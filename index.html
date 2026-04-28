@@ -461,15 +461,48 @@ function renderUsuarios(){
 
 async function carregarUsuarios(){
   const el=document.getElementById('lista-usuarios');if(!el)return;
-  const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
+  const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId).eq('ativo',true);
   if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px">nenhum usuário cadastrado ainda.</div>';return;}
   el.innerHTML=data.map(u=>{
     const badge=u.perfil==='gestor'||u.perfil==='superadmin'?'accent':'blue';
-    const action=u.id!==USER?.id?'<button class="btn sm danger" data-uid="'+u.id+'" onclick="removerUsuario(this.dataset.uid)">✕</button>':'<span style="font-size:10px;color:var(--text3)">você</span>';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px">'+
+    const isMe=u.id===USER?.id;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px;cursor:pointer" onclick="editarUsuario(\''+u.id+'\',\''+esc(u.nome||'')+'\',\''+esc(u.email)+'\',\''+u.perfil+'\')">'+
       '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(u.nome||u.email)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(u.email)+'</div></div>'+
-      '<span class="badge '+badge+'">'+u.perfil+'</span>'+action+'</div>';
+      '<span class="badge '+badge+'">'+u.perfil+'</span>'+
+      (isMe?'<span style="font-size:10px;color:var(--text3)">você</span>':'<button class="btn sm danger" data-uid="'+u.id+'" onclick="event.stopPropagation();removerUsuario(this.dataset.uid)">✕</button>')+
+    '</div>';
   }).join('');
+}
+
+function editarUsuario(uid,nome,email,perfil){
+  openModal('✏️ editar usuário',
+  `<div class="form-group"><label class="form-label">nome</label><input class="form-input" id="eu-nome" value="${esc(nome)}"></div>
+   <div class="form-group"><label class="form-label">email</label><input class="form-input" value="${esc(email)}" disabled style="opacity:.5"></div>
+   <div class="form-group"><label class="form-label">perfil</label><select class="form-input" id="eu-perfil">
+     <option value="vendedor" ${perfil==='vendedor'?'selected':''}>vendedor</option>
+     <option value="gestor" ${perfil==='gestor'?'selected':''}>gestor</option>
+   </select></div>`,
+  `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="salvarEdicaoUsuario('${uid}')">salvar</button>`);
+}
+
+async function salvarEdicaoUsuario(uid){
+  const nome=document.getElementById('eu-nome')?.value.trim();
+  const perfil=document.getElementById('eu-perfil')?.value;
+  if(!nome){toast('Digite o nome');return;}
+  await sb.from('perfis').update({nome,perfil}).eq('id',uid);
+  closeModal();
+  // Atualiza na aba config se estiver aberta
+  carregarUsuarios();
+  carregarUsuariosCfg();
+  toast('usuário atualizado!');
+}
+
+async function removerUsuario(uid){
+  if(!confirm('Remover este usuário?'))return;
+  await sb.from('perfis').update({ativo:false}).eq('id',uid);
+  toast('usuário removido!');
+  await carregarUsuarios();
+  await carregarUsuariosCfg();
 }
 
 async function criarUsuario(){
@@ -806,8 +839,6 @@ function renderTopbar(){
     ${canSeeRelatorio()?`<button class="nav-btn ${tab==='relatorio'?'active':''}" onclick="setTab('relatorio')">📊 relatórios</button>`:''}
     ${canSeeConfig()?`<button class="nav-btn ${tab==='config'?'active':''}" onclick="setTab('config')">⚙ config</button>`:''}
     <div class="topbar-right">
-      ${canSeeConfig()?`<button class="btn sm" onclick="renderUsuarios()" style="color:var(--text3)">👥 usuários</button>`:''}
-      <span style="font-size:11px;color:var(--text3)">${esc(USER?.nome||USER?.email||'')}</span>
       <button class="btn sm" style="color:var(--text3)" onclick="logout()">sair</button>
       <button class="btn-novo-lead" onclick="openNewLead()">+ novo lead</button>
       <button class="btn" style="padding:4px 10px;font-size:11px" onclick="exportCSV()">⬇ csv</button>
@@ -1423,14 +1454,16 @@ function rCfgUsuarios(){
 async function carregarUsuariosCfg(){
   const el=document.getElementById('cfg-usuarios-lista');
   if(!el)return;
-  const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
+  const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId).eq('ativo',true);
   if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">nenhum usuário cadastrado ainda.</div>';return;}
   el.innerHTML=data.map(u=>{
     const badge=u.perfil==='gestor'||u.perfil==='superadmin'?'accent':'blue';
-    const action=u.id!==USER?.id?('<button class="btn sm danger" data-uid="'+u.id+'" onclick="removerUsuario(this.dataset.uid)">✕</button>'):'<span style="font-size:10px;color:var(--text3)">você</span>';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px">'+
+    const isMe=u.id===USER?.id;
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px;cursor:pointer" onclick="editarUsuario(\''+u.id+'\',\''+esc(u.nome||'')+'\',\''+esc(u.email)+'\',\''+u.perfil+'\')">'+
       '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(u.nome||u.email)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(u.email)+'</div></div>'+
-      '<span class="badge '+badge+'">'+u.perfil+'</span>'+action+'</div>';
+      '<span class="badge '+badge+'">'+u.perfil+'</span>'+
+      (isMe?'<span style="font-size:10px;color:var(--text3)">você</span>':'<button class="btn sm danger" data-uid="'+u.id+'" onclick="event.stopPropagation();removerUsuario(this.dataset.uid)">✕</button>')+
+    '</div>';
   }).join('');
 }
 
