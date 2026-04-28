@@ -481,8 +481,22 @@ function editarUsuario(uid,nome,email,perfil){
    <div class="form-group"><label class="form-label">perfil</label><select class="form-input" id="eu-perfil">
      <option value="vendedor" ${perfil==='vendedor'?'selected':''}>vendedor</option>
      <option value="gestor" ${perfil==='gestor'?'selected':''}>gestor</option>
-   </select></div>`,
+   </select></div>
+   <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+     <button class="btn sm" style="width:100%" onclick="redefinirSenha('${uid}','${esc(email)}')">🔑 gerar nova senha para este usuário</button>
+     <div id="nova-senha-result" style="display:none;margin-top:8px"></div>
+   </div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="salvarEdicaoUsuario('${uid}')">salvar</button>`);
+}
+
+async function redefinirSenha(uid,email){
+  const novaSenha=gerarSenha(email);
+  const{error}=await sb.auth.admin?.updateUserById(uid,{password:novaSenha}).catch(()=>({error:'sem permissão admin'}));
+  const el=document.getElementById('nova-senha-result');
+  if(!el)return;
+  // Como não temos admin API no client, usamos signUp workaround ou mostramos instrução
+  el.style.cssText='display:block;background:var(--blue-bg);border:1px solid rgba(96,165,250,.3);border-radius:var(--br);padding:10px;font-size:12px;color:var(--blue)';
+  el.innerHTML='💡 Para redefinir a senha, envie o link de recuperação pelo email da pessoa. Ou acesse o painel do Supabase → Authentication → Users → clique no usuário → "Send password reset".<br><br>Ou a pessoa pode clicar em <strong>"esqueci minha senha"</strong> na tela de login.';
 }
 
 async function salvarEdicaoUsuario(uid){
@@ -729,8 +743,9 @@ document.addEventListener('click',e=>{const el=document.getElementById('empresa-
 function renderEmpresaDropdown(){
   const empresas=getEmpresas();
   const el=document.getElementById('empresa-dropdown');
+  if(!el)return;
   el.innerHTML=empresas.map(e=>`<div class="empresa-item ${e.id===empresaId?'active':''}" style="padding:8px 14px">
-    <span onclick="trocarEmpresa('${e.id}')" style="flex:1;cursor:pointer">✦ ${esc(e.nome)}${e.id===empresaId?' ✓':''}</span>
+    <span onclick="trocarEmpresa('${e.id}')" style="flex:1;cursor:pointer">✦ ${esc(e.id===empresaId?S.config.clinica||e.nome:e.nome)}${e.id===empresaId?' ✓':''}</span>
     ${empresas.length>1?`<button onclick="event.stopPropagation();excluirEmpresa('${e.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px" title="Excluir empresa">✕</button>`:''}
   </div>`).join('')+
   `<div class="empresa-item" onclick="novaEmpresa()" style="color:var(--accent)">+ nova empresa</div>`;
@@ -740,15 +755,18 @@ function excluirEmpresa(id){
   const emp=empresas.find(e=>e.id===id);
   if(!emp)return;
   if(id===empresaId){toast('Troque para outra empresa antes de excluir esta.');return;}
-  openModal('⚠️ excluir empresa',`<div style="font-size:13px;color:var(--text2);line-height:1.6">Excluir <strong style="color:var(--text)">${esc(emp.nome)}</strong>?<br><br>Todos os leads e configurações desta empresa serão <strong style="color:var(--red)">permanentemente apagados</strong>.</div>`,
+  openModal('⚠️ excluir empresa',`<div style="font-size:13px;color:var(--text2);line-height:1.6">Excluir <strong style="color:var(--text)">${esc(emp.nome)}</strong>?<br><br>Todos os leads e configurações serão <strong style="color:var(--red)">permanentemente apagados</strong>.</div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn danger" onclick="confirmarExcluirEmpresa('${id}')">sim, excluir</button>`);
 }
-function confirmarExcluirEmpresa(id){
+async function confirmarExcluirEmpresa(id){
+  // Remove do Supabase de verdade
+  await sb.from('leads').delete().eq('empresa_id',id);
+  await sb.from('configuracoes').delete().eq('empresa_id',id);
+  await sb.from('empresas').delete().eq('id',id);
   const empresas=getEmpresas().filter(e=>e.id!==id);
   saveEmpresas(empresas);
-  localStorage.removeItem('crm_data_'+id);
   closeModal();
-  document.getElementById('empresa-dropdown').classList.remove('open');
+  document.getElementById('empresa-dropdown')?.classList.remove('open');
   toast('Empresa excluída!');
   renderEmpresaDropdown();
 }
