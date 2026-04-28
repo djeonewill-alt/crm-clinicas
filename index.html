@@ -826,10 +826,13 @@ function renderWork(){
   const active=UI.workActive?leads.find(l=>l.id===UI.workActive):null;
   const now=Date.now();
   const metas=S.config.metas||{prosp:{valor:20,periodo:'dia'},qualif:{valor:5,periodo:'semana'},fech:{valor:7,periodo:'semana'}};
-  const cProsp=getMetaCount('prospectadoEm',metas.prosp.periodo);
-  const cQualif=getMetaCount('qualificadoEm',metas.qualif.periodo);
-  const cFech=getMetaCount('fechadoEm',metas.fech.periodo);
-  const novosHoje=S.leads.filter(l=>l.funnel==='prospeccao'&&!l.fechado&&(now-l.colAt)<86400000).length;
+  const vConfig=USER?(S.config.vendedores||[]).find(v=>v.uid===USER.id):null;
+  const metasAtivas=vConfig?.metas||metas;
+  const mostrarMetas=!vConfig||vConfig.mostrarMetas!==false;
+  const cProsp=getMetaCount('prospectadoEm',metasAtivas.prosp?.periodo||'dia');
+  const cQualif=getMetaCount('qualificadoEm',metasAtivas.qualif?.periodo||'semana');
+  const cFech=getMetaCount('fechadoEm',metasAtivas.fech?.periodo||'semana');
+  const novosHoje=getMeusLeads().filter(l=>l.funnel==='prospeccao'&&!l.fechado&&(now-l.colAt)<86400000).length;
   const retornosHoje=getRetornosHoje();
 
   document.getElementById('main').innerHTML=`
@@ -846,24 +849,24 @@ function renderWork(){
           <div class="cockpit-lbl">🔥 novos leads</div>
           <div class="cockpit-periodo">hoje</div>
         </div>
-        <div class="cockpit-card">
-          <div class="cockpit-num" style="color:${cProsp>=metas.prosp.valor?'var(--green)':'var(--accent)'}">${cProsp}<span style="font-size:13px;color:var(--text3)">/${metas.prosp.valor}</span></div>
+        ${mostrarMetas?`<div class="cockpit-card">
+          <div class="cockpit-num" style="color:${cProsp>=(metasAtivas.prosp?.valor||20)?'var(--green)':'var(--accent)'}">${cProsp}<span style="font-size:13px;color:var(--text3)">/${metasAtivas.prosp?.valor||20}</span></div>
           <div class="cockpit-lbl">✉️ prospectados</div>
-          <div class="cockpit-periodo">${PERIODOS[metas.prosp.periodo]||'hoje'}</div>
-          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cProsp/metas.prosp.valor*100))}%;background:${cProsp>=metas.prosp.valor?'var(--green)':'var(--accent)'}"></div></div>
+          <div class="cockpit-periodo">${PERIODOS[metasAtivas.prosp?.periodo||'dia']||'hoje'}</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cProsp/(metasAtivas.prosp?.valor||20)*100))}%;background:${cProsp>=(metasAtivas.prosp?.valor||20)?'var(--green)':'var(--accent)'}"></div></div>
         </div>
         <div class="cockpit-card">
-          <div class="cockpit-num" style="color:${cQualif>=metas.qualif.valor?'var(--green)':'var(--blue)'}">${cQualif}<span style="font-size:13px;color:var(--text3)">/${metas.qualif.valor}</span></div>
+          <div class="cockpit-num" style="color:${cQualif>=(metasAtivas.qualif?.valor||5)?'var(--green)':'var(--blue)'}">${cQualif}<span style="font-size:13px;color:var(--text3)">/${metasAtivas.qualif?.valor||5}</span></div>
           <div class="cockpit-lbl">✅ qualificados</div>
-          <div class="cockpit-periodo">${PERIODOS[metas.qualif.periodo]||'esta semana'}</div>
-          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cQualif/metas.qualif.valor*100))}%;background:var(--blue)"></div></div>
+          <div class="cockpit-periodo">${PERIODOS[metasAtivas.qualif?.periodo||'semana']||'esta semana'}</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cQualif/(metasAtivas.qualif?.valor||5)*100))}%;background:var(--blue)"></div></div>
         </div>
         <div class="cockpit-card">
-          <div class="cockpit-num" style="color:${cFech>=metas.fech.valor?'var(--green)':'var(--purple)'}">${cFech}<span style="font-size:13px;color:var(--text3)">/${metas.fech.valor}</span></div>
+          <div class="cockpit-num" style="color:${cFech>=(metasAtivas.fech?.valor||7)?'var(--green)':'var(--purple)'}">${cFech}<span style="font-size:13px;color:var(--text3)">/${metasAtivas.fech?.valor||7}</span></div>
           <div class="cockpit-lbl">🎉 fechamentos</div>
-          <div class="cockpit-periodo">${PERIODOS[metas.fech.periodo]||'esta semana'}</div>
-          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cFech/metas.fech.valor*100))}%;background:var(--purple)"></div></div>
-        </div>
+          <div class="cockpit-periodo">${PERIODOS[metasAtivas.fech?.periodo||'semana']||'esta semana'}</div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${Math.min(100,Math.round(cFech/(metasAtivas.fech?.valor||7)*100))}%;background:var(--purple)"></div></div>
+        </div>`:''}
       </div>
       <div class="quick-btns">
         ${(S.config.pixes||[]).map(p=>`<button class="btn sm" onclick="navigator.clipboard.writeText('${p.chave}');toast('${esc(p.apelido)} copiado!')">💳 ${esc(p.apelido)}</button>`).join('')}
@@ -1312,30 +1315,85 @@ function confirmReset(){
 
 function rCfgVendedor(){
   const sub=UI.configSubTab?.vendedor||'todos';
-  const subs=[{id:'todos',label:'todos'},{id:'dados',label:'dados'},{id:'metas',label:'metas'},{id:'params',label:'parâmetros'}];
+  // Pega vendedores da config (sincronizados dos perfis)
+  const vendedores=S.config.vendedores||[];
+  const subs=[{id:'todos',label:'todos'},...vendedores.map(v=>({id:v.uid,label:v.nome||v.email})),{id:'params',label:'parâmetros'}];
   const sa=sub==='todos';
   const metas=S.config.metas||{prosp:{valor:20,periodo:'dia'},qualif:{valor:5,periodo:'semana'},fech:{valor:7,periodo:'semana'}};
-  return subBar(subs,sub,"vendedor")+`
-  ${sa||sub==='dados'?`<div class="config-block"><h3>👤 dados do vendedor</h3>
-    <div class="form-row"><div class="form-group"><label class="form-label">nome do vendedor</label><input class="form-input" id="c-vend" value="${esc(S.config.vendedor||'')}"></div><div class="form-group"><label class="form-label">comissão (%)</label><input class="form-input" type="number" id="c-com" value="${S.config.comissao||10}"></div></div>
-    <button class="btn primary" onclick="S.config.vendedor=document.getElementById('c-vend').value.trim()||S.config.vendedor;S.config.comissao=parseFloat(document.getElementById('c-com').value)||10;save();render();toast('salvo!')">salvar</button>
-  </div>`:''}
-  ${sa||sub==='metas'?`<div class="config-block"><h3>🎯 metas</h3>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">defina quantidade e período para cada meta. aparecem no cockpit da tela de trabalho.</p>
-    ${[
-      {key:'prosp',label:'meta de prospecção',tip:'conta quando o vendedor faz o primeiro contato com um lead novo.'},
-      {key:'qualif',label:'meta de qualificação',tip:'conta quando o vendedor move um lead para o funil de qualificação.'},
-      {key:'fech',label:'meta de fechamentos',tip:'conta quando o vendedor fecha um negócio e move para clientes.'},
-    ].map(m=>`<div style="background:var(--bg3);border-radius:var(--brl);padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:10px">${m.label} ${tip(m.tip)}</div><div class="form-row"><div class="form-group"><label class="form-label">quantidade</label><input class="form-input" type="number" value="${metas[m.key]?.valor||0}" onblur="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].valor=parseInt(this.value)||0;save();toast('salvo!')"></div><div class="form-group"><label class="form-label">período</label><select class="form-input" onchange="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].periodo=this.value;save();toast('salvo!')"><option value="dia" ${(metas[m.key]?.periodo||'dia')==='dia'?'selected':''}>por dia</option><option value="semana" ${metas[m.key]?.periodo==='semana'?'selected':''}>por semana</option><option value="mes" ${metas[m.key]?.periodo==='mes'?'selected':''}>por mês</option></select></div></div></div>`).join('')}
-  </div>`:''}
-  ${sa||sub==='params'?`<div class="config-block"><h3>📊 parâmetros do funil</h3>
+
+  if(sub==='params')return subBar(subs,sub,"vendedor")+`
+  <div class="config-block"><h3>📊 parâmetros do funil</h3>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">taxas mínimas saudáveis — usadas como semáforo verde/vermelho nos relatórios.</p>
     ${[
-      {key:'respProsp',label:'taxa mínima de resposta — prospecção',tip:'ideal acima de 20%. abaixo pode indicar problema no público da campanha.'},
-      {key:'fechQualif',label:'taxa mínima de fechamento — qualificação',tip:'ideal acima de 25%. abaixo pode indicar problema na abordagem do vendedor.'},
-      {key:'convRetorno',label:'taxa mínima de conversão — retorno',tip:'ideal acima de 40%. esse lead já foi qualificado antes, então a barra é mais alta.'},
+      {key:'respProsp',label:'taxa mínima de resposta — prospecção',tip:'ideal acima de 20%.'},
+      {key:'fechQualif',label:'taxa mínima de fechamento — qualificação',tip:'ideal acima de 25%.'},
+      {key:'convRetorno',label:'taxa mínima de conversão — retorno',tip:'ideal acima de 40%.'},
     ].map(pm=>`<div class="param-item"><div style="flex:1;font-size:13px">${pm.label} ${tip(pm.tip)}</div><input class="param-input" type="number" value="${S.config.params?.[pm.key]||0}" onblur="if(!S.config.params)S.config.params={};S.config.params['${pm.key}']=parseInt(this.value)||0;save()"><span style="font-size:11px;color:var(--text3)">%</span></div>`).join('')}
-  </div>`:''}`;
+  </div>`;
+
+  // Vendedor individual selecionado
+  const vsel=vendedores.find(v=>v.uid===sub);
+  if(vsel){
+    const vm=vsel.metas||{prosp:{valor:20,periodo:'dia'},qualif:{valor:5,periodo:'semana'},fech:{valor:7,periodo:'semana'}};
+    return subBar(subs,sub,"vendedor")+`
+    <div class="config-block"><h3>👤 ${esc(vsel.nome||vsel.email)}</h3>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px">${esc(vsel.email)}</div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group"><label class="form-label">comissão (%)</label><input class="form-input" type="number" value="${vsel.comissao||10}" onblur="S.config.vendedores.find(v=>v.uid==='${vsel.uid}').comissao=parseFloat(this.value)||0;save();toast('salvo!')"></div>
+        <div class="form-group"><label class="form-label">mostrar metas no cockpit</label>
+          <select class="form-input" onchange="S.config.vendedores.find(v=>v.uid==='${vsel.uid}').mostrarMetas=this.value==='sim';save();toast('salvo!')">
+            <option value="sim" ${vsel.mostrarMetas!==false?'selected':''}>sim — mostrar metas</option>
+            <option value="nao" ${vsel.mostrarMetas===false?'selected':''}>não — ocultar metas</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px">metas individuais</div>
+      ${[
+        {key:'prosp',label:'meta de prospecção',tip:'conta o primeiro contato com um lead novo.'},
+        {key:'qualif',label:'meta de qualificação',tip:'conta quando move um lead para qualificação.'},
+        {key:'fech',label:'meta de fechamentos',tip:'conta quando fecha um negócio.'},
+      ].map(m=>`<div style="background:var(--bg3);border-radius:var(--brl);padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:10px">${m.label} ${tip(m.tip)}</div><div class="form-row"><div class="form-group"><label class="form-label">quantidade</label><input class="form-input" type="number" value="${vm[m.key]?.valor||0}" onblur="const v=S.config.vendedores.find(v=>v.uid==='${vsel.uid}');if(!v.metas)v.metas={};if(!v.metas['${m.key}'])v.metas['${m.key}']={};v.metas['${m.key}'].valor=parseInt(this.value)||0;save();toast('salvo!')"></div><div class="form-group"><label class="form-label">período</label><select class="form-input" onchange="const v=S.config.vendedores.find(v=>v.uid==='${vsel.uid}');if(!v.metas)v.metas={};if(!v.metas['${m.key}'])v.metas['${m.key}']={};v.metas['${m.key}'].periodo=this.value;save();toast('salvo!')"><option value="dia" ${(vm[m.key]?.periodo||'dia')==='dia'?'selected':''}>por dia</option><option value="semana" ${vm[m.key]?.periodo==='semana'?'selected':''}>por semana</option><option value="mes" ${vm[m.key]?.periodo==='mes'?'selected':''}>por mês</option></select></div></div></div>`).join('')}
+    </div>`;
+  }
+
+  // Tela todos — lista vendedores
+  return subBar(subs,sub,"vendedor")+`
+  <div class="config-block"><h3>👥 vendedores</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">clique em um vendedor para configurar metas e comissão individualmente.</p>
+    <button class="btn sm primary" style="margin-bottom:14px" onclick="sincVendedores()">🔄 sincronizar usuários</button>
+    ${!vendedores.length?'<div style="font-size:12px;color:var(--text3);padding:12px 0">nenhum vendedor cadastrado ainda.<br>Clique em "sincronizar usuários" para carregar.</div>':''}
+    ${vendedores.map(v=>`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px;cursor:pointer" onclick="setSubTab('vendedor','${v.uid}')">
+      <div style="flex:1"><div style="font-size:13px;font-weight:500">${esc(v.nome||v.email)}</div><div style="font-size:11px;color:var(--text3)">${esc(v.email)}</div></div>
+      <span class="badge gray">comissão: ${v.comissao||10}%</span>
+      <span class="badge ${v.mostrarMetas!==false?'green':'orange'}">${v.mostrarMetas!==false?'metas visíveis':'metas ocultas'}</span>
+      <span style="color:var(--text3);font-size:12px">→</span>
+    </div>`).join('')}
+  </div>
+  <div class="config-block"><h3>🎯 metas globais padrão</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">usadas para vendedores sem meta individual configurada.</p>
+    ${[
+      {key:'prosp',label:'meta de prospecção',tip:'conta o primeiro contato com um lead novo.'},
+      {key:'qualif',label:'meta de qualificação',tip:'conta quando move um lead para qualificação.'},
+      {key:'fech',label:'meta de fechamentos',tip:'conta quando fecha um negócio.'},
+    ].map(m=>`<div style="background:var(--bg3);border-radius:var(--brl);padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:10px">${m.label}</div><div class="form-row"><div class="form-group"><label class="form-label">quantidade</label><input class="form-input" type="number" value="${metas[m.key]?.valor||0}" onblur="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].valor=parseInt(this.value)||0;save();toast('salvo!')"></div><div class="form-group"><label class="form-label">período</label><select class="form-input" onchange="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].periodo=this.value;save();toast('salvo!')"><option value="dia" ${(metas[m.key]?.periodo||'dia')==='dia'?'selected':''}>por dia</option><option value="semana" ${metas[m.key]?.periodo==='semana'?'selected':''}>por semana</option><option value="mes" ${metas[m.key]?.periodo==='mes'?'selected':''}>por mês</option></select></div></div></div>`).join('')}
+  </div>`;
+}
+
+async function sincVendedores(){
+  showLoading('sincronizando...');
+  try{
+    const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId).in('perfil',['vendedor','gestor']);
+    if(data&&data.length){
+      if(!S.config.vendedores)S.config.vendedores=[];
+      data.forEach(p=>{
+        const ex=S.config.vendedores.find(v=>v.uid===p.id);
+        if(!ex)S.config.vendedores.push({uid:p.id,email:p.email,nome:p.nome||p.email,comissao:10,mostrarMetas:true,metas:null});
+        else{ex.email=p.email;ex.nome=p.nome||p.email;}
+      });
+      save();toast(data.length+' usuários sincronizados!');
+    }else{toast('nenhum vendedor encontrado');}
+  }catch(e){toast('erro ao sincronizar');}
+  hideLoading();renderConfig();
 }
 
 function rCfgScripts(){
