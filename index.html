@@ -513,8 +513,9 @@ function setEmpresaAtual(id){localStorage.setItem('crm_empresa_atual',id)}
 // Sincroniza empresas do Supabase para o cache local
 async function syncEmpresas(){
   try{
-    const rows=await sbGet('empresas');
-    if(rows.length){
+    const{data:rows,error:e1}=await sb.from('empresas').select('*');
+    if(e1){console.warn('sync empresas',e1);return getEmpresas();}
+    if(rows&&rows.length){
       const list=rows.map(r=>({id:r.id,nome:r.nome}));
       saveEmpresas(list);
       return list;
@@ -526,7 +527,7 @@ async function syncEmpresas(){
 async function initEmpresas(){
   showLoading('carregando...');
   // Sempre busca do Supabase primeiro
-  const rows=await sbGet('empresas');
+  const{data:rows}=await sb.from('empresas').select('*');
   if(rows.length){
     const list=rows.map(r=>({id:r.id,nome:r.nome}));
     saveEmpresas(list);
@@ -572,7 +573,6 @@ let UI={workFunnel:'prospeccao',workActive:null,searchQuery:'',configTab:'clinic
 let saveTimer=null;
 function save(){
   // Salva imediatamente no cache local
-  try{localStorage.setItem('crm_config_'+empresaId,JSON.stringify(S.config))}catch(e){}
   try{localStorage.setItem('crm_ui',JSON.stringify(UI))}catch(e){}
   // Debounce para não sobrecarregar o Supabase
   clearTimeout(saveTimer);
@@ -590,7 +590,6 @@ async function saveLead(leadObj){
   // Cache local imediato
   const idx=S.leads.findIndex(l=>l.id===leadObj.id);
   if(idx>=0)S.leads[idx]=leadObj;else S.leads.push(leadObj);
-  try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
   // Supabase async
   try{
     const row=leadToRow(leadObj);
@@ -599,7 +598,6 @@ async function saveLead(leadObj){
 }
 async function deleteLead(id){
   S.leads=S.leads.filter(l=>l.id!==id);
-  try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
   try{await sb.from('leads').delete().eq('id',id)}catch(e){}
   closeModal();advQ();toast('lead excluído');
 }
@@ -643,27 +641,20 @@ function rowToLead(r){
 async function loadEmpresa(id){
   empresaId=id;setEmpresaAtual(id);
   showLoading('carregando dados...');
-  // Carrega do cache primeiro (exibição imediata)
+  // Busca sempre do Supabase — sem cache local para dados
   try{
-    const cc=localStorage.getItem('crm_config_'+id);
-    const cl=localStorage.getItem('crm_leads_'+id);
-    if(cc)S.config={...DEFAULT_CONFIG(),...JSON.parse(cc),metas:{...DEFAULT_CONFIG().metas,...(JSON.parse(cc).metas||{})}};
-    if(cl)S.leads=JSON.parse(cl);
-  }catch(e){}
-  // Busca dados frescos do Supabase
-  try{
-    const[cfgRows,leadRows]=await Promise.all([
-      sbGet('configuracoes',{empresa_id:id}),
-      sbGet('leads',{empresa_id:id})
+    const[cfgRes,leadRes]=await Promise.all([
+      sb.from('configuracoes').select('*').eq('empresa_id',id),
+      sb.from('leads').select('*').eq('empresa_id',id)
     ]);
+    const cfgRows=cfgRes.data||[];
+    const leadRows=leadRes.data||[];
     if(cfgRows.length){
       const cfg=cfgRows[0].dados;
       S.config={...DEFAULT_CONFIG(),...cfg,metas:{...DEFAULT_CONFIG().metas,...(cfg.metas||{})}};
-      localStorage.setItem('crm_config_'+id,JSON.stringify(S.config));
     }
     if(leadRows.length){
       S.leads=leadRows.map(rowToLead);
-      localStorage.setItem('crm_leads_'+id,JSON.stringify(S.leads));
     }
   }catch(e){console.warn('load offline',e)}
   migrarDiaProsp();
@@ -677,7 +668,7 @@ function migrarDiaProsp(){
     if(l.funnel==='retorno'&&(l.diaProsp?.startsWith('d')||l.diaProsp?.startsWith('q'))){l.diaProsp='r1';alt=true;}
     if(l.funnel==='prospeccao'&&(l.diaProsp?.startsWith('q')||l.diaProsp?.startsWith('r'))){l.diaProsp='d1';alt=true;}
   });
-  if(alt)try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
+
 }
 
 function loadUI(){
@@ -698,7 +689,7 @@ spinStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(spinStyle);
 
 function toggleEmpresa(){document.getElementById('empresa-dropdown').classList.toggle('open')}
-document.addEventListener('click',e=>{if(!e.target.closest('.brand-wrap'))document.getElementById('empresa-dropdown').classList.remove('open')});
+document.addEventListener('click',e=>{const el=document.getElementById('empresa-dropdown');if(el&&!e.target.closest('.brand-wrap'))el.classList.remove('open')});
 
 function renderEmpresaDropdown(){
   const empresas=getEmpresas();
@@ -1107,14 +1098,12 @@ function saveLeadLocal(l){
   if(!l)return;
   const idx=S.leads.findIndex(x=>x.id===l.id);
   if(idx>=0)S.leads[idx]=l;
-  try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
   saveLead(l).catch(e=>console.warn('sync lead',e));
 }
 function updF(lid,field,val){const l=S.leads.find(x=>x.id===lid);if(l){l[field]=val;saveLeadLocal(l)}}
 // Sobrescreve deleteLead para usar nova lógica
 async function excluirLeadDB(id){
   S.leads=S.leads.filter(l=>l.id!==id);
-  try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
   try{await sb.from('leads').delete().eq('id',id)}catch(e){}
   closeModal();advQ();toast('lead excluído');
 }
@@ -1390,19 +1379,22 @@ function rCfgVendedor(){
 }
 
 async function sincVendedores(){
+  if(!empresaId){toast('erro: empresa não carregada. recarregue a página.');return;}
   showLoading('sincronizando...');
   try{
-    const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId).in('perfil',['vendedor','gestor']);
+    const{data,error}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
+    if(error){toast('erro: '+error.message);hideLoading();return;}
     if(data&&data.length){
       if(!S.config.vendedores)S.config.vendedores=[];
-      data.forEach(p=>{
+      const relevantes=data.filter(p=>p.id!==USER?.id||p.perfil!=='superadmin');
+      relevantes.forEach(p=>{
         const ex=S.config.vendedores.find(v=>v.uid===p.id);
-        if(!ex)S.config.vendedores.push({uid:p.id,email:p.email,nome:p.nome||p.email,comissao:10,mostrarMetas:true,metas:null});
-        else{ex.email=p.email;ex.nome=p.nome||p.email;}
+        if(!ex)S.config.vendedores.push({uid:p.id,email:p.email,nome:p.nome||p.email,perfil:p.perfil,comissao:10,mostrarMetas:true,metas:null});
+        else{ex.email=p.email;ex.nome=p.nome||p.email;ex.perfil=p.perfil;}
       });
-      save();toast(data.length+' usuários sincronizados!');
-    }else{toast('nenhum vendedor encontrado');}
-  }catch(e){toast('erro ao sincronizar');}
+      save();toast(relevantes.length+' usuário(s) sincronizado(s)!');
+    }else{toast('nenhum usuário encontrado. empresa: '+empresaId.slice(0,8)+'...');}
+  }catch(e){console.error(e);toast('erro: '+e.message);}
   hideLoading();renderConfig();
 }
 
@@ -1612,7 +1604,6 @@ async function _salvarLead(tel,eid,forcar){
       if(error||!data){toast('erro ao salvar — tente novamente');return;}
       const l=rowToLead(data);
       S.leads.push(l);
-      try{localStorage.setItem('crm_leads_'+empresaId,JSON.stringify(S.leads))}catch(e){}
       closeModal();UI.workActive=l.id;UI.workFunnel=fid;setTab('work');toast('✓ lead salvo! tel: '+l.tel);
     }catch(e){hideLoading();console.error(e);toast('erro de conexão — verifique a internet');}
   }
@@ -1665,6 +1656,11 @@ async function iniciarApp(){
 
 async function init(){
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  // Limpa cache antigo de leads e config — sempre busca do Supabase
+  Object.keys(localStorage).forEach(k=>{
+    if(k.startsWith('crm_leads_')||k.startsWith('crm_config_')||k.startsWith('crm_data_')||k==='crm_empresas')
+      localStorage.removeItem(k);
+  });
   // Timeout de 5 segundos — se não conectar, mostra login
   const timeout=new Promise(resolve=>setTimeout(()=>resolve(null),5000));
   const sessionPromise=sb.auth.getSession().then(r=>r.data?.session).catch(()=>null);
