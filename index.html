@@ -771,7 +771,12 @@ async function confirmarExcluirEmpresa(id){
   toast('Empresa excluída!');
   renderEmpresaDropdown();
 }
-async function trocarEmpresa(id){await loadEmpresa(id);UI.workFunnel='prospeccao';UI.workActive=null;document.getElementById('empresa-dropdown').classList.remove('open');render()}
+async function trocarEmpresa(id){
+  await loadEmpresa(id);
+  UI.workFunnel='prospeccao';UI.workActive=null;
+  document.getElementById('empresa-dropdown')?.classList.remove('open');
+  render();
+}
 function novaEmpresa(){
   openModal('nova empresa',`<div class="form-group"><label class="form-label">nome da empresa</label><input class="form-input" id="ne-nome" placeholder="Ex: Livro Vencendo as Tempestades" autofocus></div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmarNovaEmpresa()">criar</button>`);
@@ -855,6 +860,13 @@ let tab='work';
 function setTab(t){tab=t;['work','kanban','relatorio','config'].forEach(x=>document.getElementById('tab-'+x)?.classList.toggle('active',x===t));render()}
 function renderTopbar(){
   const el=document.getElementById('topbar');if(!el)return;
+  // Atualiza nome da empresa atual no cache
+  const empresas=getEmpresas();
+  const empAtual=empresas.find(e=>e.id===empresaId);
+  if(empAtual&&S.config.clinica&&empAtual.nome!==S.config.clinica){
+    empAtual.nome=S.config.clinica;
+    saveEmpresas(empresas);
+  }
   el.innerHTML=`
     <div class="brand-wrap">
       ${canSeeEmpresas()?`<span class="brand" id="brand" onclick="toggleEmpresa()">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span> ▾</span><div class="empresa-dropdown" id="empresa-dropdown"></div>`:`<span class="brand" style="cursor:default">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span></span>`}
@@ -1337,7 +1349,7 @@ function rCfgClinica(){
   </div>`:''}
   ${sa||sub==='dados'?`<div class="config-block"><h3>🏥 dados da clínica</h3>
     <div class="form-row"><div class="form-group"><label class="form-label">nome da clínica</label><input class="form-input" id="c-clinica" value="${esc(S.config.clinica)}"></div><div class="form-group"><label class="form-label">especialidade</label><input class="form-input" id="c-esp" value="${esc(S.config.especialidade)}"></div></div>
-    <button class="btn primary" onclick="S.config.clinica=document.getElementById('c-clinica').value.trim()||S.config.clinica;S.config.especialidade=document.getElementById('c-esp').value.trim()||S.config.especialidade;const empresas=getEmpresas();const idx=empresas.findIndex(e=>e.id===empresaId);if(idx>=0){empresas[idx].nome=S.config.clinica;saveEmpresas(empresas);}save();render();toast('salvo!')">salvar</button>
+    <button class="btn primary" onclick="salvarDadosClinica()">salvar</button>
   </div>`:''}
   ${sa||sub==='enderecos'?`<div class="config-block"><h3>📍 endereços de atendimento</h3>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">o nome aparece no botão rápido. ex: "paulista", "tatuapé".</p>
@@ -1434,6 +1446,20 @@ function rCfgVendedor(){
       {key:'fech',label:'meta de fechamentos',tip:'conta quando fecha um negócio.'},
     ].map(m=>`<div style="background:var(--bg3);border-radius:var(--brl);padding:12px;margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:10px">${m.label}</div><div class="form-row"><div class="form-group"><label class="form-label">quantidade</label><input class="form-input" type="number" value="${metas[m.key]?.valor||0}" onblur="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].valor=parseInt(this.value)||0;save();toast('salvo!')"></div><div class="form-group"><label class="form-label">período</label><select class="form-input" onchange="if(!S.config.metas)S.config.metas={};if(!S.config.metas['${m.key}'])S.config.metas['${m.key}']={};S.config.metas['${m.key}'].periodo=this.value;save();toast('salvo!')"><option value="dia" ${(metas[m.key]?.periodo||'dia')==='dia'?'selected':''}>por dia</option><option value="semana" ${metas[m.key]?.periodo==='semana'?'selected':''}>por semana</option><option value="mes" ${metas[m.key]?.periodo==='mes'?'selected':''}>por mês</option></select></div></div></div>`).join('')}
   </div>`;
+}
+
+async function salvarDadosClinica(){
+  const clinica=document.getElementById('c-clinica')?.value.trim();
+  const esp=document.getElementById('c-esp')?.value.trim();
+  if(clinica)S.config.clinica=clinica;
+  if(esp!==undefined)S.config.especialidade=esp;
+  // Atualiza cache local
+  const empresas=getEmpresas();
+  const idx=empresas.findIndex(e=>e.id===empresaId);
+  if(idx>=0){empresas[idx].nome=S.config.clinica;saveEmpresas(empresas);}
+  // Atualiza tabela empresas no Supabase
+  await sb.from('empresas').update({nome:S.config.clinica}).eq('id',empresaId);
+  save();render();toast('salvo!');
 }
 
 async function sincVendedores(){
