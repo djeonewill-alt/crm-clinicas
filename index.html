@@ -463,11 +463,13 @@ async function carregarUsuarios(){
   const el=document.getElementById('lista-usuarios');if(!el)return;
   const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
   if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px">nenhum usuário cadastrado ainda.</div>';return;}
-  el.innerHTML=data.map(u=>`<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px">
-    <div style="flex:1"><div style="font-size:13px;font-weight:500">${esc(u.nome||u.email)}</div><div style="font-size:11px;color:var(--text3)">${esc(u.email)}</div></div>
-    <span class="badge ${u.perfil==='gestor'||u.perfil==='superadmin'?'accent':'blue'}">${u.perfil}</span>
-    ${u.id!==USER?.id?`<button class="btn sm danger" onclick="removerUsuario('${u.id}')">✕</button>`:'<span style="font-size:10px;color:var(--text3)">você</span>'}
-  </div>`).join('');
+  el.innerHTML=data.map(u=>{
+    const badge=u.perfil==='gestor'||u.perfil==='superadmin'?'accent':'blue';
+    const action=u.id!==USER?.id?'<button class="btn sm danger" data-uid="'+u.id+'" onclick="removerUsuario(this.dataset.uid)">✕</button>':'<span style="font-size:10px;color:var(--text3)">você</span>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px">'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(u.nome||u.email)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(u.email)+'</div></div>'+
+      '<span class="badge '+badge+'">'+u.perfil+'</span>'+action+'</div>';
+  }).join('');
 }
 
 async function criarUsuario(){
@@ -1253,14 +1255,14 @@ function renderConfig(){
   document.getElementById('main').innerHTML=`
   <div style="display:flex;flex-direction:column;flex:1;overflow:hidden">
     <div class="filter-bar">
-      ${[{id:'clinica',label:'🏥 clínica'},{id:'vendedor',label:'👤 vendedor'},{id:'scripts',label:'💬 scripts'},{id:'materiais',label:'📎 materiais'},{id:'relatorios',label:'📊 relatórios'},{id:'importar',label:'⬆ importar/exportar'}].map(t=>`<button class="filter-btn ${ct===t.id?'active':''}" onclick="UI.configTab='${t.id}';renderConfig()">${t.label}</button>`).join('')}
+      ${[{id:'clinica',label:'🏥 clínica'},{id:'vendedor',label:'👤 vendedor'},{id:'usuarios',label:'👥 usuários'},{id:'scripts',label:'💬 scripts'},{id:'materiais',label:'📎 materiais'},{id:'relatorios',label:'📊 relatórios'},{id:'importar',label:'⬆ importar/exportar'}].map(t=>`<button class="filter-btn ${ct===t.id?'active':''}" onclick="UI.configTab='${t.id}';renderConfig()">${t.label}</button>`).join('')}
     </div>
     <div class="config-wrap"><div style="max-width:860px">
-      ${ct==='clinica'?rCfgClinica():ct==='vendedor'?rCfgVendedor():ct==='scripts'?rCfgScripts():ct==='materiais'?rCfgMateriais():ct==='relatorios'?rCfgRelatorios():rCfgImportar()}
+      ${ct==='clinica'?rCfgClinica():ct==='vendedor'?rCfgVendedor():ct==='usuarios'?rCfgUsuarios():ct==='scripts'?rCfgScripts():ct==='materiais'?rCfgMateriais():ct==='relatorios'?rCfgRelatorios():rCfgImportar()}
     </div></div>
   </div>`;
+  if(ct==='usuarios')setTimeout(()=>carregarUsuariosCfg(),50);
 }
-
 function subBar(items,current,key){
   return`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${items.map(s=>`<button class="filter-btn ${current===s.id?'active':''}" onclick="setSubTab('${key}','${s.id}')">${s.label}</button>`).join('')}</div>`;
 }
@@ -1396,6 +1398,40 @@ async function sincVendedores(){
     }else{toast('nenhum usuário encontrado. empresa: '+empresaId.slice(0,8)+'...');}
   }catch(e){console.error(e);toast('erro: '+e.message);}
   hideLoading();renderConfig();
+}
+
+function rCfgUsuarios(){
+  return`<div class="config-block"><h3>👥 usuários cadastrados</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">gerencie quem tem acesso ao sistema. o sistema gera uma senha inicial que você copia e envia para a pessoa.</p>
+    <div id="cfg-usuarios-lista"><div style="font-size:12px;color:var(--text3)">carregando...</div></div>
+    <hr style="border-color:var(--border);margin:16px 0">
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:10px">adicionar usuário</div>
+    <div class="form-group" style="margin-bottom:8px"><label class="form-label">email</label><input class="form-input" id="nu-email" type="email" placeholder="vendedora@email.com"></div>
+    <div class="form-group" style="margin-bottom:8px"><label class="form-label">nome</label><input class="form-input" id="nu-nome" placeholder="Nome completo"></div>
+    <div class="form-group" style="margin-bottom:14px"><label class="form-label">perfil</label>
+      <select class="form-input" id="nu-perfil">
+        <option value="vendedor">vendedor — só trabalho e funis</option>
+        <option value="gestor">gestor — acesso total</option>
+      </select>
+    </div>
+    <button class="btn primary" onclick="criarUsuario()">+ criar usuário</button>
+    <div id="nu-result" style="display:none;margin-top:12px"></div>
+  </div>`;
+}
+
+// Carrega lista de usuários na aba config
+async function carregarUsuariosCfg(){
+  const el=document.getElementById('cfg-usuarios-lista');
+  if(!el)return;
+  const{data}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
+  if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">nenhum usuário cadastrado ainda.</div>';return;}
+  el.innerHTML=data.map(u=>{
+    const badge=u.perfil==='gestor'||u.perfil==='superadmin'?'accent':'blue';
+    const action=u.id!==USER?.id?('<button class="btn sm danger" data-uid="'+u.id+'" onclick="removerUsuario(this.dataset.uid)">✕</button>'):'<span style="font-size:10px;color:var(--text3)">você</span>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--br);margin-bottom:6px">'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+esc(u.nome||u.email)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(u.email)+'</div></div>'+
+      '<span class="badge '+badge+'">'+u.perfil+'</span>'+action+'</div>';
+  }).join('');
 }
 
 function rCfgScripts(){
