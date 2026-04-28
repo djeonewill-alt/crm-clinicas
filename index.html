@@ -1430,22 +1430,22 @@ function rCfgVendedor(){
 }
 
 async function sincVendedores(){
-  if(!empresaId){toast('erro: empresa não carregada. recarregue a página.');return;}
+  if(!empresaId){toast('erro: empresa não carregada.');return;}
   showLoading('sincronizando...');
   try{
-    const{data,error}=await sb.from('perfis').select('*').eq('empresa_id',empresaId);
+    const{data,error}=await sb.from('perfis').select('*').eq('empresa_id',empresaId).eq('ativo',true);
     if(error){toast('erro: '+error.message);hideLoading();return;}
     if(data&&data.length){
-      if(!S.config.vendedores)S.config.vendedores=[];
-      const relevantes=data.filter(p=>p.id!==USER?.id||p.perfil!=='superadmin');
-      relevantes.forEach(p=>{
-        const ex=S.config.vendedores.find(v=>v.uid===p.id);
-        if(!ex)S.config.vendedores.push({uid:p.id,email:p.email,nome:p.nome||p.email,perfil:p.perfil,comissao:10,mostrarMetas:true,metas:null});
-        else{ex.email=p.email;ex.nome=p.nome||p.email;ex.perfil=p.perfil;}
+      const relevantes=data.filter(p=>!(p.id===USER?.id&&p.perfil==='superadmin'));
+      // Reconstrói lista — remove excluídos, mantém configs dos existentes
+      S.config.vendedores=relevantes.map(p=>{
+        const ex=(S.config.vendedores||[]).find(v=>v.uid===p.id);
+        return ex?{...ex,email:p.email,nome:p.nome||p.email,perfil:p.perfil}:
+          {uid:p.id,email:p.email,nome:p.nome||p.email,perfil:p.perfil,comissao:10,mostrarMetas:true,metas:null};
       });
       save();toast(relevantes.length+' usuário(s) sincronizado(s)!');
-    }else{toast('nenhum usuário encontrado. empresa: '+empresaId.slice(0,8)+'...');}
-  }catch(e){console.error(e);toast('erro: '+e.message);}
+    }else{S.config.vendedores=[];save();toast('nenhum usuário encontrado.');}
+  }catch(e){toast('erro: '+e.message);}
   hideLoading();renderConfig();
 }
 
