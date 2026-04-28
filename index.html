@@ -525,32 +525,42 @@ async function syncEmpresas(){
 
 async function initEmpresas(){
   showLoading('carregando...');
-  let empresas=await syncEmpresas();
-  if(!empresas.length){
-    // Cria primeira empresa no Supabase
-    const{data,error}=await sb.from('empresas').insert({nome:'Clínica Bella Vida'}).select().single();
-    if(!error&&data){
-      const id=data.id;
-      empresas=[{id,nome:'Clínica Bella Vida'}];
-      saveEmpresas(empresas);
-      setEmpresaAtual(id);
-      // Config padrão
-      const demo=DEFAULT_CONFIG();
-      demo.clinica='Clínica Bella Vida';
-      demo.especialidade='Estrias';
-      demo.vendedor='Ana Paula';
-      demo.scripts=[
-        {id:1,funil:'prospeccao',dia:'d1',nome:'saudação dia 1',texto:'Olá! Tudo bem? 😊\n\nAqui é {{vendedor}} da {{clinica}}!\n\nVi que você tem interesse em {{especialidade}}. Posso te ajudar?'},
-        {id:2,funil:'prospeccao',dia:'d2',nome:'follow-up dia 2',texto:'Oi! Aqui é {{vendedor}} da {{clinica}} novamente. 😊\n\nPassei para ver se recebeu minha mensagem. Posso te enviar mais informações?'},
-        {id:3,funil:'qualificacao',dia:'q1',nome:'qualificação dia 1',texto:'Olá! Que ótimo que você respondeu! 😊\n\nMe conta um pouco mais — qual região você gostaria de tratar?'},
-        {id:4,funil:'retorno',dia:'r1',nome:'retorno dia 1',texto:'Olá! Chegamos na data que você indicou para retomar nosso contato. Podemos conversar?'},
-      ];
-      await sb.from('configuracoes').insert({empresa_id:id,dados:demo});
-      localStorage.setItem('crm_config_'+id,JSON.stringify(demo));
+  // Sempre busca do Supabase primeiro
+  const rows=await sbGet('empresas');
+  if(rows.length){
+    const list=rows.map(r=>({id:r.id,nome:r.nome}));
+    saveEmpresas(list);
+    hideLoading();
+    return list;
+  }
+  // Só cria se não existir NENHUMA empresa no banco
+  const{data,error}=await sb.from('empresas').insert({nome:'Clínica Bella Vida'}).select().single();
+  if(!error&&data){
+    const id=data.id;
+    const list=[{id,nome:'Clínica Bella Vida'}];
+    saveEmpresas(list);
+    setEmpresaAtual(id);
+    const demo=DEFAULT_CONFIG();
+    demo.clinica='Clínica Bella Vida';
+    demo.especialidade='Estrias';
+    demo.vendedor='';
+    demo.scripts=[
+      {id:1,funil:'prospeccao',dia:'d1',nome:'saudação dia 1',texto:'Olá! Tudo bem? 😊\n\nAqui é {{vendedor}} da {{clinica}}!\n\nVi que você tem interesse em {{especialidade}}. Posso te ajudar?'},
+      {id:2,funil:'prospeccao',dia:'d2',nome:'follow-up dia 2',texto:'Oi! Aqui é {{vendedor}} da {{clinica}} novamente. 😊\n\nPassei para ver se recebeu minha mensagem. Posso te enviar mais informações?'},
+      {id:3,funil:'qualificacao',dia:'q1',nome:'qualificação dia 1',texto:'Olá! Que ótimo que você respondeu! 😊\n\nMe conta um pouco mais — qual região você gostaria de tratar?'},
+      {id:4,funil:'retorno',dia:'r1',nome:'retorno dia 1',texto:'Olá! Chegamos na data que você indicou para retomar nosso contato. Podemos conversar?'},
+    ];
+    await sb.from('configuracoes').insert({empresa_id:id,dados:demo});
+    localStorage.setItem('crm_config_'+id,JSON.stringify(demo));
+    // Vincula super admin a esta empresa
+    if(USER?.id){
+      await sb.from('perfis').update({empresa_id:id}).eq('id',USER.id);
     }
+    hideLoading();
+    return list;
   }
   hideLoading();
-  return empresas;
+  return[];
 }
 
 // ═══ ESTADO ═══
@@ -1623,19 +1633,25 @@ async function iniciarApp(){
   USER=await getUser();
   if(!USER){hideLoading();renderLogin();return;}
   loadUI();
-  // Superadmin carrega todas as empresas, outros só a sua
   let empresas;
   if(isSuperAdmin()){
+    // Superadmin vê todas as empresas — mas NÃO cria novas automaticamente
     empresas=await syncEmpresas();
-    if(!empresas.length)empresas=await initEmpresas();
+    if(!empresas.length){
+      // Só cria se realmente não existe nenhuma
+      empresas=await initEmpresas();
+    }
   } else {
-    // Gestor/vendedor — só a empresa vinculada
+    // Gestor/vendedor — só a empresa vinculada ao seu perfil
     if(USER.empresa_id){
-      empresas=[{id:USER.empresa_id,nome:''}];
+      // Busca o nome da empresa
+      const{data}=await sb.from('empresas').select('id,nome').eq('id',USER.empresa_id).single();
+      empresas=[{id:USER.empresa_id,nome:data?.nome||''}];
+      saveEmpresas(empresas);
     } else {
-      // Sem empresa vinculada ainda
       hideLoading();
-      document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--bg)"><div style="font-size:32px">⚠️</div><div style="color:var(--text2);font-size:14px">sua conta ainda não foi vinculada a uma empresa.</div><div style="color:var(--text3);font-size:12px">fale com o administrador do sistema.</div><button class="btn" onclick="logout()">sair</button></div>`;
+      showApp();
+      document.getElementById('main').innerHTML=`<div style="display:flex;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:12px"><div style="font-size:32px">⚠️</div><div style="color:var(--text2);font-size:14px">sua conta ainda não foi vinculada a uma empresa.</div><div style="color:var(--text3);font-size:12px">fale com o administrador do sistema.</div><button class="btn" onclick="logout()">sair</button></div>`;
       return;
     }
   }
