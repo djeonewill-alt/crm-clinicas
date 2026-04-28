@@ -621,17 +621,18 @@ let UI={workFunnel:'prospeccao',workActive:null,searchQuery:'',configTab:'clinic
 // ═══ SAVE/LOAD — híbrido LocalStorage + Supabase ═══
 let saveTimer=null;
 function save(){
-  // Salva imediatamente no cache local
   try{localStorage.setItem('crm_ui',JSON.stringify(UI))}catch(e){}
-  // Debounce para não sobrecarregar o Supabase
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>syncConfigToSupabase(),1000);
+  saveTimer=setTimeout(async()=>{
+    try{
+      await syncConfigToSupabase();
+    }catch(e){console.warn('save falhou',e);}
+  },800);
 }
 async function syncConfigToSupabase(){
   if(!empresaId)return;
-  try{
-    await sb.from('configuracoes').upsert({empresa_id:empresaId,dados:S.config},{onConflict:'empresa_id'});
-  }catch(e){console.warn('sync config falhou',e)}
+  const{error}=await sb.from('configuracoes').upsert({empresa_id:empresaId,dados:S.config},{onConflict:'empresa_id'});
+  if(error)console.warn('sync config erro:',error);
 }
 
 async function saveLead(leadObj){
@@ -775,13 +776,19 @@ function novaEmpresa(){
   openModal('nova empresa',`<div class="form-group"><label class="form-label">nome da empresa</label><input class="form-input" id="ne-nome" placeholder="Ex: Livro Vencendo as Tempestades" autofocus></div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmarNovaEmpresa()">criar</button>`);
 }
-function confirmarNovaEmpresa(){
-  const nome=document.getElementById('ne-nome')?.value.trim();if(!nome){toast('Digite o nome');return}
-  const id='emp_'+Date.now();
-  const empresas=getEmpresas();empresas.push({id,nome});saveEmpresas(empresas);
+async function confirmarNovaEmpresa(){
+  const nome=document.getElementById('ne-nome')?.value.trim();
+  if(!nome){toast('Digite o nome');return;}
+  showLoading('criando empresa...');
+  const{data,error}=await sb.from('empresas').insert({nome}).select().single();
+  hideLoading();
+  if(error||!data){toast('Erro ao criar empresa: '+(error?.message||'tente novamente'));return;}
+  const id=data.id;
   const cfg=DEFAULT_CONFIG();cfg.clinica=nome;
-  localStorage.setItem('crm_data_'+id,JSON.stringify({config:cfg,leads:[],nid:1}));
-  closeModal();trocarEmpresa(id);toast('Empresa criada!');
+  await sb.from('configuracoes').insert({empresa_id:id,dados:cfg});
+  // Vincula super admin à nova empresa também
+  const empresas=getEmpresas();empresas.push({id,nome});saveEmpresas(empresas);
+  closeModal();await trocarEmpresa(id);toast('Empresa criada!');
 }
 
 // ═══ UTILS ═══
