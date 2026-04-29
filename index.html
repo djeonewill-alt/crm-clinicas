@@ -1651,7 +1651,7 @@ function openNewLead(){
     <div class="form-group"><label class="form-label">especialidade</label><input class="form-input" id="fl-esp" value="${esc(S.config.especialidade)}"></div>
     <div class="form-group"><label class="form-label">campanha / origem</label><select class="form-input" id="fl-camp"><option value="">— selecionar —</option>${camps.map(c=>`<option value="${esc(c.nome||c)}">${esc(c.nome||c)}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">funil</label><select class="form-input" id="fl-fun">${FUNNELS.map(f=>`<option value="${f.id}" ${f.id==='prospeccao'?'selected':''}>${f.label}</option>`).join('')}</select></div>`,
-  `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="saveLead()">salvar lead</button>`);
+  `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="saveLeadFromModal()">salvar lead</button>`);
 }
 function openEdit(id){
   const l=S.leads.find(x=>x.id===id);if(!l)return;
@@ -1664,7 +1664,7 @@ function openEdit(id){
     <div class="form-group"><label class="form-label">funil</label><select class="form-input" id="fl-fun">${FUNNELS.map(f=>`<option value="${f.id}" ${f.id===l.funnel?'selected':''}>${f.label}</option>`).join('')}</select></div>
     <input type="hidden" id="fl-eid" value="${id}">
     <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px"><button class="btn danger" style="width:100%" onclick="confirmExcl('${id}')">🗑️ excluir este lead</button></div>`,
-  `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="saveLead()">salvar</button>`);
+  `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="saveLeadFromModal()">salvar</button>`);
 }
 function confirmExcl(id){openModal('⚠️ excluir lead',`<div style="font-size:13px;color:var(--text2);line-height:1.6">esta ação é <strong style="color:var(--red)">irreversível</strong>. o lead será permanentemente excluído e não poderá ser recuperado.</div>`,`<button class="btn" onclick="openEdit('${id}')">← voltar</button><button class="btn danger" onclick="delLead('${id}')">sim, excluir permanentemente</button>`)}
 // Normaliza telefone: remove tudo que não é dígito, formata (11) 98765-4321
@@ -1678,7 +1678,7 @@ function normalizarTel(t){
 }
 function soDigitos(t){return(t||'').replace(/\D/g,'')}
 
-function saveLead(){
+function saveLeadFromModal(){
   const telRaw=document.getElementById('fl-tel')?.value.trim();
   if(!telRaw){toast('telefone obrigatório');return}
   const tel=normalizarTel(telRaw);
