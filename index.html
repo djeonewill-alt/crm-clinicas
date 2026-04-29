@@ -741,7 +741,7 @@ spinStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(spinStyle);
 
 function toggleEmpresa(e){if(e)e.stopPropagation();const el=document.getElementById('empresa-dropdown');if(el)el.classList.toggle('open')}
-document.addEventListener('click',e=>{const el=document.getElementById('empresa-dropdown');if(el&&!e.target.closest('.brand-wrap'))el.classList.remove('open')});
+document.addEventListener('click',e=>{const el=document.getElementById('empresa-dropdown');if(el&&!e.target.closest('.brand-wrap')&&!e.target.closest('#brand'))el.classList.remove('open')});
 
 function renderEmpresaDropdown(){
   const empresas=getEmpresas();
@@ -1130,7 +1130,9 @@ function moverF(lid,funil){
   }
   saveLeadLocal(l);advQ();toast('lead movido!');
 }
+window.moverF=moverF;
 function confirmDesq(lid){openModal('⚠️ desqualificar',`<div style="font-size:13px;color:var(--text2);line-height:1.6">mover para <strong style="color:var(--red)">desqualificado</strong>. não aparecerá mais nas filas.</div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn danger" onclick="moverF('${lid}','descartado');closeModal()">confirmar</button>`)}
+window.confirmDesq=confirmDesq;
 function fecharN(lid){
   const l=S.leads.find(x=>x.id===lid);if(!l)return;
   const unidades=(S.config.enderecos||[]).map(e=>e.nome).filter(Boolean);
@@ -1144,6 +1146,7 @@ function fecharN(lid){
     <div class="form-group"><label class="form-label">observação</label><textarea class="notes-area" id="fn-obs" rows="2" placeholder="ex: cliente vai levar comprovante na consulta..."></textarea></div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmFech('${lid}')">✓ confirmar agendamento</button>`);
 }
+window.fecharN=fecharN;
 function confirmFech(lid){
   const l=S.leads.find(x=>x.id===lid);if(!l)return;
   const unidade=document.getElementById('fn-unidade')?.value||'';
@@ -1157,10 +1160,13 @@ function confirmFech(lid){
   saveLeadLocal(l);closeModal();UI.workFunnel='clientes';UI.workActive=lid;render();
   toast('🎉 agendamento confirmado!');
 }
+window.confirmFech=confirmFech;
 function novaSessao(lid){openModal('nova sessão',`<div class="form-group"><label class="form-label">observação</label><textarea class="notes-area" id="ns-obs" rows="3"></textarea></div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmNS('${lid}')">registrar</button>`)}
 function confirmNS(lid){const l=S.leads.find(x=>x.id===lid);if(!l)return;const obs=document.getElementById('ns-obs').value.trim();if(obs)l.notas=(l.notas?l.notas+'\n':'')+obs;const b=new Date();l.toques=(S.config.toques||[]).map(t=>{const d=new Date(b);d.setDate(d.getDate()+t.dias);return{id:t.id,feito:false,dataAgendada:d.toISOString().slice(0,10)}});saveLeadLocal(l);closeModal();selectLead(lid);toast('sessão registrada!')}
 function abrirRet(lid){openModal('colocar em retorno 🕐',`<div class="form-group"><label class="form-label">data de retorno</label><input class="form-input" type="date" id="ret-data" value="${todayStr()}"></div><div class="form-group"><label class="form-label">motivo</label><textarea class="notes-area" id="ret-obs" rows="2"></textarea></div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmRet('${lid}')">confirmar</button>`)}
+window.abrirRet=abrirRet;
 function confirmRet(lid){const l=S.leads.find(x=>x.id===lid);if(!l)return;const data=document.getElementById('ret-data').value;const obs=document.getElementById('ret-obs').value.trim();l.funnel='retorno';l.retornoData=data;l.colAt=Date.now();if(obs)l.notas=(l.notas?l.notas+'\n':'')+`[retorno ${data}]: ${obs}`;saveLeadLocal(l);closeModal();advQ();toast('retorno para '+fmtDate(data))}
+window.confirmRet=confirmRet;
 function limparRet(lid){const l=S.leads.find(x=>x.id===lid);if(!l)return;l.retornoData='';saveLeadLocal(l);selectLead(lid)}
 function togTq(lid,i){const l=S.leads.find(x=>x.id===lid);if(!l)return;l.toques[i].feito=!l.toques[i].feito;saveLeadLocal(l);selectLead(lid)}
 function addTq(lid){const l=S.leads.find(x=>x.id===lid);if(!l)return;openModal('adicionar toque',`<div class="form-group"><label class="form-label">tipo</label><select class="form-input" id="at-tipo">${(S.config.toques||[]).map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">data</label><input class="form-input" type="date" id="at-data" value="${todayStr()}"></div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="salvaTq('${lid}')">adicionar</button>`)}
