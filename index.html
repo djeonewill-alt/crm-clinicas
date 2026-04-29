@@ -537,13 +537,15 @@ async function criarUsuario(){
   if(error){res.style.cssText='display:block;color:var(--red);font-size:12px';res.textContent='Erro: '+error.message;return;}
   // Vincula à empresa atual
   if(data.user){
-    await sb.from('perfis').upsert({id:data.user.id,email,nome,perfil,empresa_id:empresaId},{onConflict:'id'});
+    await sb.from('perfis').upsert({id:data.user.id,email,nome,perfil,empresa_id:empresaId,ativo:true},{onConflict:'id'});
+    // Atualiza lista
+    await carregarUsuarios();
+    await carregarUsuariosCfg();
   }
   res.style.cssText='display:block;background:var(--green-bg);border:1px solid rgba(74,222,128,.3);border-radius:var(--br);padding:12px;font-size:12px;color:var(--green)';
-  res.innerHTML=`✅ usuário criado!<br><strong>Email:</strong> ${email}<br><strong>Senha inicial:</strong> <code style="background:var(--bg4);padding:2px 6px;border-radius:4px;font-size:13px">${senha}</code><br><span style="color:var(--text2);font-size:11px">copie e envie para a pessoa. ela pode trocar depois.</span>`;
+  res.innerHTML=`✅ usuário criado!<br><strong>Email:</strong> ${email}<br><strong>Senha inicial:</strong> <code style="background:var(--bg4);padding:2px 6px;border-radius:4px;font-size:13px">${senha}</code><br><span style="color:var(--text2);font-size:11px">copie e envie para a pessoa. ela pode fazer login imediatamente.</span>`;
   document.getElementById('nu-email').value='';
   document.getElementById('nu-nome').value='';
-  carregarUsuarios();
 }
 
 async function removerUsuario(uid){
@@ -738,7 +740,7 @@ const spinStyle=document.createElement('style');
 spinStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(spinStyle);
 
-function toggleEmpresa(){document.getElementById('empresa-dropdown').classList.toggle('open')}
+function toggleEmpresa(e){if(e)e.stopPropagation();const el=document.getElementById('empresa-dropdown');if(el)el.classList.toggle('open')}
 document.addEventListener('click',e=>{const el=document.getElementById('empresa-dropdown');if(el&&!e.target.closest('.brand-wrap'))el.classList.remove('open')});
 
 function renderEmpresaDropdown(){
@@ -869,7 +871,7 @@ function renderTopbar(){
   }
   el.innerHTML=`
     <div class="brand-wrap">
-      ${canSeeEmpresas()?`<span class="brand" id="brand" onclick="toggleEmpresa()">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span> ▾</span><div class="empresa-dropdown" id="empresa-dropdown"></div>`:`<span class="brand" style="cursor:default">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span></span>`}
+      ${canSeeEmpresas()?`<span class="brand" id="brand" onclick="toggleEmpresa(event)">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span> ▾</span><div class="empresa-dropdown" id="empresa-dropdown"></div>`:`<span class="brand" style="cursor:default">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span></span>`}
     </div>
     <button class="nav-btn ${tab==='work'?'active':''}" onclick="setTab('work')">⚡ trabalho</button>
     <button class="nav-btn ${tab==='kanban'?'active':''}" onclick="setTab('kanban')">⠿ funis</button>
@@ -1353,12 +1355,12 @@ function rCfgClinica(){
   </div>`:''}
   ${sa||sub==='enderecos'?`<div class="config-block"><h3>📍 endereços de atendimento</h3>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">o nome aparece no botão rápido. ex: "paulista", "tatuapé".</p>
-    ${(S.config.enderecos||[]).map((e,i)=>`<div class="endereco-item"><input class="form-input" value="${esc(e.nome||'')}" style="width:130px;flex-shrink:0" placeholder="nome (ex: paulista)" onblur="S.config.enderecos[${i}].nome=this.value;save()"><input class="form-input" value="${esc(e.endereco||'')}" style="flex:1" placeholder="endereço completo" onblur="S.config.enderecos[${i}].endereco=this.value;save()"><button class="btn sm danger" onclick="S.config.enderecos.splice(${i},1);save();renderConfig()">✕</button></div>`).join('')}
+    ${(S.config.enderecos||[]).map((e,i)=>`<div class="endereco-item"><input class="form-input" value="${esc(e.nome||'')}" style="width:130px;flex-shrink:0" placeholder="nome (ex: paulista)" onblur="S.config.enderecos[${i}].nome=this.value;save()"><textarea class="form-input" style="flex:1;min-height:60px" placeholder="Endereço com quebras de linha..." onblur="S.config.enderecos[${i}].endereco=this.value;save()">${esc(e.endereco||'')}</textarea><button class="btn sm danger" onclick="S.config.enderecos.splice(${i},1);save();renderConfig()">✕</button></div>`).join('')}
     <button class="btn sm" onclick="if(!S.config.enderecos)S.config.enderecos=[];S.config.enderecos.push({nome:'',endereco:''});save();renderConfig()">+ adicionar endereço</button>
   </div>`:''}
   ${sa||sub==='pix'?`<div class="config-block"><h3>💳 chaves pix</h3>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">o apelido aparece no botão rápido. adicione quantas chaves quiser.</p>
-    ${(S.config.pixes||[]).map((p,i)=>`<div class="pix-item"><input class="form-input" value="${esc(p.apelido||'')}" style="width:160px;flex-shrink:0" placeholder="apelido (ex: pix nubank)" onblur="S.config.pixes[${i}].apelido=this.value;save()"><input class="form-input" value="${esc(p.chave||'')}" style="flex:1" placeholder="chave pix" onblur="S.config.pixes[${i}].chave=this.value;save()"><button class="btn sm danger" onclick="S.config.pixes.splice(${i},1);save();renderConfig()">✕</button></div>`).join('')}
+    ${(S.config.pixes||[]).map((p,i)=>`<div class="pix-item"><input class="form-input" value="${esc(p.apelido||'')}" style="width:160px;flex-shrink:0" placeholder="apelido (ex: pix nubank)" onblur="S.config.pixes[${i}].apelido=this.value;save()"><textarea class="form-input" style="flex:1;min-height:50px" placeholder="Chave pix ou informações..." onblur="S.config.pixes[${i}].chave=this.value;save()">${esc(p.chave||'')}</textarea><button class="btn sm danger" onclick="S.config.pixes.splice(${i},1);save();renderConfig()">✕</button></div>`).join('')}
     <button class="btn sm" style="margin-bottom:20px" onclick="if(!S.config.pixes)S.config.pixes=[];S.config.pixes.push({apelido:'',chave:''});save();renderConfig()">+ adicionar pix</button>
   </div>
   <div class="config-block"><h3>🏦 dados bancários</h3>
@@ -1366,7 +1368,7 @@ function rCfgClinica(){
     <button class="btn sm" onclick="if(!S.config.dadosBancarios)S.config.dadosBancarios=[];S.config.dadosBancarios.push({apelido:'',banco:'',agencia:'',conta:'',titular:''});save();renderConfig()">+ adicionar conta bancária</button>
   </div>`:''}
   ${sa||sub==='horarios'?`<div class="config-block"><h3>🕐 horários de funcionamento</h3>
-    <div class="form-group" style="margin-bottom:14px"><label class="form-label">horários</label><input class="form-input" id="c-hor" value="${esc(S.config.horarios||'')}" placeholder="ex: seg-sex: 8h-18h | sáb: 8h-12h"></div>
+    <div class="form-group" style="margin-bottom:14px"><label class="form-label">horários de atendimento</label><textarea class="form-input" id="c-hor" rows="6" placeholder="Cole aqui a agenda formatada com quebras de linha...">${esc(S.config.horarios||'')}</textarea></div>
     <button class="btn primary" onclick="S.config.horarios=document.getElementById('c-hor').value.trim();save();toast('salvo!')">salvar</button>
   </div>`:''}
   ${sa||sub==='dados'?`<div class="config-block" style="border-color:rgba(248,113,113,.2)"><h3 style="color:var(--red)">⚠ zona de perigo</h3>
@@ -1674,8 +1676,9 @@ function saveLead(){
   const tel=normalizarTel(telRaw);
   const telD=soDigitos(tel);
   const eid=document.getElementById('fl-eid')?.value;
-  // Verifica duplicado por telefone (ignora o próprio lead ao editar)
-  const duplicado=S.leads.find(x=>soDigitos(x.tel)===telD&&(!eid||x.id!==parseInt(eid)));
+  // Só valida duplicata ao CRIAR novo lead (não ao editar)
+  if(!eid){
+    const duplicado=S.leads.find(x=>soDigitos(x.tel)===telD);
   if(duplicado){
     const fInfo=FUNNELS.find(f=>f.id===duplicado.funnel)||FUNNELS[0];
     openModal('⚠️ telefone já cadastrado',`<div style="font-size:13px;color:var(--text2);line-height:1.8">
@@ -1687,6 +1690,7 @@ function saveLead(){
     </div>`,
     `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn danger" onclick="salvarLeadForçado('${telD}')">cadastrar mesmo assim</button>`);
     return;
+    }
   }
   _salvarLead(tel,eid);
 }
