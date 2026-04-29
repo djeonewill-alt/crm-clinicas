@@ -1637,9 +1637,11 @@ function getCampanhas(apenasAtivas=true){
 }
 function openNewLead(){
   const camps=getCampanhas();
+  const hoje=new Date().toISOString().slice(0,10);
   openModal('+ novo lead',`
     <div class="form-group"><label class="form-label">telefone (whatsapp) *</label><input class="form-input" id="fl-tel" placeholder="11987654321" type="tel" autofocus></div>
     <div class="form-group"><label class="form-label">nome (opcional)</label><input class="form-input" id="fl-nome"></div>
+    <div class="form-group"><label class="form-label">data de entrada</label><input class="form-input" id="fl-data" type="date" value="${hoje}"></div>
     <div class="form-group"><label class="form-label">especialidade</label><input class="form-input" id="fl-esp" value="${esc(S.config.especialidade)}"></div>
     <div class="form-group"><label class="form-label">campanha / origem</label><select class="form-input" id="fl-camp"><option value="">— selecionar —</option>${camps.map(c=>`<option value="${esc(c.nome||c)}">${esc(c.nome||c)}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">funil</label><select class="form-input" id="fl-fun">${FUNNELS.map(f=>`<option value="${f.id}" ${f.id==='prospeccao'?'selected':''}>${f.label}</option>`).join('')}</select></div>`,
@@ -1709,6 +1711,7 @@ async function _salvarLead(tel,eid,forcar){
   const esp=document.getElementById('fl-esp')?.value.trim()||S.config.especialidade||'';
   const campanha=document.getElementById('fl-camp')?.value||'';
   const telNorm=normalizarTel(telFinal||'');
+  const dataEntrada=document.getElementById('fl-data')?.value||'';
 
   if(eidFinal){
     // Edição — atualiza lead existente
@@ -1719,10 +1722,11 @@ async function _salvarLead(tel,eid,forcar){
     // Novo lead — insere no Supabase para obter UUID
     showLoading('salvando lead...');
     try{
+      const colAtDate=dataEntrada?new Date(dataEntrada+'T12:00:00').toISOString():new Date().toISOString();
       const row={empresa_id:empresaId,nome,tel:telNorm,funnel:fid,dia_prosp:dias[0].id,
         esp,campanha,vendedor_id:USER?.id||null,vendedor_nome:USER?.nome||USER?.email||'',
         valor:0,fechado:false,tentativas:[{resultado:'',obs:'',data:null,hora:null,horaResp:null}],
-        toques:[],col_at:new Date().toISOString()};
+        toques:[],col_at:colAtDate};
       const{data,error}=await sb.from('leads').insert(row).select().single();
       hideLoading();
       if(error||!data){toast('erro ao salvar — tente novamente');return;}
