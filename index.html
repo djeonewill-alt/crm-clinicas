@@ -1674,10 +1674,11 @@ function renderRelContent(rtab){
     });
 
     // Breakdown de cadastrados por data de entrada
-    const cadastradosHojeEntrada=cadastradosHoje.filter(l=>{
+    const cadastradosHojeEntradaLeads=cadastradosHoje.filter(l=>{
       const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
       return dE===dataHoje;
-    }).length;
+    });
+    const cadastradosHojeEntrada=cadastradosHojeEntradaLeads.length;
     const cadastradosAntigos=cadastradosHoje.length-cadastradosHojeEntrada;
 
     // Breakdown de qualificados por data de entrada
@@ -1704,6 +1705,21 @@ function renderRelContent(rtab){
             • ${cadastradosHojeEntrada} que entraram hoje<br>
             • ${cadastradosAntigos} que entraram antes
           </div>`:''}
+          
+          ${cadastradosHojeEntradaLeads.length>0?`<details style="margin-top:12px;padding:12px;background:var(--bg4);border-radius:6px">
+            <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--accent)">🔍 DEBUG: Ver quais são os ${cadastradosHojeEntrada} leads</summary>
+            <div style="margin-top:8px;font-size:11px;color:var(--text2)">
+              ${cadastradosHojeEntradaLeads.map(l=>{
+                const dE=l.dataEntrada||'SEM DATA';
+                const dC=new Date(l.colAt).toISOString().slice(0,10);
+                return`<div style="margin:4px 0;padding:4px;background:var(--bg3);border-radius:4px">
+                  <strong>${esc(l.nome||l.tel)}</strong><br>
+                  <span style="font-size:10px">Data entrada: ${dE}</span><br>
+                  <span style="font-size:10px">Data cadastro: ${dC}</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </details>`:''}
         </div>
 
         <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
