@@ -1022,6 +1022,13 @@ function renderLD(l){
 
   // Botões mover — no cabeçalho
   let moverBtns='';
+  let voltarBtn='';
+  
+  // Botão "voltar para prospecção" quando não está em prospecção
+  if(l.funnel!=='prospeccao'&&l.funnel!=='clientes'){
+    voltarBtn=`<button class="action-btn" style="background:var(--bg4);color:var(--text2);border-color:var(--border2)" onclick="moverF('${l.id}','prospeccao')">← voltar p/ prospecção</button>`;
+  }
+  
   if(l.funnel==='prospeccao')moverBtns=`<button class="action-btn green" onclick="moverF('${l.id}','qualificacao')">✅ qualificação</button><button class="action-btn purple" onclick="moverF('${l.id}','remarketing')">📣 remarketing</button><button class="action-btn red" onclick="confirmDesq('${l.id}')">🗑️ desqualificar</button>`;
   else if(l.funnel==='qualificacao')moverBtns=`<button class="action-btn green" onclick="fecharN('${l.id}')">🎉 fechou!</button><button class="action-btn purple" onclick="abrirRet('${l.id}')">🕐 retorno</button><button class="action-btn orange" onclick="moverF('${l.id}','remarketing')">📣 remarketing</button><button class="action-btn red" onclick="confirmDesq('${l.id}')">🗑️ desqualificar</button>`;
   else if(l.funnel==='retorno')moverBtns=`<button class="action-btn green" onclick="fecharN('${l.id}')">🎉 fechou!</button><button class="action-btn purple" onclick="abrirRet('${l.id}')">🕐 nova data</button><button class="action-btn orange" onclick="moverF('${l.id}','remarketing')">📣 remarketing</button><button class="action-btn red" onclick="confirmDesq('${l.id}')">🗑️ desqualificar</button>`;
