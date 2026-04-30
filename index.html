@@ -1799,14 +1799,31 @@ function renderRelContent(rtab){
       dataFim=UI.relDataAte||hoje;
     }
     
+    console.log('🔍 Filtro Análise Funil:',{periodo,dataInicio,dataFim});
+    
     // Agrupa leads por data de entrada (filtrado por período)
     const porLote={};
     S.leads.forEach(l=>{
-      const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      // Extrai só a data, ignorando horário
+      let dE;
+      if(l.dataEntrada){
+        dE=new Date(l.dataEntrada).toISOString().slice(0,10);
+      }else{
+        dE=new Date(l.colAt).toISOString().slice(0,10);
+      }
       
-      // Filtra por período
-      if(dataInicio&&dE<dataInicio)return;
-      if(dataFim&&dE>dataFim)return;
+      console.log('Lead:',l.nome||l.tel,'dataEntrada:',l.dataEntrada,'→ data extraída:',dE);
+      
+      // Filtra por período (comparação string funciona pois formato é YYYY-MM-DD)
+      if(dataInicio&&dE<dataInicio){
+        console.log('  ❌ Filtrado: dE < dataInicio',dE,'<',dataInicio);
+        return;
+      }
+      if(dataFim&&dE>dataFim){
+        console.log('  ❌ Filtrado: dE > dataFim',dE,'>',dataFim);
+        return;
+      }
+      console.log('  ✅ Incluído no relatório');
       
       if(!porLote[dE])porLote[dE]={data:dE,total:0,qualificados:0,fechados:0,porDia:{}};
       porLote[dE].total++;
