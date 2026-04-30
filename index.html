@@ -800,6 +800,7 @@ function rowToLead(r){
     fechado:r.fechado||false,retornoData:r.retorno_data||'',
     tentativas:r.tentativas||[],toques:r.toques||[],
     fechamento:r.fechamento||null,
+    dataEntrada:r.data_entrada||r.col_at||null,
     colAt:r.col_at?new Date(r.col_at).getTime():Date.now(),
     respondeuAt:r.respondeu_at?new Date(r.respondeu_at).getTime():null,
     prospectadoEm:r.prospectado_em?new Date(r.prospectado_em).getTime():null,
@@ -1380,7 +1381,10 @@ function moverF(lid,funil){
   if(funil==='qualificacao'){
     l.diaProsp='q1';
     l.tentativas=criarTentativasDia('qualificacao','q1');
-    if(prev==='prospeccao')l.qualificadoEm=Date.now();
+    if(prev==='prospeccao'){
+      l.qualificadoEm=Date.now();
+      l.diaQualificado=prevDia; // Salva em qual dia da prospecção qualificou
+    }
   }
   if(funil==='retorno'){
     l.diaProsp='r1';
@@ -1392,6 +1396,7 @@ function moverF(lid,funil){
   }
   if(funil==='clientes'){
     l.fechadoEm=Date.now();
+    l.diaFechado=prevDia; // Salva em qual dia da qualificação/retorno fechou
     const b=new Date();
     l.toques=(S.config.toques||[]).map(t=>{const d=new Date(b);d.setDate(d.getDate()+t.dias);return{id:t.id,feito:false,dataAgendada:d.toISOString().slice(0,10)}});
   }
@@ -1952,7 +1957,8 @@ function importarCSV(input){
       const funnelValido=['prospeccao','qualificacao','retorno','clientes'].includes(obj.funil)?obj.funil:'prospeccao';
       const dias=getDias(funnelValido);
       const diaValido=dias.find(d=>d.id===obj.dia)?obj.dia:dias[0].id;
-      S.leads.push({id:S.nid++,nome:obj.nome||'',tel:obj.telefone,funnel:funnelValido,diaProsp:diaValido,colAt:Date.now(),esp:obj.especialidade||S.config.especialidade||'',valor:parseFloat(obj.valor)||0,fechado:funnelValido==='clientes',cor:'',local:'',causa:'',toques:[],retornoData:obj.retornodata||'',respondeuAt:null,prospectadoEm:null,qualificadoEm:null,fechadoEm:null,tentativas:criarTentativasDia(funnelValido,diaValido)});
+      const dataEntrada=obj.dataentrada||obj.data_entrada||new Date().toISOString().slice(0,10);
+      S.leads.push({id:S.nid++,nome:obj.nome||'',tel:obj.telefone,funnel:funnelValido,diaProsp:diaValido,colAt:Date.now(),dataEntrada,esp:obj.especialidade||S.config.especialidade||'',valor:parseFloat(obj.valor)||0,fechado:funnelValido==='clientes',cor:'',local:'',causa:'',toques:[],retornoData:obj.retornodata||'',respondeuAt:null,prospectadoEm:null,qualificadoEm:null,fechadoEm:null,tentativas:criarTentativasDia(funnelValido,diaValido)});
       importados++;
     }
     save();input.value='';
@@ -2055,10 +2061,11 @@ async function _salvarLead(tel,eid,forcar){
     showLoading('salvando lead...');
     try{
       const colAtDate=dataEntrada?new Date(dataEntrada+'T12:00:00').toISOString():new Date().toISOString();
+      const dataEntradaISO=dataEntrada?new Date(dataEntrada+'T12:00:00').toISOString():new Date().toISOString();
       const row={empresa_id:empresaId,nome,tel:telNorm,funnel:fid,dia_prosp:dias[0].id,
         esp,campanha,vendedor_id:USER?.id||null,vendedor_nome:USER?.nome||USER?.email||'',
         valor:0,fechado:false,tentativas:criarTentativasDia(fid,dias[0].id),
-        toques:[],col_at:colAtDate};
+        toques:[],col_at:colAtDate,data_entrada:dataEntradaISO};
       const{data,error}=await sb.from('leads').insert(row).select().single();
       hideLoading();
       if(error||!data){toast('erro ao salvar — tente novamente');return;}
