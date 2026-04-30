@@ -741,6 +741,7 @@ spinStyle.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(spinStyle);
 
 function toggleEmpresa(e){if(e)e.stopPropagation();const el=document.getElementById('empresa-dropdown');if(el)el.classList.toggle('open')}
+window.toggleEmpresa=toggleEmpresa;
 document.addEventListener('click',e=>{const el=document.getElementById('empresa-dropdown');if(el&&!e.target.closest('.brand-wrap')&&!e.target.closest('#brand'))el.classList.remove('open')});
 
 function renderEmpresaDropdown(){
@@ -761,6 +762,7 @@ function excluirEmpresa(id){
   openModal('⚠️ excluir empresa',`<div style="font-size:13px;color:var(--text2);line-height:1.6">Excluir <strong style="color:var(--text)">${esc(emp.nome)}</strong>?<br><br>Todos os leads e configurações serão <strong style="color:var(--red)">permanentemente apagados</strong>.</div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn danger" onclick="confirmarExcluirEmpresa('${id}')">sim, excluir</button>`);
 }
+window.excluirEmpresa=excluirEmpresa;
 async function confirmarExcluirEmpresa(id){
   // Remove do Supabase de verdade
   await sb.from('leads').delete().eq('empresa_id',id);
@@ -773,16 +775,19 @@ async function confirmarExcluirEmpresa(id){
   toast('Empresa excluída!');
   renderEmpresaDropdown();
 }
+window.confirmarExcluirEmpresa=confirmarExcluirEmpresa;
 async function trocarEmpresa(id){
   await loadEmpresa(id);
   UI.workFunnel='prospeccao';UI.workActive=null;
   document.getElementById('empresa-dropdown')?.classList.remove('open');
   render();
 }
+window.trocarEmpresa=trocarEmpresa;
 function novaEmpresa(){
   openModal('nova empresa',`<div class="form-group"><label class="form-label">nome da empresa</label><input class="form-input" id="ne-nome" placeholder="Ex: Livro Vencendo as Tempestades" autofocus></div>`,
   `<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="confirmarNovaEmpresa()">criar</button>`);
 }
+window.novaEmpresa=novaEmpresa;
 async function confirmarNovaEmpresa(){
   const nome=document.getElementById('ne-nome')?.value.trim();
   if(!nome){toast('Digite o nome');return;}
@@ -1189,6 +1194,8 @@ function delLead(id){excluirLeadDB(id)}
 
 // ═══ KANBAN ═══
 let dragId=null;
+function setDragId(id){dragId=id;}
+window.setDragId=setDragId;
 function renderKanban(){
   const fS=UI.workFunnel,dias=getDias(fS);
   const meusL=getMeusLeads();
@@ -1200,15 +1207,16 @@ function renderKanban(){
       <div class="kanban-board">
         ${fS==='retorno'
           ?`${[{id:'dorm',label:'aguardando data',color:'#9a9890'}].map(col=>{const ls=meusL.filter(l=>l.funnel==='retorno'&&l.retornoData&&l.retornoData>todayStr());return`<div class="k-col" style="flex:0 0 200px"><div class="k-col-header"><div class="k-col-title" style="color:${col.color}">${col.label}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text)">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3)">${l.tel}</div><div style="font-size:10px;color:var(--text3);margin-top:3px">📅 ${fmtDate(l.retornoData)}</div></div>`).join('')}</div></div>`;}).join('')}
-          ${DIAS_RETORNO.map(dia=>{const ls=meusL.filter(l=>l.funnel==='retorno'&&l.retornoData&&l.retornoData<=todayStr()&&l.diaProsp===dia.id);return`<div class="k-col" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropK(event,'${dia.id}')"><div class="k-col-header"><div class="k-col-title" style="color:var(--purple)">${dia.label}</div><div style="display:flex;gap:3px">${dia.icons.map(ic=>`<span style="font-size:13px">${ic}</span>`).join('')}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" draggable="true" ondragstart="dragId=${l.id}" ondragend="document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'))" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l.tel}</div><span style="font-size:10px;color:${timeAgoClass(l.colAt)==='cold'?'var(--red)':'var(--text3)'}">${timeAgo(l.colAt)}</span></div>`).join('')}</div></div>`;}).join('')}`
+          ${DIAS_RETORNO.map(dia=>{const ls=meusL.filter(l=>l.funnel==='retorno'&&l.retornoData&&l.retornoData<=todayStr()&&l.diaProsp===dia.id);return`<div class="k-col" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropK(event,'${dia.id}')"><div class="k-col-header"><div class="k-col-title" style="color:var(--purple)">${dia.label}</div><div style="display:flex;gap:3px">${dia.icons.map(ic=>`<span style="font-size:13px">${ic}</span>`).join('')}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" draggable="true" ondragstart="setDragId('${l.id}')" ondragend="document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'))" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l.tel}</div><span style="font-size:10px;color:${timeAgoClass(l.colAt)==='cold'?'var(--red)':'var(--text3)'}">${timeAgo(l.colAt)}</span></div>`).join('')}</div></div>`;}).join('')}`
           :fS==='clientes'
           ?`<div class="k-col" style="flex:0 0 280px"><div class="k-col-header"><div class="k-col-title" style="color:#4ade80">clientes</div><span class="k-col-count">${meusL.filter(l=>l.funnel==='clientes').length}</span></div><div class="k-cards">${meusL.filter(l=>l.funnel==='clientes').map(l=>`<div class="k-card" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text)">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3)">${l.tel}</div>${l.valor?`<span class="badge green" style="font-size:9px;margin-top:3px">R$${l.valor}</span>`:''}</div>`).join('')}</div></div>`
-          :dias.map(dia=>{const ls=meusL.filter(l=>l.funnel===fS&&l.diaProsp===dia.id);return`<div class="k-col" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropK(event,'${dia.id}')"><div class="k-col-header"><div class="k-col-title">${dia.label}</div><div style="display:flex;gap:3px">${dia.icons.map(ic=>`<span style="font-size:13px">${ic}</span>`).join('')}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" draggable="true" ondragstart="dragId=${l.id}" ondragend="document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'))" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l.tel}</div><span style="font-size:10px;font-family:'DM Mono',monospace;color:${timeAgoClass(l.colAt)==='cold'?'var(--red)':timeAgoClass(l.colAt)==='hot'?'var(--orange)':'var(--text3)'}">${timeAgo(l.colAt)}</span></div>`).join('')}</div></div>`;}).join('')}
+          :dias.map(dia=>{const ls=meusL.filter(l=>l.funnel===fS&&l.diaProsp===dia.id);return`<div class="k-col" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropK(event,'${dia.id}')"><div class="k-col-header"><div class="k-col-title">${dia.label}</div><div style="display:flex;gap:3px">${dia.icons.map(ic=>`<span style="font-size:13px">${ic}</span>`).join('')}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" draggable="true" ondragstart="setDragId('${l.id}')" ondragend="document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'))" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px">${esc(l.nome||l.tel)}</div><div style="font-size:11px;color:var(--text3);margin-bottom:3px">${l.tel}</div><span style="font-size:10px;font-family:'DM Mono',monospace;color:${timeAgoClass(l.colAt)==='cold'?'var(--red)':timeAgoClass(l.colAt)==='hot'?'var(--orange)':'var(--text3)'}">${timeAgo(l.colAt)}</span></div>`).join('')}</div></div>`;}).join('')}
         ${['remarketing','descartado'].map(fid=>{const ls=meusL.filter(l=>l.funnel===fid);if(!ls.length)return'';const color=fid==='remarketing'?'#c084fc':'#f87171';return`<div class="k-col" style="flex:0 0 160px"><div class="k-col-header"><div class="k-col-title" style="color:${color}">${fid==='remarketing'?'remarketing':'descartado'}</div><span class="k-col-count">${ls.length}</span></div><div class="k-cards">${ls.map(l=>`<div class="k-card" onclick="goWork('${l.id}')"><div style="font-size:12px;font-weight:500;color:var(--text)">${esc(l.nome||l.tel)}</div></div>`).join('')}</div></div>`;}).join('')}
       </div>
     </div>`;
 }
 function dropK(e,diaId){e.preventDefault();document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'));if(!dragId)return;const l=S.leads.find(x=>x.id===dragId);if(l){l.diaProsp=diaId;l.colAt=Date.now();saveLeadLocal(l);renderKanban();}}
+window.dropK=dropK;
 function goWork(id){
   const l=S.leads.find(x=>x.id===id);if(!l)return;
   UI.workFunnel=l.funnel;
