@@ -855,7 +855,25 @@ function migrarDiaProsp(){
       alt=true;
     }
   });
-  if(alt)save();
+  if(alt){
+    S.leads.forEach(l=>saveLeadLocal(l));
+    toast('Migração completa! Aguarde sincronização...');
+  }
+}
+
+async function migrarDataEntradaManual(){
+  showLoading('Migrando datas de entrada...');
+  let count=0;
+  for(const l of S.leads){
+    if(!l.dataEntrada&&l.colAt){
+      l.dataEntrada=new Date(l.colAt).toISOString();
+      await saveLead(l);
+      count++;
+    }
+  }
+  hideLoading();
+  toast(`✓ ${count} leads migrados!`);
+  render();
 }
 
 function loadUI(){
@@ -1065,6 +1083,10 @@ function renderWork(){
 
   document.getElementById('main').innerHTML=`
   <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;height:100%">
+    <div style="padding:12px;background:var(--orange-bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+      <span style="font-size:13px;color:var(--orange);flex:1">🔧 Migração de dados disponível</span>
+      <button class="btn sm" onclick="migrarDataEntradaManual()" style="background:var(--orange);color:white">Migrar dataEntrada</button>
+    </div>
     ${retornosHoje>0?`<div class="retorno-alert" onclick="setFunnel('retorno')">
       <span style="font-size:16px">🕐</span>
       <span style="font-size:13px;color:var(--purple);font-weight:500">${retornosHoje} lead${retornosHoje>1?'s':''} com retorno para hoje</span>
