@@ -98,7 +98,7 @@ select.form-input option{background:var(--bg3)}textarea.form-input{resize:vertic
 /* WORK */
 .work-layout{display:flex;flex:1;overflow:hidden}
 .queue-panel{width:260px;border-right:1px solid var(--border);overflow-y:auto;background:var(--bg);flex-shrink:0;display:flex;flex-direction:column}
-.queue-funnel-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto;flex-shrink:0}
+.queue-funnel-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto;flex-shrink:0;position:sticky;top:0;z-index:10}
 .qft{flex:1;padding:7px 4px;text-align:center;font-size:10px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;min-width:50px}
 .qft:hover{color:var(--text2)}.qft.active{color:var(--accent);border-bottom-color:var(--accent)}
 .qft-count{display:inline-block;background:var(--bg4);border-radius:8px;padding:0 5px;font-size:9px;margin-left:2px;font-family:'DM Mono',monospace}
@@ -1018,15 +1018,19 @@ function getQueue(fid){
   if(fid==='prospeccao'||fid==='qualificacao'){
     leads=leads.filter(l=>{
       const dias=getDias(l.funnel);
-      const diaConfig=dias.find(d=>d.id===l.diaProsp);
+      const diaAtual=l.diaProsp||'d1';
+      const diaConfig=dias.find(d=>d.id===diaAtual);
       if(!diaConfig)return true; // Se não tem config, mostra
       
-      const tentativasConfig=diaConfig.tentativas||[];
-      const tentativasFeitas=(l.tentativas||[]).filter(t=>t.resultado).length;
-      const totalTentativas=tentativasConfig.length;
+      const tentativasConfigDia=diaConfig.tentativas||[];
+      const totalTentativasDia=tentativasConfigDia.length;
+      
+      // Conta quantas tentativas JÁ TEM RESULTADO (completadas)
+      const tentativas=l.tentativas||[];
+      const tentativasCompletas=tentativas.filter(t=>t.resultado&&t.resultado!=='').length;
       
       // Se completou TODAS as tentativas configuradas para esse dia, esconde
-      if(tentativasFeitas>=totalTentativas&&totalTentativas>0){
+      if(tentativasCompletas>=totalTentativasDia&&totalTentativasDia>0){
         return false; // Remove da fila
       }
       
