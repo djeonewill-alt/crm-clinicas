@@ -93,7 +93,7 @@ select.form-input option{background:var(--bg3)}textarea.form-input{resize:vertic
 .search-results{position:absolute;left:16px;right:16px;top:calc(100% - 2px);background:var(--bg2);border:1px solid var(--border2);border-radius:var(--brl);overflow:hidden;display:none;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .search-results.show{display:block}
 .search-result-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .12s}
-.search-result-item:hover{background:var(--bg3)}.search-result-item:last-child{border-bottom:none}
+.search-result-item:hover,.search-result-item.selected{background:var(--bg3)}.search-result-item:last-child{border-bottom:none}
 
 /* WORK */
 .work-layout{display:flex;flex:1;overflow:hidden}
@@ -1122,7 +1122,10 @@ function renderWork(){
       </div>
     </div>
     <div class="global-search-wrap">
-      <input class="global-search" placeholder="🔍 buscar lead por nome ou telefone em todos os funis..." value="${esc(UI.searchQuery)}" oninput="UI.searchQuery=this.value;renderSearchResults(this.value)" onblur="setTimeout(()=>hideSearch(),200)">
+      <input class="global-search" placeholder="🔍 buscar lead por nome ou telefone em todos os funis..." value="${esc(UI.searchQuery)}" 
+        oninput="UI.searchQuery=this.value;renderSearchResults(this.value)" 
+        onkeydown="handleSearchKeydown(event)"
+        onblur="setTimeout(()=>hideSearch(),200)">
       <div class="search-results" id="search-results"></div>
     </div>
     <div class="work-layout">
@@ -1145,13 +1148,59 @@ function renderWork(){
 
 function renderSearchResults(q){
   const el=document.getElementById('search-results');if(!el)return;
-  if(!q||q.length<2){el.classList.remove('show');return;}
+  if(!q||q.length<2){el.classList.remove('show');UI.searchSelectedIndex=-1;return;}
   const results=searchGlobal(q);
   if(!results.length){el.innerHTML='<div style="padding:12px 14px;font-size:12px;color:var(--text3)">nenhum lead encontrado</div>';el.classList.add('show');return;}
-  el.innerHTML=results.map(l=>{const fInfo=FUNNELS.find(f=>f.id===l.funnel)||FUNNELS[0];return`<div class="search-result-item" onmousedown="goToLead(${l.id})"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:${avatarClr(l.id)}22;color:${avatarClr(l.id)}">${initials(l.nome||l.tel)}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${esc(l.nome||'sem nome')}</div><div style="font-size:11px;color:var(--text3)">${esc(l.tel)}</div></div><span class="badge" style="background:${fInfo.color}22;color:${fInfo.color}">${fInfo.label}</span></div>`;}).join('');
+  
+  UI.searchResults=results; // Guarda resultados para navegação com teclado
+  
+  el.innerHTML=results.map((l,idx)=>{
+    const fInfo=FUNNELS.find(f=>f.id===l.funnel)||FUNNELS[0];
+    const isSelected=idx===UI.searchSelectedIndex;
+    return`<div class="search-result-item ${isSelected?'selected':''}" onclick="goToLead(${l.id})" data-lead-id="${l.id}">
+      <div class="avatar" style="width:30px;height:30px;font-size:11px;background:${avatarClr(l.id)}22;color:${avatarClr(l.id)}">${initials(l.nome||l.tel)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${esc(l.nome||'sem nome')}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(l.tel)}</div>
+      </div>
+      <span class="badge" style="background:${fInfo.color}22;color:${fInfo.color}">${fInfo.label}</span>
+    </div>`;
+  }).join('');
   el.classList.add('show');
 }
-function hideSearch(){const el=document.getElementById('search-results');if(el)el.classList.remove('show')}
+
+function handleSearchKeydown(e){
+  const results=UI.searchResults||[];
+  if(!results.length)return;
+  
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    UI.searchSelectedIndex=Math.min((UI.searchSelectedIndex||0)+1,results.length-1);
+    renderSearchResults(UI.searchQuery);
+  }else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    UI.searchSelectedIndex=Math.max((UI.searchSelectedIndex||0)-1,0);
+    renderSearchResults(UI.searchQuery);
+  }else if(e.key==='Enter'){
+    e.preventDefault();
+    const idx=UI.searchSelectedIndex>=0?UI.searchSelectedIndex:0;
+    if(results[idx]){
+      goToLead(results[idx].id);
+    }
+  }else if(e.key==='Escape'){
+    UI.searchQuery='';
+    hideSearch();
+    render();
+  }
+}
+
+function hideSearch(){
+  const el=document.getElementById('search-results');
+  if(el)el.classList.remove('show');
+  UI.searchSelectedIndex=-1;
+  UI.searchResults=[];
+}
+
 function goToLead(id){
   const l=S.leads.find(x=>x.id===id);
   if(!l)return;
