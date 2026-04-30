@@ -1153,9 +1153,20 @@ function confirmarHoraResp(lid,i){
   toast('horário salvo!');
 }
 function setObsT(lid,i,val){const l=S.leads.find(x=>x.id===lid);if(!l)return;if(!l.tentativas[i])return;l.tentativas[i].obs=val;saveLeadLocal(l)}
+// Histórico para desfazer última movimentação
+let lastMove=null;
+let undoTimer=null;
+
 function moverF(lid,funil){
   const l=S.leads.find(x=>x.id===lid);if(!l)return;
-  const prev=l.funnel;l.funnel=funil;l.colAt=Date.now();
+  const prev=l.funnel;
+  const prevDia=l.diaProsp;
+  const prevTents=JSON.parse(JSON.stringify(l.tentativas||[])); // clone profundo
+  
+  // Guarda estado anterior para desfazer
+  lastMove={lid,prevFunnel:prev,prevDia,prevTents,newFunnel:funil};
+  
+  l.funnel=funil;l.colAt=Date.now();
   // Corrige diaProsp para o funil de destino
   if(funil==='qualificacao'){
     l.diaProsp='q1';
@@ -1175,9 +1186,46 @@ function moverF(lid,funil){
     const b=new Date();
     l.toques=(S.config.toques||[]).map(t=>{const d=new Date(b);d.setDate(d.getDate()+t.dias);return{id:t.id,feito:false,dataAgendada:d.toISOString().slice(0,10)}});
   }
-  saveLeadLocal(l);advQ();toast('lead movido!');
+  saveLeadLocal(l);advQ();
+  
+  // Toast com botão desfazer
+  const fInfo=FUNNELS.find(f=>f.id===funil)||FUNNELS[0];
+  toastWithUndo(`Lead movido para ${fInfo.label}`,()=>undoMove());
 }
 window.moverF=moverF;
+
+function undoMove(){
+  if(!lastMove)return;
+  const l=S.leads.find(x=>x.id===lastMove.lid);
+  if(!l)return;
+  
+  // Reverte para estado anterior
+  l.funnel=lastMove.prevFunnel;
+  l.diaProsp=lastMove.prevDia;
+  l.tentativas=lastMove.prevTents;
+  l.colAt=Date.now();
+  
+  saveLeadLocal(l);
+  UI.workFunnel=lastMove.prevFunnel;
+  UI.workActive=lastMove.lid;
+  lastMove=null;
+  render();
+  toast('✓ Desfeito!');
+}
+window.undoMove=undoMove;
+
+function toastWithUndo(msg,undoFn){
+  const t=document.getElementById('toast');
+  t.innerHTML=`${msg} <button onclick="undoMove()" style="margin-left:12px;padding:4px 10px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:11px">↩ Desfazer</button>`;
+  t.classList.add('show');
+  
+  // Remove após 5 segundos
+  clearTimeout(undoTimer);
+  undoTimer=setTimeout(()=>{
+    t.classList.remove('show');
+    lastMove=null; // limpa histórico
+  },5000);
+}
 function confirmDesq(lid){openModal('⚠️ desqualificar',`<div style="font-size:13px;color:var(--text2);line-height:1.6">mover para <strong style="color:var(--red)">desqualificado</strong>. não aparecerá mais nas filas.</div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn danger" onclick="moverF('${lid}','descartado');closeModal()">confirmar</button>`)}
 window.confirmDesq=confirmDesq;
 function fecharN(lid){
@@ -1257,7 +1305,26 @@ function renderKanban(){
       </div>
     </div>`;
 }
-function dropK(e,diaId){e.preventDefault();document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'));if(!dragId)return;const l=S.leads.find(x=>x.id===dragId);if(l){l.diaProsp=diaId;l.colAt=Date.now();saveLeadLocal(l);renderKanban();}}
+function dropK(e,diaId){
+  e.preventDefault();
+  document.querySelectorAll('.k-col').forEach(c=>c.classList.remove('drag-over'));
+  if(!dragId)return;
+  const l=S.leads.find(x=>x.id===dragId);
+  if(l){
+    const prevDia=l.diaProsp;
+    // Guarda estado para desfazer
+    lastMove={lid:l.id,prevFunnel:l.funnel,prevDia,prevTents:l.tentativas,newFunnel:l.funnel,isDayChange:true};
+    
+    l.diaProsp=diaId;
+    l.colAt=Date.now();
+    saveLeadLocal(l);
+    renderKanban();
+    
+    const dias=getDias(l.funnel);
+    const diaInfo=dias.find(d=>d.id===diaId)||dias[0];
+    toastWithUndo(`Movido para ${diaInfo.label}`,()=>undoMove());
+  }
+}
 window.dropK=dropK;
 function goWork(id){
   const l=S.leads.find(x=>x.id===id);if(!l)return;
@@ -1585,10 +1652,10 @@ function rCfgScripts(){
   return subBar(subs,sub,"scripts")+`
   <div class="config-block"><h3>💬 scripts por funil e dia</h3>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">aparecem automaticamente na tela de trabalho no dia correto. use {{vendedor}}, {{clinica}}, {{especialidade}}.</p>
-    ${gruposM.map(g=>{const scripts=(S.config.scripts||[]).filter(s=>s.funil===g.id);return`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:600;color:${g.color};margin-bottom:8px">📌 ${g.label}</div>${scripts.map(s=>`<div class="script-item"><div class="script-header" onclick="this.nextElementSibling.classList.toggle('open')"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${g.color}22;color:${g.color};font-weight:500">${s.dia}</span><span style="flex:1;font-size:12px;font-weight:500;margin-left:4px">${esc(s.nome)}</span><button class="btn sm danger" onclick="event.stopPropagation();S.config.scripts=S.config.scripts.filter(x=>x.id!==${s.id});save();renderConfig()">✕</button></div><div class="script-body"><div class="form-group" style="margin-bottom:8px"><label class="form-label">nome</label><input class="form-input" value="${esc(s.nome)}" onblur="S.config.scripts.find(x=>x.id===${s.id}).nome=this.value;save()"></div><div class="form-group"><label class="form-label">texto</label><textarea class="form-input" rows="4" onblur="S.config.scripts.find(x=>x.id===${s.id}).texto=this.value;save()">${esc(s.texto)}</textarea></div></div></div>`).join('')}${!scripts.length?`<div style="font-size:12px;color:var(--text3);padding:8px 0">nenhum script cadastrado.</div>`:''}<button class="btn sm" onclick="addScript('${g.id}')">+ script em ${g.label}</button></div>`;}).join('')}
+    ${gruposM.map(g=>{const scripts=(S.config.scripts||[]).filter(s=>s.funil===g.id);return`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:600;color:${g.color};margin-bottom:8px">📌 ${g.label}</div>${scripts.map(s=>`<div class="script-item"><div class="script-header" onclick="this.nextElementSibling.classList.toggle('open')"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${g.color}22;color:${g.color};font-weight:500">${s.dia}</span><span style="flex:1;font-size:12px;font-weight:500;margin-left:4px">${esc(s.nome)}</span><button class="btn sm danger" onclick="event.stopPropagation();S.config.scripts=S.config.scripts.filter(x=>x.id!==${s.id});save();renderConfig()">✕</button></div><div class="script-body"><div class="form-group" style="margin-bottom:8px"><label class="form-label">nome</label><input class="form-input" value="${esc(s.nome)}" onblur="S.config.scripts.find(x=>x.id===${s.id}).nome=this.value;save()"></div><div class="form-group"><label class="form-label">texto</label><textarea class="form-input" rows="12" style="min-height:200px;line-height:1.6" onblur="S.config.scripts.find(x=>x.id===${s.id}).texto=this.value;save()">${esc(s.texto)}</textarea></div></div></div>`).join('')}${!scripts.length?`<div style="font-size:12px;color:var(--text3);padding:8px 0">nenhum script cadastrado.</div>`:''}<button class="btn sm" onclick="addScript('${g.id}')">+ script em ${g.label}</button></div>`;}).join('')}
   </div>`;
 }
-function addScript(funil){const dias=getDias(funil).map(d=>d.id);openModal('novo script',`<div class="form-group"><label class="form-label">nome</label><input class="form-input" id="ns-nome"></div><div class="form-group"><label class="form-label">dia</label><select class="form-input" id="ns-dia">${dias.map(d=>`<option value="${d}">${d}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">texto</label><textarea class="form-input" id="ns-txt" rows="5" placeholder="use {{vendedor}}, {{clinica}}, {{especialidade}}"></textarea></div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="salvaScript('${funil}')">salvar</button>`)}
+function addScript(funil){const dias=getDias(funil).map(d=>d.id);openModal('novo script',`<div class="form-group"><label class="form-label">nome</label><input class="form-input" id="ns-nome"></div><div class="form-group"><label class="form-label">dia</label><select class="form-input" id="ns-dia">${dias.map(d=>`<option value="${d}">${d}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">texto</label><textarea class="form-input" id="ns-txt" rows="12" placeholder="use {{vendedor}}, {{clinica}}, {{especialidade}}" style="min-height:200px;line-height:1.6"></textarea></div>`,`<button class="btn" onclick="closeModal()">cancelar</button><button class="btn primary" onclick="salvaScript('${funil}')">salvar</button>`)}
 function salvaScript(funil){const nome=document.getElementById('ns-nome')?.value.trim(),texto=document.getElementById('ns-txt')?.value.trim(),dia=document.getElementById('ns-dia')?.value;if(!nome||!texto){toast('preencha tudo');return}if(!S.config.scripts)S.config.scripts=[];S.config.scripts.push({id:S.nid++,funil,dia,nome,texto});save();closeModal();renderConfig();toast('script salvo!')}
 
 function rCfgMateriais(){
