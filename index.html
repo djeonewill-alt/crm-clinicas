@@ -2246,7 +2246,7 @@ async function _salvarLead(tel,eid,forcar){
 
   if(eidFinal){
     // Edição — atualiza lead existente
-    const l=S.leads.find(x=>x.id===eidFinal);
+    const l=S.leads.find(x=>x.id===eidFinal||x.id==eidFinal);
     if(l){
       l.nome=nome;
       l.tel=telNorm;
@@ -2254,6 +2254,7 @@ async function _salvarLead(tel,eid,forcar){
       l.funnel=fid;
       if(dataEntrada){
         l.dataEntrada=new Date(dataEntrada+'T12:00:00').toISOString();
+        console.log('💾 Salvando dataEntrada:',l.dataEntrada,'para lead:',l.nome||l.tel);
       }
       saveLeadLocal(l);
     }
