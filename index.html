@@ -1152,7 +1152,20 @@ function renderSearchResults(q){
   el.classList.add('show');
 }
 function hideSearch(){const el=document.getElementById('search-results');if(el)el.classList.remove('show')}
-function goToLead(id){const l=S.leads.find(x=>x.id===id);if(!l)return;UI.workFunnel=l.funnel;UI.workActive=id;UI.searchQuery='';hideSearch();render()}
+function goToLead(id){
+  const l=S.leads.find(x=>x.id===id);
+  if(!l)return;
+  UI.workFunnel=l.funnel;
+  UI.workActive=id;
+  UI.searchQuery='';
+  hideSearch();
+  render();
+  // Scroll para o lead selecionado após renderizar
+  setTimeout(()=>{
+    const el=document.querySelector('.queue-item.active');
+    if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+  },100);
+}
 
 function verMateriais(){
   const cats=['todos',...new Set((S.config.materiais||[]).map(m=>m.cat))];
