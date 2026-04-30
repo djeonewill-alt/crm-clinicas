@@ -1662,97 +1662,114 @@ function renderRelContent(rtab){
 
   // NOVO RELATÓRIO: Produtividade Diária
   if(rtab==='produtividade'){
-    const dataHoje=new Date().toISOString().slice(0,10);
-    // Cadastrados hoje (por data de cadastro)
-    const cadastradosHoje=S.leads.filter(l=>{
+    // Determina período
+    let dataInicio, dataFim;
+    const hoje=new Date().toISOString().slice(0,10);
+    
+    if(periodo==='hoje'){
+      dataInicio=hoje;
+      dataFim=hoje;
+    }else if(periodo==='semana'){
+      const d=new Date();
+      d.setDate(d.getDate()-7);
+      dataInicio=d.toISOString().slice(0,10);
+      dataFim=hoje;
+    }else if(periodo==='mes'){
+      const d=new Date();
+      d.setDate(d.getDate()-30);
+      dataInicio=d.toISOString().slice(0,10);
+      dataFim=hoje;
+    }else if(periodo==='personalizado'){
+      dataInicio=UI.relDataDe||hoje;
+      dataFim=UI.relDataAte||hoje;
+    }else{
+      dataInicio=hoje;
+      dataFim=hoje;
+    }
+    
+    const periodoTexto=periodo==='hoje'?new Date().toLocaleDateString('pt-BR'):
+                       periodo==='semana'?'últimos 7 dias':
+                       periodo==='mes'?'últimos 30 dias':
+                       `${new Date(dataInicio).toLocaleDateString('pt-BR')} a ${new Date(dataFim).toLocaleDateString('pt-BR')}`;
+    
+    // Cadastrados no período (por data de cadastro)
+    const cadastradosPeriodo=S.leads.filter(l=>{
       const dC=new Date(l.colAt).toISOString().slice(0,10);
-      return dC===dataHoje;
+      return dC>=dataInicio&&dC<=dataFim;
     });
-    // Qualificados hoje
-    const qualificadosHoje=S.leads.filter(l=>{
+    
+    // Qualificados no período
+    const qualificadosPeriodo=S.leads.filter(l=>{
       if(!l.qualificadoEm)return false;
       const dQ=new Date(l.qualificadoEm).toISOString().slice(0,10);
-      return dQ===dataHoje;
+      return dQ>=dataInicio&&dQ<=dataFim;
     });
-    // Fechados hoje
-    const fechadosHoje=S.leads.filter(l=>{
+    
+    // Fechados no período
+    const fechadosPeriodo=S.leads.filter(l=>{
       if(!l.fechadoEm)return false;
       const dF=new Date(l.fechadoEm).toISOString().slice(0,10);
-      return dF===dataHoje;
+      return dF>=dataInicio&&dF<=dataFim;
     });
-    // Prospectados hoje (primeira tentativa feita)
-    const prospectadosHoje=S.leads.filter(l=>{
+    
+    // Prospectados no período (primeira tentativa feita)
+    const prospectadosPeriodo=S.leads.filter(l=>{
       if(!l.prospectadoEm)return false;
       const dP=new Date(l.prospectadoEm).toISOString().slice(0,10);
-      return dP===dataHoje;
+      return dP>=dataInicio&&dP<=dataFim;
     });
 
     // Breakdown de cadastrados por data de entrada
-    const cadastradosHojeEntradaLeads=cadastradosHoje.filter(l=>{
+    const cadastradosPeriodoEntrada=cadastradosPeriodo.filter(l=>{
       const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
-      return dE===dataHoje;
+      return dE>=dataInicio&&dE<=dataFim;
     });
-    const cadastradosHojeEntrada=cadastradosHojeEntradaLeads.length;
-    const cadastradosAntigos=cadastradosHoje.length-cadastradosHojeEntrada;
+    const cadastradosHojeEntrada=cadastradosPeriodoEntrada.length;
+    const cadastradosAntigos=cadastradosPeriodo.length-cadastradosHojeEntrada;
 
     // Breakdown de qualificados por data de entrada
-    const qualHojeEntrada=qualificadosHoje.filter(l=>{
+    const qualHojeEntrada=qualificadosPeriodo.filter(l=>{
       const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
-      return dE===dataHoje;
+      return dE>=dataInicio&&dE<=dataFim;
     }).length;
-    const qualAntigos=qualificadosHoje.length-qualHojeEntrada;
+    const qualAntigos=qualificadosPeriodo.length-qualHojeEntrada;
 
     // Breakdown de fechados por data de entrada
-    const fechHojeEntrada=fechadosHoje.filter(l=>{
+    const fechHojeEntrada=fechadosPeriodo.filter(l=>{
       const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
-      return dE===dataHoje;
+      return dE>=dataInicio&&dE<=dataFim;
     }).length;
-    const fechAntigos=fechadosHoje.length-fechHojeEntrada;
+    const fechAntigos=fechadosPeriodo.length-fechHojeEntrada;
 
     return`<div class="report-grid">
-      <div class="report-card full"><div class="report-title">⚡ O QUE EU FIZ HOJE (${new Date().toLocaleDateString('pt-BR')})</div>
-        <div class="report-desc">resultado do meu trabalho de hoje — inclui leads que entraram hoje e leads antigos</div>
+      <div class="report-card full"><div class="report-title">⚡ O QUE EU FIZ (${periodoTexto.toUpperCase()})</div>
+        <div class="report-desc">resultado do trabalho no período — inclui leads que entraram no período e leads antigos</div>
         
         <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
-          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">📥 Cadastrei</span><span style="font-size:20px;font-weight:600;color:var(--orange)">${cadastradosHoje.length}</span></div>
-          ${cadastradosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
-            • ${cadastradosHojeEntrada} que entraram hoje<br>
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">📥 Cadastrei</span><span style="font-size:20px;font-weight:600;color:var(--orange)">${cadastradosPeriodo.length}</span></div>
+          ${cadastradosPeriodo.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${cadastradosHojeEntrada} que entraram no período<br>
             • ${cadastradosAntigos} que entraram antes
           </div>`:''}
-          
-          ${cadastradosHojeEntradaLeads.length>0?`<details style="margin-top:12px;padding:12px;background:var(--bg4);border-radius:6px">
-            <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--accent)">🔍 DEBUG: Ver quais são os ${cadastradosHojeEntrada} leads</summary>
-            <div style="margin-top:8px;font-size:11px;color:var(--text2)">
-              ${cadastradosHojeEntradaLeads.map(l=>{
-                const dE=l.dataEntrada||'SEM DATA';
-                const dC=new Date(l.colAt).toISOString().slice(0,10);
-                return`<div style="margin:4px 0;padding:4px;background:var(--bg3);border-radius:4px">
-                  <strong>${esc(l.nome||l.tel)}</strong><br>
-                  <span style="font-size:10px">Data entrada: ${dE}</span><br>
-                  <span style="font-size:10px">Data cadastro: ${dC}</span>
-                </div>`;
-              }).join('')}
-            </div>
-          </details>`:''}
         </div>
 
         <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
-          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">💬 Prospectei</span><span style="font-size:20px;font-weight:600;color:var(--accent)">${prospectadosHoje.length}</span></div>
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">💬 Prospectei</span><span style="font-size:20px;font-weight:600;color:var(--accent)">${prospectadosPeriodo.length}</span></div>
           <div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">total de tentativas de contato feitas</div>
         </div>
 
         <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
-          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">✅ Qualifiquei</span><span style="font-size:20px;font-weight:600;color:var(--blue)">${qualificadosHoje.length}</span></div>
-          ${qualificadosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
-            • ${qualHojeEntrada} que entraram hoje<br>
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">✅ Qualifiquei</span><span style="font-size:20px;font-weight:600;color:var(--blue)">${qualificadosPeriodo.length}</span></div>
+          ${qualificadosPeriodo.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${qualHojeEntrada} que entraram no período<br>
             • ${qualAntigos} que entraram antes
           </div>`:''}
         </div>
 
         <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
-          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">🎉 Fechei</span><span style="font-size:20px;font-weight:600;color:var(--green)">${fechadosHoje.length}</span></div>
-          ${fechadosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
-            • ${fechHojeEntrada} que entraram hoje<br>
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">🎉 Fechei</span><span style="font-size:20px;font-weight:600;color:var(--green)">${fechadosPeriodo.length}</span></div>
+          ${fechadosPeriodo.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${fechHojeEntrada} que entraram no período<br>
             • ${fechAntigos} que entraram antes
           </div>`:''}
         </div>
