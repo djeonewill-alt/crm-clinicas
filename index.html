@@ -1013,6 +1013,27 @@ function getMeusLeads(){
 function getQueue(fid){
   const meus=getMeusLeads();
   let leads=fid==='retorno'?meus.filter(l=>l.funnel==='retorno'&&!l.fechado&&l.retornoData&&l.retornoData<=todayStr()):meus.filter(l=>l.funnel===fid&&!l.fechado);
+  
+  // FILTRO: Remove leads que completaram todas as tentativas de HOJE
+  if(fid==='prospeccao'||fid==='qualificacao'){
+    leads=leads.filter(l=>{
+      const dias=getDias(l.funnel);
+      const diaConfig=dias.find(d=>d.id===l.diaProsp);
+      if(!diaConfig)return true; // Se não tem config, mostra
+      
+      const tentativasConfig=diaConfig.tentativas||[];
+      const tentativasFeitas=(l.tentativas||[]).filter(t=>t.resultado).length;
+      const totalTentativas=tentativasConfig.length;
+      
+      // Se completou TODAS as tentativas configuradas para esse dia, esconde
+      if(tentativasFeitas>=totalTentativas&&totalTentativas>0){
+        return false; // Remove da fila
+      }
+      
+      return true; // Mostra na fila
+    });
+  }
+  
   // Ordenação configurável
   if(UI.queueSort==='newest'){
     return leads.sort((a,b)=>b.colAt-a.colAt); // Mais recentes primeiro
@@ -1224,7 +1245,12 @@ function verMateriais(){
 }
 
 function renderQL(leads){
-  if(!leads.length)return'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">fila vazia 🎉</div>';
+  if(!leads.length)return`<div style="padding:40px 20px;text-align:center">
+    <div style="font-size:48px;margin-bottom:12px">🎉</div>
+    <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:6px">Parabéns!</div>
+    <div style="font-size:12px;color:var(--text3)">Você completou todas as tentativas de hoje!</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">Os leads voltam amanhã no próximo dia</div>
+  </div>`;
   const now=Date.now();
   return leads.map(l=>{
     const isLate=(now-l.colAt)>172800000;
