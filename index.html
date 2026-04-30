@@ -320,6 +320,19 @@ function canSeeConfig(){return isSuperAdmin()||isPerfil('gestor')}
 function canSeeRelatorio(){return isSuperAdmin()||isPerfil('gestor')}
 function canSeeEmpresas(){return isSuperAdmin()}
 
+// Debug helper - chame no console: promoverSuperAdmin()
+async function promoverSuperAdmin(){
+  if(!USER){console.log('Nenhum usuário logado');return;}
+  console.log('Usuário atual:',USER);
+  const{error}=await sb.from('perfis').update({perfil:'superadmin'}).eq('id',USER.id);
+  if(error){console.error('Erro:',error);return;}
+  USER.perfil='superadmin';
+  console.log('✅ Promovido para superadmin! Recarregue a página.');
+  setTimeout(()=>location.reload(),1000);
+}
+window.promoverSuperAdmin=promoverSuperAdmin;
+window.verificarPerfil=()=>console.log('Perfil atual:',USER);
+
 async function logout(){
   await sb.auth.signOut();
   USER=null;
@@ -481,6 +494,7 @@ function editarUsuario(uid,nome,email,perfil){
    <div class="form-group"><label class="form-label">perfil</label><select class="form-input" id="eu-perfil">
      <option value="vendedor" ${perfil==='vendedor'?'selected':''}>vendedor</option>
      <option value="gestor" ${perfil==='gestor'?'selected':''}>gestor</option>
+     <option value="superadmin" ${perfil==='superadmin'?'selected':''}>superadmin — acesso total</option>
    </select></div>
    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
      <button class="btn sm" style="width:100%" onclick="redefinirSenha('${uid}','${esc(email)}')">🔑 gerar nova senha para este usuário</button>
@@ -693,6 +707,9 @@ function rowToLead(r){
 async function loadEmpresa(id){
   empresaId=id;setEmpresaAtual(id);
   showLoading('carregando dados...');
+  // LIMPA os dados antigos ANTES de buscar os novos
+  S.leads=[];
+  S.config=DEFAULT_CONFIG();
   // Busca sempre do Supabase — sem cache local para dados
   try{
     const[cfgRes,leadRes]=await Promise.all([
@@ -1012,10 +1029,34 @@ function renderLD(l){
   else moverBtns=`<button class="action-btn green" onclick="moverF('${l.id}','qualificacao')">→ reativar qualif.</button><button class="action-btn orange" onclick="moverF('${l.id}','prospeccao')">→ reativar prosp.</button>`;
 
   const diaHTML=l.funnel!=='clientes'?`<div class="dia-badge ${l.diaProsp||dias[0].id}">${dC.icons.join(' ')} ${dC.label}</div>`:'';
-  const scHTML=sc?`<div class="script-box"><div class="script-box-label">${esc(sc.nome)}<button class="btn sm" onclick="navigator.clipboard.writeText(V(S.config.scripts.find(s=>s.id===${sc.id}).texto));toast('script copiado!')">📋 copiar</button></div><div class="script-box-text">${esc(V(sc.texto))}</div></div>`:'';
+  
+  // Script COLAPSADO por padrão
+  const scHTML=sc?`<div class="script-box" style="cursor:pointer;padding:8px 12px" onclick="this.classList.toggle('open')">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;font-weight:600;color:var(--accent)">📋 ${esc(sc.nome)}</span>
+      <button class="btn sm" onclick="event.stopPropagation();navigator.clipboard.writeText(V(S.config.scripts.find(s=>s.id===${sc.id}).texto));toast('script copiado!')" style="margin-left:auto">copiar</button>
+      <span style="font-size:10px;color:var(--text3)">▸</span>
+    </div>
+    <div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)" class="script-text">${esc(V(sc.texto))}</div>
+  </div>
+  <style>.script-box.open .script-text{display:block!important}.script-box.open span:last-child{transform:rotate(90deg)}</style>`:'';
+  
   const retH=l.retornoData?`<div class="alert-box ${daysDiff(l.retornoData)<=0?'danger':'info'}" style="margin-bottom:10px">🕐 retorno: <strong>${fmtDate(l.retornoData)}</strong>${daysDiff(l.retornoData)<=0?' — <strong>hoje!</strong>':''}<button onclick="limparRet('${l.id}')" style="margin-left:auto;background:none;border:none;color:inherit;cursor:pointer;font-size:11px">✕</button></div>`:'';
 
-  const tentHTML=l.funnel!=='clientes'?`<div class="section-label" style="margin:12px 0 8px">tentativas de contato</div>
+  // Tentativas COMPACTAS - resumo visual no topo
+  const tentResumo=l.funnel!=='clientes'?tents.map((t,i)=>{
+    const rOpt=rO.find(r=>r.id===t.resultado);
+    const isDone=!!t.resultado;
+    const isResp=t.resultado==='respondeu'||t.resultado==='agendou';
+    return`<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:${isDone?(isResp?'var(--green-bg)':'var(--bg4)'):'var(--bg3)'};border:1px solid ${isDone?(isResp?'rgba(74,222,128,.3)':'var(--border)'):'var(--border2)'};font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px" onclick="toggleT('${l.id}',${i})" title="${rOpt?rOpt.label:'pendente'}">
+      <span style="color:${isDone?(isResp?'var(--green)':'var(--text2)'):'var(--text3)'}">${isDone?'✓':'○'}</span>
+      <span style="color:${isDone?'var(--text)':'var(--text3)'}">tent. ${i+1}</span>
+    </div>`;
+  }).join(''):'';
+
+  const tentHTML=l.funnel!=='clientes'?`<div style="margin:12px 0 8px">
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">tentativas</div>
+    <div style="margin-bottom:10px">${tentResumo}</div>
     ${[...tents].reverse().map((t,ri)=>{
       const i=tents.length-1-ri;const iC=!t.resultado;const rOpt=rO.find(r=>r.id===t.resultado);
       const isResp=t.resultado==='respondeu'||t.resultado==='agendou';
@@ -1034,7 +1075,8 @@ function renderLD(l){
           <textarea class="notes-area" rows="2" placeholder="anotação..." onblur="setObsT(${l.id},${i},this.value)">${esc(t.obs||'')}</textarea>
         </div>
       </div>`;
-    }).join('')}`:'';
+    }).join('')}
+  </div>`:'';
 
   const prH=l.funnel!=='prospeccao'?`<div class="section-label" style="margin:12px 0 8px">prontuário</div><div class="fields-grid" style="margin-bottom:10px"><div class="field-item"><div class="field-lbl">cor da estria</div><input class="field-input" value="${esc(l.cor||'')}" placeholder="ex: violácea" onblur="updF(${l.id},'cor',this.value)"></div><div class="field-item"><div class="field-lbl">localização</div><input class="field-input" value="${esc(l.local||'')}" placeholder="ex: abdômen" onblur="updF(${l.id},'local',this.value)"></div><div class="field-item"><div class="field-lbl">causa</div><input class="field-input" value="${esc(l.causa||'')}" placeholder="ex: gestação" onblur="updF(${l.id},'causa',this.value)"></div><div class="field-item"><div class="field-lbl">valor (R$)</div><input class="field-input" type="number" value="${l.valor||''}" placeholder="0" onblur="updF(${l.id},'valor',parseFloat(this.value)||0)"></div></div>`:'';
   const tqH=l.funnel==='clientes'?renderCrono(l):'';
@@ -1058,6 +1100,7 @@ function renderLD(l){
         <div class="lead-name-row">
           <span class="lead-name">${esc(l.nome||'sem nome')}</span>
           <button class="btn sm" onclick="openEdit('${l.id}')" style="margin-left:4px">editar</button>
+          <button class="btn sm" style="background:var(--accent);color:#000;border-color:var(--accent);font-weight:600;margin-left:auto" onclick="advQ()">próximo ›</button>
         </div>
         <div class="lead-meta">
           <span style="cursor:pointer" onclick="navigator.clipboard.writeText('${l.tel}');toast('número copiado!')">📱 ${esc(l.tel)}</span>
@@ -1066,9 +1109,8 @@ function renderLD(l){
           ${l.campanha?`<span class="badge purple">📣 ${esc(l.campanha)}</span>`:''}
           ${l.valor?`<span class="badge green">R$ ${l.valor}</span>`:''}
         </div>
-        <div class="lead-actions-row" style="justify-content:flex-end;flex-wrap:wrap;gap:4px">
+        <div class="lead-actions-row" style="justify-content:flex-start;flex-wrap:wrap;gap:4px;margin-top:8px">
           ${moverBtns}
-          <button class="btn sm" style="background:var(--accent);color:#000;border-color:var(--accent);font-weight:600;margin-left:4px" onclick="advQ()">próximo ›</button>
         </div>
       </div>
     </div>
