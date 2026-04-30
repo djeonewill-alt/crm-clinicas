@@ -1083,10 +1083,6 @@ function renderWork(){
 
   document.getElementById('main').innerHTML=`
   <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;height:100%">
-    <div style="padding:12px;background:var(--orange-bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-      <span style="font-size:13px;color:var(--orange);flex:1">🔧 Migração de dados disponível</span>
-      <button class="btn sm" onclick="migrarDataEntradaManual()" style="background:var(--orange);color:white">Migrar dataEntrada</button>
-    </div>
     ${retornosHoje>0?`<div class="retorno-alert" onclick="setFunnel('retorno')">
       <span style="font-size:16px">🕐</span>
       <span style="font-size:13px;color:var(--purple);font-weight:500">${retornosHoje} lead${retornosHoje>1?'s':''} com retorno para hoje</span>
@@ -1821,8 +1817,6 @@ function renderRelContent(rtab){
       dataFim=UI.relDataAte||hoje;
     }
     
-    console.log('🔍 Filtro Análise Funil:',{periodo,dataInicio,dataFim});
-    
     // Agrupa leads por data de entrada (filtrado por período)
     const porLote={};
     S.leads.forEach(l=>{
@@ -1834,18 +1828,9 @@ function renderRelContent(rtab){
         dE=new Date(l.colAt).toISOString().slice(0,10);
       }
       
-      console.log('Lead:',l.nome||l.tel,'dataEntrada:',l.dataEntrada,'→ data extraída:',dE);
-      
       // Filtra por período (comparação string funciona pois formato é YYYY-MM-DD)
-      if(dataInicio&&dE<dataInicio){
-        console.log('  ❌ Filtrado: dE < dataInicio',dE,'<',dataInicio);
-        return;
-      }
-      if(dataFim&&dE>dataFim){
-        console.log('  ❌ Filtrado: dE > dataFim',dE,'>',dataFim);
-        return;
-      }
-      console.log('  ✅ Incluído no relatório');
+      if(dataInicio&&dE<dataInicio)return;
+      if(dataFim&&dE>dataFim)return;
       
       if(!porLote[dE])porLote[dE]={data:dE,total:0,qualificados:0,fechados:0,porDia:{}};
       porLote[dE].total++;
