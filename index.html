@@ -1047,8 +1047,8 @@ function renderWork(){
   const vConfig=USER?(S.config.vendedores||[]).find(v=>v.uid===USER.id):null;
   const metasAtivas=vConfig?.metas||metas;
   const mostrarMetas=!vConfig||vConfig.mostrarMetas!==false;
-  const cProsp=getMetaCount('prospectadoEm',metasAtivas.prosp?.periodo||'dia');
-  const cQualif=getMetaCount('qualificadoEm',metasAtivas.qualif?.periodo||'semana');
+  const cProsp=getMeusLeads().filter(l=>l.prospectadoEm&&l.prospectadoEm>=getPStart(metasAtivas.prosp?.periodo||'dia')&&(l.funnel==='prospeccao'||l.funnel==='qualificacao'||l.funnel==='clientes'||l.funnel==='retorno')).length;
+  const cQualif=getMeusLeads().filter(l=>l.qualificadoEm&&l.qualificadoEm>=getPStart(metasAtivas.qualif?.periodo||'semana')&&(l.funnel==='qualificacao'||l.funnel==='clientes'||l.funnel==='retorno')).length;
   const cFech=getMetaCount('fechadoEm',metasAtivas.fech?.periodo||'semana');
   const hoje=new Date().toISOString().slice(0,10);
   const novosHoje=getMeusLeads().filter(l=>{
