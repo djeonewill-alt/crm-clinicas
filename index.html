@@ -1226,7 +1226,58 @@ function verMateriais(){
 function renderQL(leads){
   if(!leads.length)return'<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">fila vazia 🎉</div>';
   const now=Date.now();
-  return leads.map(l=>{const isLate=(now-l.colAt)>172800000;const dias=getDias(l.funnel);const dC=dias.find(d=>d.id===l.diaProsp)||dias[0];return`<div class="queue-item ${UI.workActive===l.id?'active':''}" onclick="selectLead('${l.id}')"><div class="qi-top"><span class="qi-name">${esc(l.nome||l.tel)}</span><span class="qi-time ${timeAgoClass(l.colAt)}">${timeAgo(l.colAt)}</span></div><div class="qi-sub">${l.funnel!=='clientes'?dC.label+' · ':''} ${esc(l.esp||S.config.especialidade)}</div><div class="qi-badges">${isLate?'<span class="badge red">atrasado</span>':''}${l.retornoData&&l.retornoData<=todayStr()?'<span class="badge purple">retorno hoje</span>':''}${l.valor?`<span class="badge green">R$${l.valor}</span>`:''}</div></div>`;}).join('');
+  return leads.map(l=>{
+    const isLate=(now-l.colAt)>172800000;
+    const dias=getDias(l.funnel);
+    const dC=dias.find(d=>d.id===l.diaProsp)||dias[0];
+    
+    // Conta tentativas feitas
+    const tents=l.tentativas||[];
+    const totalTents=dias.length;
+    const tentativasFeitas=tents.length;
+    
+    // Última ação
+    const ultimaTent=tents[tents.length-1];
+    let ultimaAcao='🆕 Sem contato';
+    if(ultimaTent){
+      const icons={
+        'msg_enviada':'📱',
+        'nao_atendeu':'📞',
+        'atendeu':'☎️',
+        'respondeu':'✅',
+        'agendou':'📅',
+        'nao_respondeu':'❌'
+      };
+      const labels={
+        'msg_enviada':'Mensagem enviada',
+        'nao_atendeu':'Não atendeu',
+        'atendeu':'Atendeu',
+        'respondeu':'Respondeu',
+        'agendou':'Agendou',
+        'nao_respondeu':'Não respondeu'
+      };
+      const icon=icons[ultimaTent.acao]||'📍';
+      const label=labels[ultimaTent.acao]||ultimaTent.acao;
+      ultimaAcao=`${icon} ${label}`;
+    }
+    
+    return`<div class="queue-item ${UI.workActive===l.id?'active':''}" onclick="selectLead('${l.id}')">
+      <div class="qi-top">
+        <span class="qi-name">${esc(l.nome||l.tel)}</span>
+        <span class="qi-time ${timeAgoClass(l.colAt)}">${timeAgo(l.colAt)}</span>
+      </div>
+      <div class="qi-sub">
+        ${l.funnel!=='clientes'?`<span style="font-weight:500;color:var(--accent)">${dC.label}</span> · `:''} 
+        <span style="font-size:10px;color:var(--text3)">${tentativasFeitas}/${totalTents} tentativas</span>
+      </div>
+      <div style="margin-top:4px;font-size:11px;color:var(--text2)">${ultimaAcao}</div>
+      <div class="qi-badges">
+        ${isLate?'<span class="badge red">atrasado</span>':''}
+        ${l.retornoData&&l.retornoData<=todayStr()?'<span class="badge purple">retorno hoje</span>':''}
+        ${l.valor?`<span class="badge green">R$${l.valor}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderLD(l){
