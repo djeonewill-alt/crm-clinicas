@@ -271,11 +271,115 @@ select.form-input option{background:var(--bg3)}textarea.form-input{resize:vertic
 <script>
 // ═══ CONSTANTES ═══
 const FUNNELS=[{id:'prospeccao',label:'prospecção',color:'#fb923c',short:'Prosp'},{id:'qualificacao',label:'qualificação',color:'#60a5fa',short:'Qualif'},{id:'retorno',label:'retorno',color:'#c084fc',short:'Retorno'},{id:'clientes',label:'clientes',color:'#4ade80',short:'Clientes'}];
-const DIAS_PROSP=[{id:'d1',label:'dia 1',icons:['💬','📞']},{id:'d2',label:'dia 2',icons:['💬']},{id:'d3',label:'dia 3',icons:['📞']},{id:'d4',label:'dia 4',icons:['💬']},{id:'d5',label:'dia 5',icons:['📞','💬']}];
-const DIAS_QUALIF=[{id:'q1',label:'dia 1',icons:['💬','📞']},{id:'q2',label:'dia 2',icons:['💬']},{id:'q3',label:'dia 3',icons:['📞']},{id:'q4',label:'dia 4',icons:['💬']},{id:'q5',label:'dia 5',icons:['📞','💬']}];
-const DIAS_RETORNO=[{id:'r1',label:'dia 1',icons:['💬','📞']},{id:'r2',label:'dia 2',icons:['💬']},{id:'r3',label:'dia 3',icons:['📞','💬']}];
-const RESULT_PROSP=[{id:'msg-enviada',label:'mensagem enviada',icon:'✉️'},{id:'viu-nao-resp',label:'viu e não respondeu',icon:'👁️'},{id:'nao-atendeu',label:'não atendeu',icon:'📵'},{id:'caiu',label:'caiu',icon:'📞'},{id:'rejeitou',label:'rejeitou',icon:'🚫'},{id:'ocupado',label:'ocupado',icon:'⏳'},{id:'respondeu',label:'respondeu',icon:'✅'}];
-const RESULT_QUALIF=[...RESULT_PROSP,{id:'agendou',label:'agendou',icon:'📅'}];
+
+// Tipos de tentativa
+const TIPOS_TENTATIVA={
+  mensagem:{id:'mensagem',label:'Mensagem',icon:'💬',temScript:true},
+  ligacao:{id:'ligacao',label:'Ligação',icon:'📞',temScript:false},
+  email:{id:'email',label:'Email',icon:'📧',temScript:true,temAssunto:true},
+  instagram:{id:'instagram',label:'Instagram',icon:'📱',temScript:true},
+  facebook:{id:'facebook',label:'Facebook',icon:'👥',temScript:true},
+  linkedin:{id:'linkedin',label:'LinkedIn',icon:'💼',temScript:true}
+};
+
+// Dias com tentativas por tipo
+const DIAS_PROSP=[
+  {id:'d1',label:'dia 1',icons:['💬','📞'],tentativas:[
+    {tipo:'mensagem',temScript:true},
+    {tipo:'ligacao',temScript:false}
+  ]},
+  {id:'d2',label:'dia 2',icons:['💬'],tentativas:[
+    {tipo:'mensagem',temScript:true}
+  ]},
+  {id:'d3',label:'dia 3',icons:['📞'],tentativas:[
+    {tipo:'ligacao',temScript:false}
+  ]},
+  {id:'d4',label:'dia 4',icons:['💬'],tentativas:[
+    {tipo:'mensagem',temScript:true}
+  ]},
+  {id:'d5',label:'dia 5',icons:['📞','💬'],tentativas:[
+    {tipo:'ligacao',temScript:false},
+    {tipo:'mensagem',temScript:true}
+  ]}
+];
+
+const DIAS_QUALIF=[
+  {id:'q1',label:'dia 1',icons:['💬','📞'],tentativas:[
+    {tipo:'mensagem',temScript:true},
+    {tipo:'ligacao',temScript:false}
+  ]},
+  {id:'q2',label:'dia 2',icons:['💬'],tentativas:[
+    {tipo:'mensagem',temScript:true}
+  ]},
+  {id:'q3',label:'dia 3',icons:['📞'],tentativas:[
+    {tipo:'ligacao',temScript:false}
+  ]},
+  {id:'q4',label:'dia 4',icons:['💬'],tentativas:[
+    {tipo:'mensagem',temScript:true}
+  ]},
+  {id:'q5',label:'dia 5',icons:['📞','💬'],tentativas:[
+    {tipo:'ligacao',temScript:false},
+    {tipo:'mensagem',temScript:true}
+  ]}
+];
+
+const DIAS_RETORNO=[
+  {id:'r1',label:'dia 1',icons:['💬','📞'],tentativas:[
+    {tipo:'mensagem',temScript:true},
+    {tipo:'ligacao',temScript:false}
+  ]},
+  {id:'r2',label:'dia 2',icons:['💬'],tentativas:[
+    {tipo:'mensagem',temScript:true}
+  ]},
+  {id:'r3',label:'dia 3',icons:['📞','💬'],tentativas:[
+    {tipo:'ligacao',temScript:false},
+    {tipo:'mensagem',temScript:true}
+  ]}
+];
+
+// Resultados por tipo de tentativa
+const RESULTADOS={
+  mensagem:[
+    {id:'respondeu',label:'Respondeu',icon:'✅'},
+    {id:'enviada',label:'Enviada',icon:'📤'},
+    {id:'nao-entregue',label:'Não entregue',icon:'❌'}
+  ],
+  ligacao:[
+    {id:'respondeu',label:'Atendeu',icon:'✅'},
+    {id:'nao-atendeu',label:'Não atendeu',icon:'📵'},
+    {id:'caiu',label:'Caiu',icon:'📞'},
+    {id:'rejeitou',label:'Rejeitou',icon:'🚫'},
+    {id:'ocupado',label:'Ocupado',icon:'💼'}
+  ],
+  email:[
+    {id:'respondeu',label:'Respondeu',icon:'✅'},
+    {id:'aberto',label:'Aberto',icon:'👁️'},
+    {id:'enviado',label:'Enviado',icon:'📤'},
+    {id:'rejeitado',label:'Rejeitado',icon:'❌'}
+  ],
+  instagram:[
+    {id:'respondeu',label:'Respondeu',icon:'✅'},
+    {id:'visualizado',label:'Visualizado',icon:'👁️'},
+    {id:'enviado',label:'Enviado',icon:'📤'},
+    {id:'nao-entregue',label:'Não entregue',icon:'❌'}
+  ],
+  facebook:[
+    {id:'respondeu',label:'Respondeu',icon:'✅'},
+    {id:'visualizado',label:'Visualizado',icon:'👁️'},
+    {id:'enviado',label:'Enviado',icon:'📤'},
+    {id:'nao-entregue',label:'Não entregue',icon:'❌'}
+  ],
+  linkedin:[
+    {id:'respondeu',label:'Respondeu',icon:'✅'},
+    {id:'visualizado',label:'Visualizado',icon:'👁️'},
+    {id:'enviado',label:'Enviado',icon:'📤'},
+    {id:'nao-entregue',label:'Não entregue',icon:'❌'}
+  ]
+};
+
+// Mantém compatibilidade com código antigo
+const RESULT_PROSP=RESULTADOS.mensagem;
+const RESULT_QUALIF=[...RESULTADOS.mensagem,{id:'agendou',label:'agendou',icon:'📅'}];
 const PERIODOS={dia:'hoje',semana:'esta semana',mes:'este mês'};
 
 // ═══ MULTI-EMPRESA ═══
@@ -632,7 +736,7 @@ async function initEmpresas(){
 // ═══ ESTADO ═══
 let empresaId='';
 let S={config:DEFAULT_CONFIG(),leads:[],nid:10};
-let UI={workFunnel:'prospeccao',workActive:null,searchQuery:'',configTab:'clinica',configSubTab:{clinica:'todos',vendedor:'todos',scripts:'todos',materiais:'Todos',relatorios:'todos'},relatorioTab:'geral',relPeriodo:'semana',matModalCat:'Todos'};
+let UI={workFunnel:'prospeccao',workActive:null,searchQuery:'',queueSort:'oldest',configTab:'clinica',configSubTab:{clinica:'todos',vendedor:'todos',scripts:'todos',materiais:'Todos',relatorios:'todos'},relatorioTab:'geral',relPeriodo:'semana',matModalCat:'Todos'};
 
 // ═══ SAVE/LOAD — híbrido LocalStorage + Supabase ═══
 let saveTimer=null;
@@ -837,7 +941,14 @@ function toast(m,d=2200){const t=document.getElementById('toast');t.textContent=
 function waLink(tel){return'https://wa.me/55'+tel.replace(/\D/g,'')}
 function getDias(f){return f==='qualificacao'?DIAS_QUALIF:f==='retorno'?DIAS_RETORNO:DIAS_PROSP}
 function getDia(f,id){return getDias(f).find(d=>d.id===id)||getDias(f)[0]}
-function getRO(f){return f==='qualificacao'?RESULT_QUALIF:RESULT_PROSP}
+function getRO(f,tipoTentativa){
+  // Se especificou tipo, retorna resultados do tipo
+  if(tipoTentativa&&RESULTADOS[tipoTentativa]){
+    return RESULTADOS[tipoTentativa];
+  }
+  // Fallback para compatibilidade
+  return f==='qualificacao'?RESULT_QUALIF:RESULT_PROSP;
+}
 function getScript(funil,dia){return(S.config.scripts||[]).find(s=>s.funil===funil&&s.dia===dia)||null}
 function tip(text){const txt=text.charAt(0).toUpperCase()+text.slice(1);return`<span class="tip" onmouseenter="showTip(event,'${txt.replace(/'/g,"&#39;")}')" onmouseleave="hideTip()">ℹ</span>`}
 function showTip(e,txt){hideTip();const t=document.createElement('div');t.id='tip-box';t.style.cssText='position:fixed;background:#1e1e22;color:#9a9890;font-size:12px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.13);z-index:9999;width:260px;line-height:1.6;box-shadow:0 6px 24px rgba(0,0,0,.7);pointer-events:none';t.textContent=txt;document.body.appendChild(t);const th=t.offsetHeight||80;let left=e.clientX-130;let top=e.clientY-th-12;if(left<8)left=8;if(left+260>window.innerWidth-8)left=window.innerWidth-268;if(top<8)top=e.clientY+20;t.style.left=left+'px';t.style.top=top+'px';}
@@ -870,7 +981,11 @@ function getMeusLeads(){
 function getQueue(fid){
   const meus=getMeusLeads();
   let leads=fid==='retorno'?meus.filter(l=>l.funnel==='retorno'&&!l.fechado&&l.retornoData&&l.retornoData<=todayStr()):meus.filter(l=>l.funnel===fid&&!l.fechado);
-  return leads.sort((a,b)=>a.colAt-b.colAt);
+  // Ordenação configurável
+  if(UI.queueSort==='newest'){
+    return leads.sort((a,b)=>b.colAt-a.colAt); // Mais recentes primeiro
+  }
+  return leads.sort((a,b)=>a.colAt-b.colAt); // Mais antigos primeiro (padrão)
 }
 function getRetornosHoje(){return S.leads.filter(l=>l.funnel==='retorno'&&!l.fechado&&l.retornoData&&l.retornoData<=todayStr()).length}
 function searchGlobal(q){
@@ -979,6 +1094,10 @@ function renderWork(){
         <div class="queue-funnel-tabs">
           ${FUNNELS.map(f=>{const q=getQueue(f.id);return`<div class="qft ${UI.workFunnel===f.id?'active':''}" onclick="setFunnel('${f.id}')">${f.short}<span class="qft-count">${q.length}</span></div>`;}).join('')}
         </div>
+        <div style="display:flex;gap:4px;padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border)">
+          <button class="btn sm ${UI.queueSort==='oldest'?'primary':''}" onclick="UI.queueSort='oldest';render()" style="flex:1;font-size:11px">⏰ Mais antigos</button>
+          <button class="btn sm ${UI.queueSort==='newest'?'primary':''}" onclick="UI.queueSort='newest';render()" style="flex:1;font-size:11px">🆕 Mais recentes</button>
+        </div>
         <div id="queue-list">${renderQL(leads)}</div>
       </div>
       <div class="lead-detail" id="lead-detail">
@@ -1037,26 +1156,18 @@ function renderLD(l){
 
   const diaHTML=l.funnel!=='clientes'?`<div class="dia-badge ${l.diaProsp||dias[0].id}">${dC.icons.join(' ')} ${dC.label}</div>`:'';
   
-  // Script COLAPSADO por padrão
-  const scHTML=sc?`<div class="script-box" style="cursor:pointer;padding:8px 12px" onclick="this.classList.toggle('open')">
-    <div style="display:flex;align-items:center;gap:8px">
-      <span style="font-size:11px;font-weight:600;color:var(--accent)">📋 ${esc(sc.nome)}</span>
-      <button class="btn sm" onclick="event.stopPropagation();navigator.clipboard.writeText(V(S.config.scripts.find(s=>s.id===${sc.id}).texto));toast('script copiado!')" style="margin-left:auto">copiar</button>
-      <span style="font-size:10px;color:var(--text3)">▸</span>
-    </div>
-    <div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)" class="script-text">${esc(V(sc.texto))}</div>
-  </div>
-  <style>.script-box.open .script-text{display:block!important}.script-box.open span:last-child{transform:rotate(90deg)}</style>`:'';
-  
   const retH=l.retornoData?`<div class="alert-box ${daysDiff(l.retornoData)<=0?'danger':'info'}" style="margin-bottom:10px">🕐 retorno: <strong>${fmtDate(l.retornoData)}</strong>${daysDiff(l.retornoData)<=0?' — <strong>hoje!</strong>':''}<button onclick="limparRet('${l.id}')" style="margin-left:auto;background:none;border:none;color:inherit;cursor:pointer;font-size:11px">✕</button></div>`:'';
 
   // Tentativas COMPACTAS - resumo visual no topo
   const tentResumo=l.funnel!=='clientes'?tents.map((t,i)=>{
-    const rOpt=rO.find(r=>r.id===t.resultado);
+    const tipoInfo=TIPOS_TENTATIVA[t.tipo||'mensagem']||TIPOS_TENTATIVA.mensagem;
+    const rOTipo=getRO(l.funnel,t.tipo);
+    const rOpt=rOTipo.find(r=>r.id===t.resultado);
     const isDone=!!t.resultado;
     const isResp=t.resultado==='respondeu'||t.resultado==='agendou';
-    return`<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:${isDone?(isResp?'var(--green-bg)':'var(--bg4)'):'var(--bg3)'};border:1px solid ${isDone?(isResp?'rgba(74,222,128,.3)':'var(--border)'):'var(--border2)'};font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px" onclick="toggleT('${l.id}',${i})" title="${rOpt?rOpt.label:'pendente'}">
+    return`<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:${isDone?(isResp?'var(--green-bg)':'var(--bg4)'):'var(--bg3)'};border:1px solid ${isDone?(isResp?'rgba(74,222,128,.3)':'var(--border)'):'var(--border2)'};font-size:11px;cursor:pointer;margin-right:4px;margin-bottom:4px" onclick="toggleT('${l.id}',${i})" title="${tipoInfo.label} - ${rOpt?rOpt.label:'pendente'}">
       <span style="color:${isDone?(isResp?'var(--green)':'var(--text2)'):'var(--text3)'}">${isDone?'✓':'○'}</span>
+      <span>${tipoInfo.icon}</span>
       <span style="color:${isDone?'var(--text)':'var(--text3)'}">tent. ${i+1}</span>
     </div>`;
   }).join(''):'';
@@ -1065,18 +1176,38 @@ function renderLD(l){
     <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">tentativas</div>
     <div style="margin-bottom:10px">${tentResumo}</div>
     ${[...tents].reverse().map((t,ri)=>{
-      const i=tents.length-1-ri;const iC=!t.resultado;const rOpt=rO.find(r=>r.id===t.resultado);
+      const i=tents.length-1-ri;
+      const iC=!t.resultado;
+      const tipoInfo=TIPOS_TENTATIVA[t.tipo||'mensagem']||TIPOS_TENTATIVA.mensagem;
+      const rOTipo=getRO(l.funnel,t.tipo);
+      const rOpt=rOTipo.find(r=>r.id===t.resultado);
       const isResp=t.resultado==='respondeu'||t.resultado==='agendou';
+      const temScript=tipoInfo.temScript;
+      const scriptTent=temScript?getScript(l.funnel,l.diaProsp):null;
+      
       return`<div class="tent-block ${iC?'current':''}">
         <div class="tent-header" onclick="toggleT('${l.id}',${i})">
           <div class="tent-num ${iC?'current':isResp?'done':t.resultado?'fail':''}">${i+1}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:14px">${tipoInfo.icon}</span>
+            <span style="font-size:11px;color:var(--text3);text-transform:uppercase">${tipoInfo.label}</span>
+          </div>
           <div class="tent-result">${iC?'<span style="color:var(--accent);font-weight:500">registrar resultado...</span>':rOpt?rOpt.icon+' '+rOpt.label:'—'}</div>
           ${t.data?`<div class="tent-datetime">${fmtDateTime(t.data)}${t.horaResp!=null?' · respondeu às '+t.horaResp+'h':''}</div>`:''}
           <span style="color:var(--text3);font-size:10px;margin-left:4px">${iC?'▼':'▶'}</span>
         </div>
         <div class="tent-body ${iC?'open':''}" id="tb-${l.id}-${i}">
+          ${temScript&&scriptTent?`<div class="script-box script-tent-${l.id}-${i}" style="margin-bottom:12px;background:var(--bg4);padding:8px 12px;border-radius:8px;cursor:pointer" onclick="this.classList.toggle('open')">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:11px;font-weight:600;color:var(--accent)">📋 ${esc(scriptTent.nome)}</span>
+              <button class="btn sm" onclick="event.stopPropagation();navigator.clipboard.writeText(V(S.config.scripts.find(s=>s.id===${scriptTent.id}).texto));toast('script copiado!')" style="margin-left:auto">copiar</button>
+              <span style="font-size:10px;color:var(--text3)">▸</span>
+            </div>
+            <div style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap" class="script-text">${esc(V(scriptTent.texto))}</div>
+          </div>
+          <style>.script-box.open .script-text{display:block!important}.script-box.open span:last-child{transform:rotate(90deg)}</style>`:''}
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;font-weight:600">resultado</div>
-          <div class="result-btns">${rO.map(r=>`<button class="result-btn ${r.id} ${t.resultado===r.id?'active':''}" onclick="setRes('${l.id}',${i},'${r.id}')">${r.icon} ${r.label}</button>`).join('')}</div>
+          <div class="result-btns">${rOTipo.map(r=>`<button class="result-btn ${r.id} ${t.resultado===r.id?'active':''}" onclick="setRes('${l.id}',${i},'${r.id}')">${r.icon} ${r.label}</button>`).join('')}</div>
           ${isResp?`<div class="hora-resp-box" id="hora-box-${l.id}-${i}">🕐 <span style="color:var(--text2)">que horas o cliente respondeu?</span> <input type="number" id="hora-inp-${l.id}-${i}" min="0" max="23" value="${t.horaResp!=null?t.horaResp:new Date().getHours()}" style="width:50px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:'DM Mono',monospace;font-size:13px;outline:none"> <span style="color:var(--text3)">h</span> <button class="btn sm primary" style="padding:4px 12px" onclick="confirmarHoraResp('${l.id}',${i})">ok</button></div>`:''}
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;font-weight:600">observação</div>
           <textarea class="notes-area" rows="2" placeholder="anotação..." onblur="setObsT(${l.id},${i},this.value)">${esc(t.obs||'')}</textarea>
@@ -1122,7 +1253,7 @@ function renderLD(l){
         </div>
       </div>
     </div>
-    ${retH}${diaHTML}${scHTML}${tentHTML}${fechH}${tqH}${prH}
+    ${retH}${diaHTML}${tentHTML}${fechH}${tqH}${prH}
   </div>`;
 }
 
@@ -1130,18 +1261,69 @@ function renderCrono(l){const tq=l.toques||[];return`<div class="section-label" 
 
 // ═══ AÇÕES ═══
 function selectLead(id){UI.workActive=id;const ld=document.getElementById('lead-detail');const l=S.leads.find(x=>x.id===id);if(ld&&l)ld.innerHTML=renderLD(l);document.querySelectorAll('.queue-item').forEach(el=>el.classList.toggle('active',(el.getAttribute('onclick')||'').includes(`(${id})`)));}
-function advQ(){const leads=getQueue(UI.workFunnel);const idx=leads.findIndex(l=>l.id===UI.workActive);UI.workActive=(leads[idx+1]||leads[0])?.id||null;render()}
+function advQ(){
+  const currentLead=S.leads.find(l=>l.id===UI.workActive);
+  
+  // Verifica se completou todas as tentativas do dia atual
+  if(currentLead&&currentLead.funnel!=='clientes'){
+    const dias=getDias(currentLead.funnel);
+    const diaConfig=dias.find(d=>d.id===currentLead.diaProsp)||dias[0];
+    const tentativasConfig=diaConfig.tentativas||[];
+    const tentativasFeitas=(currentLead.tentativas||[]).filter(t=>t.resultado).length;
+    
+    // Se completou TODAS as tentativas do dia
+    if(tentativasFeitas>=tentativasConfig.length&&tentativasConfig.length>0){
+      // Avança pro próximo dia
+      const diaIdx=dias.findIndex(d=>d.id===currentLead.diaProsp);
+      if(diaIdx>=0&&diaIdx<dias.length-1){
+        // Tem próximo dia
+        const proximoDia=dias[diaIdx+1];
+        currentLead.diaProsp=proximoDia.id;
+        currentLead.tentativas=criarTentativasDia(currentLead.funnel,proximoDia.id);
+        currentLead.colAt=Date.now(); // Atualiza timestamp
+        saveLeadLocal(currentLead);
+        toast(`✅ Avançou para ${proximoDia.label}!`);
+      }
+    }
+  }
+  
+  // Avança na fila
+  const leads=getQueue(UI.workFunnel);
+  const idx=leads.findIndex(l=>l.id===UI.workActive);
+  UI.workActive=(leads[idx+1]||leads[0])?.id||null;
+  render();
+}
 function setFunnel(fid){UI.workFunnel=fid;UI.workActive=null;setTab('work')}
 function toggleT(lid,i){const el=document.getElementById(`tb-${lid}-${i}`);if(el)el.classList.toggle('open')}
 function setRes(lid,i,res){
   const l=S.leads.find(x=>x.id===lid);if(!l)return;
-  if(!l.tentativas[i])l.tentativas[i]={resultado:'',obs:'',data:null,hora:null,horaResp:null};
+  if(!l.tentativas[i])l.tentativas[i]={tipo:'mensagem',resultado:'',obs:'',data:null,hora:null,horaResp:null};
   l.tentativas[i].resultado=res;l.tentativas[i].data=Date.now();l.tentativas[i].hora=new Date().getHours();
   if(res==='respondeu'||res==='agendou'){
     if(!l.respondeuAt)l.respondeuAt=Date.now();
     l.tentativas[i].horaResp=new Date().getHours();
   }
-  if(i===0&&!l.prospectadoEm&&['msg-enviada','nao-atendeu','caiu','rejeitou','ocupado','respondeu'].includes(res))l.prospectadoEm=Date.now();
+  if(i===0&&!l.prospectadoEm&&['msg-enviada','nao-atendeu','caiu','rejeitou','ocupado','respondeu','enviada','atendeu'].includes(res))l.prospectadoEm=Date.now();
+  
+  // CRIAR PRÓXIMA TENTATIVA AUTOMATICAMENTE
+  const dias=getDias(l.funnel);
+  const diaConfig=dias.find(d=>d.id===l.diaProsp)||dias[0];
+  if(diaConfig.tentativas&&diaConfig.tentativas.length>i+1){
+    // Tem mais tentativas configuradas para esse dia
+    const proximaTent=diaConfig.tentativas[i+1];
+    // Se não existe ainda, cria
+    if(!l.tentativas[i+1]){
+      l.tentativas.push({
+        tipo:proximaTent.tipo,
+        resultado:'',
+        obs:'',
+        data:null,
+        hora:null,
+        horaResp:null
+      });
+    }
+  }
+  
   saveLeadLocal(l);
   // Re-renderiza mantendo a caixinha aberta
   const ld=document.getElementById('lead-detail');
@@ -1161,6 +1343,25 @@ function confirmarHoraResp(lid,i){
   toast('horário salvo!');
 }
 function setObsT(lid,i,val){const l=S.leads.find(x=>x.id===lid);if(!l)return;if(!l.tentativas[i])return;l.tentativas[i].obs=val;saveLeadLocal(l)}
+
+// Cria tentativas vazias baseado na configuração do dia
+function criarTentativasDia(funnel,diaId){
+  const dias=getDias(funnel);
+  const diaConfig=dias.find(d=>d.id===diaId)||dias[0];
+  if(!diaConfig.tentativas||!diaConfig.tentativas.length){
+    // Fallback para estrutura antiga
+    return [{tipo:'mensagem',resultado:'',obs:'',data:null,hora:null,horaResp:null}];
+  }
+  return diaConfig.tentativas.map(t=>({
+    tipo:t.tipo,
+    resultado:'',
+    obs:'',
+    data:null,
+    hora:null,
+    horaResp:null
+  }));
+}
+
 // Histórico para desfazer última movimentação
 let lastMove=null;
 let undoTimer=null;
@@ -1178,16 +1379,16 @@ function moverF(lid,funil){
   // Corrige diaProsp para o funil de destino
   if(funil==='qualificacao'){
     l.diaProsp='q1';
-    l.tentativas=[{resultado:'',obs:'',data:null,hora:null,horaResp:null}];
+    l.tentativas=criarTentativasDia('qualificacao','q1');
     if(prev==='prospeccao')l.qualificadoEm=Date.now();
   }
   if(funil==='retorno'){
     l.diaProsp='r1';
-    l.tentativas=[{resultado:'',obs:'',data:null,hora:null,horaResp:null}];
+    l.tentativas=criarTentativasDia('retorno','r1');
   }
   if(funil==='prospeccao'){
     l.diaProsp='d1';
-    l.tentativas=[{resultado:'',obs:'',data:null,hora:null,horaResp:null}];
+    l.tentativas=criarTentativasDia('prospeccao','d1');
   }
   if(funil==='clientes'){
     l.fechadoEm=Date.now();
@@ -1751,7 +1952,7 @@ function importarCSV(input){
       const funnelValido=['prospeccao','qualificacao','retorno','clientes'].includes(obj.funil)?obj.funil:'prospeccao';
       const dias=getDias(funnelValido);
       const diaValido=dias.find(d=>d.id===obj.dia)?obj.dia:dias[0].id;
-      S.leads.push({id:S.nid++,nome:obj.nome||'',tel:obj.telefone,funnel:funnelValido,diaProsp:diaValido,colAt:Date.now(),esp:obj.especialidade||S.config.especialidade||'',valor:parseFloat(obj.valor)||0,fechado:funnelValido==='clientes',cor:'',local:'',causa:'',toques:[],retornoData:obj.retornodata||'',respondeuAt:null,prospectadoEm:null,qualificadoEm:null,fechadoEm:null,tentativas:[{resultado:'',obs:obj.observacao||'',data:null,hora:null,horaResp:null}]});
+      S.leads.push({id:S.nid++,nome:obj.nome||'',tel:obj.telefone,funnel:funnelValido,diaProsp:diaValido,colAt:Date.now(),esp:obj.especialidade||S.config.especialidade||'',valor:parseFloat(obj.valor)||0,fechado:funnelValido==='clientes',cor:'',local:'',causa:'',toques:[],retornoData:obj.retornodata||'',respondeuAt:null,prospectadoEm:null,qualificadoEm:null,fechadoEm:null,tentativas:criarTentativasDia(funnelValido,diaValido)});
       importados++;
     }
     save();input.value='';
@@ -1856,7 +2057,7 @@ async function _salvarLead(tel,eid,forcar){
       const colAtDate=dataEntrada?new Date(dataEntrada+'T12:00:00').toISOString():new Date().toISOString();
       const row={empresa_id:empresaId,nome,tel:telNorm,funnel:fid,dia_prosp:dias[0].id,
         esp,campanha,vendedor_id:USER?.id||null,vendedor_nome:USER?.nome||USER?.email||'',
-        valor:0,fechado:false,tentativas:[{resultado:'',obs:'',data:null,hora:null,horaResp:null}],
+        valor:0,fechado:false,tentativas:criarTentativasDia(fid,dias[0].id),
         toques:[],col_at:colAtDate};
       const{data,error}=await sb.from('leads').insert(row).select().single();
       hideLoading();
