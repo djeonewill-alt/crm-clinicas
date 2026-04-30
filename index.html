@@ -841,8 +841,14 @@ function migrarDiaProsp(){
     if(l.funnel==='qualificacao'&&l.diaProsp?.startsWith('d')){l.diaProsp='q1';alt=true;}
     if(l.funnel==='retorno'&&(l.diaProsp?.startsWith('d')||l.diaProsp?.startsWith('q'))){l.diaProsp='r1';alt=true;}
     if(l.funnel==='prospeccao'&&(l.diaProsp?.startsWith('q')||l.diaProsp?.startsWith('r'))){l.diaProsp='d1';alt=true;}
+    
+    // Migração: leads sem dataEntrada pegam de colAt
+    if(!l.dataEntrada&&l.colAt){
+      l.dataEntrada=new Date(l.colAt).toISOString();
+      alt=true;
+    }
   });
-
+  if(alt)save();
 }
 
 function loadUI(){
@@ -1568,7 +1574,7 @@ function renderRelatorio(){
         ${['geral','produtividade','analise_funil','prospeccao','qualificacao','retorno','clientes','vendedor'].map(t=>`<button class="filter-btn ${rtab===t?'active':''}" onclick="UI.relatorioTab='${t}';renderRelatorio()">${{geral:'📊 geral',produtividade:'⚡ produtividade',analise_funil:'🔬 análise funil',prospeccao:'🔍 prospecção',qualificacao:'💬 qualificação',retorno:'🕐 retorno',clientes:'👥 clientes',vendedor:'👤 vendedor'}[t]}</button>`).join('')}
       </div>
       <div class="period-filter" style="margin-left:auto;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        ${['hoje','semana','mes','tudo'].map(p=>`<button class="period-btn ${periodo===p?'active':''}" onclick="UI.relPeriodo='${p}';renderRelatorio()">${{hoje:'hoje',semana:'semana',mes:'mês',tudo:'tudo'}[p]}</button>`).join('')}
+        ${['hoje','semana','mes'].map(p=>`<button class="period-btn ${periodo===p?'active':''}" onclick="UI.relPeriodo='${p}';renderRelatorio()">${{hoje:'hoje',semana:'semana',mes:'mês'}[p]}</button>`).join('')}
         <button class="period-btn ${periodo==='personalizado'?'active':''}" onclick="UI.relPeriodo='personalizado';renderRelatorio()">📅 período</button>
         ${periodo==='personalizado'?`<input type="date" class="form-input" style="padding:3px 8px;font-size:11px;width:130px" value="${UI.relDataDe||''}" onchange="UI.relDataDe=this.value;renderRelatorio()" placeholder="de">
         <span style="font-size:11px;color:var(--text3)">até</span>
@@ -1748,10 +1754,35 @@ function renderRelContent(rtab){
 
   // NOVO RELATÓRIO: Análise de Funil
   if(rtab==='analise_funil'){
-    // Agrupa leads por data de entrada
+    // Determina range de datas baseado no período
+    const hoje=new Date().toISOString().slice(0,10);
+    let dataInicio='';
+    let dataFim=hoje;
+    
+    if(periodo==='hoje'){
+      dataInicio=hoje;
+    }else if(periodo==='semana'){
+      const d=new Date();
+      d.setDate(d.getDate()-7);
+      dataInicio=d.toISOString().slice(0,10);
+    }else if(periodo==='mes'){
+      const d=new Date();
+      d.setDate(d.getDate()-30);
+      dataInicio=d.toISOString().slice(0,10);
+    }else if(periodo==='personalizado'){
+      dataInicio=UI.relDataDe||'';
+      dataFim=UI.relDataAte||hoje;
+    }
+    
+    // Agrupa leads por data de entrada (filtrado por período)
     const porLote={};
     S.leads.forEach(l=>{
       const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      
+      // Filtra por período
+      if(dataInicio&&dE<dataInicio)return;
+      if(dataFim&&dE>dataFim)return;
+      
       if(!porLote[dE])porLote[dE]={data:dE,total:0,qualificados:0,fechados:0,porDia:{}};
       porLote[dE].total++;
       if(l.qualificadoEm){
@@ -1763,11 +1794,13 @@ function renderRelContent(rtab){
       if(l.fechadoEm)porLote[dE].fechados++;
     });
 
-    const lotes=Object.values(porLote).sort((a,b)=>b.data.localeCompare(a.data)).slice(0,10);
+    const lotes=Object.values(porLote).sort((a,b)=>b.data.localeCompare(a.data));
+    const periodoTexto={hoje:'hoje',semana:'últimos 7 dias',mes:'últimos 30 dias',personalizado:'período selecionado'}[periodo]||'período';
 
     return`<div class="report-grid">
       <div class="report-card full"><div class="report-title">🔬 ANÁLISE DE FUNIL POR LOTE</div>
-        <div class="report-desc">taxa de conversão dos leads por data de entrada — últimos 10 lotes</div>
+        <div class="report-desc">taxa de conversão dos leads por data de entrada — ${periodoTexto}</div>
+        ${lotes.length===0?`<div style="padding:40px;text-align:center;color:var(--text3)">Nenhum lead cadastrado no período selecionado</div>`:''}
         ${lotes.map(lote=>{
           const txQ=lote.total>0?Math.round(lote.qualificados/lote.total*100):0;
           const txF=lote.total>0?Math.round(lote.fechados/lote.total*100):0;
@@ -2145,9 +2178,11 @@ function openNewLead(){
 function openEdit(id){
   const l=S.leads.find(x=>x.id===id);if(!l)return;
   const camps=getCampanhas();
+  const dataEntradaVal=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
   openModal('editar lead',`
     <div class="form-group"><label class="form-label">telefone *</label><input class="form-input" id="fl-tel" value="${esc(l.tel)}"></div>
     <div class="form-group"><label class="form-label">nome</label><input class="form-input" id="fl-nome" value="${esc(l.nome||'')}"></div>
+    <div class="form-group"><label class="form-label">data de entrada</label><input class="form-input" id="fl-data" type="date" value="${dataEntradaVal}"></div>
     <div class="form-group"><label class="form-label">especialidade</label><input class="form-input" id="fl-esp" value="${esc(l.esp||'')}"></div>
     <div class="form-group"><label class="form-label">campanha / origem</label><select class="form-input" id="fl-camp"><option value="">— selecionar —</option>${camps.map(c=>`<option value="${esc(c.nome||c)}" ${(l.campanha||'')===(c.nome||c)?'selected':''}>${esc(c.nome||c)}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">funil</label><select class="form-input" id="fl-fun">${FUNNELS.map(f=>`<option value="${f.id}" ${f.id===l.funnel?'selected':''}>${f.label}</option>`).join('')}</select></div>
@@ -2211,7 +2246,16 @@ async function _salvarLead(tel,eid,forcar){
   if(eidFinal){
     // Edição — atualiza lead existente
     const l=S.leads.find(x=>x.id===eidFinal);
-    if(l){l.nome=nome;l.tel=telNorm;l.esp=esp;l.funnel=fid;saveLeadLocal(l);}
+    if(l){
+      l.nome=nome;
+      l.tel=telNorm;
+      l.esp=esp;
+      l.funnel=fid;
+      if(dataEntrada){
+        l.dataEntrada=new Date(dataEntrada+'T12:00:00').toISOString();
+      }
+      saveLeadLocal(l);
+    }
     closeModal();UI.workActive=eidFinal;UI.workFunnel=fid;setTab('work');toast('✓ lead salvo!');
   } else {
     // Novo lead — insere no Supabase para obter UUID
