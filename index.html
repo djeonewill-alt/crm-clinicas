@@ -1043,7 +1043,11 @@ function renderWork(){
   const cProsp=getMetaCount('prospectadoEm',metasAtivas.prosp?.periodo||'dia');
   const cQualif=getMetaCount('qualificadoEm',metasAtivas.qualif?.periodo||'semana');
   const cFech=getMetaCount('fechadoEm',metasAtivas.fech?.periodo||'semana');
-  const novosHoje=getMeusLeads().filter(l=>l.funnel==='prospeccao'&&!l.fechado&&(now-l.colAt)<86400000).length;
+  const hoje=new Date().toISOString().slice(0,10);
+  const novosHoje=getMeusLeads().filter(l=>{
+    const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+    return l.funnel==='prospeccao'&&!l.fechado&&dE===hoje;
+  }).length;
   const retornosHoje=getRetornosHoje();
 
   document.getElementById('main').innerHTML=`
@@ -1561,7 +1565,7 @@ function renderRelatorio(){
   <div class="reports-view">
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">
       <div style="display:flex;gap:4px;flex-wrap:wrap">
-        ${['geral','prospeccao','qualificacao','retorno','clientes','vendedor'].map(t=>`<button class="filter-btn ${rtab===t?'active':''}" onclick="UI.relatorioTab='${t}';renderRelatorio()">${{geral:'📊 geral',prospeccao:'🔍 prospecção',qualificacao:'💬 qualificação',retorno:'🕐 retorno',clientes:'👥 clientes',vendedor:'👤 vendedor'}[t]}</button>`).join('')}
+        ${['geral','produtividade','analise_funil','prospeccao','qualificacao','retorno','clientes','vendedor'].map(t=>`<button class="filter-btn ${rtab===t?'active':''}" onclick="UI.relatorioTab='${t}';renderRelatorio()">${{geral:'📊 geral',produtividade:'⚡ produtividade',analise_funil:'🔬 análise funil',prospeccao:'🔍 prospecção',qualificacao:'💬 qualificação',retorno:'🕐 retorno',clientes:'👥 clientes',vendedor:'👤 vendedor'}[t]}</button>`).join('')}
       </div>
       <div class="period-filter" style="margin-left:auto;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
         ${['hoje','semana','mes','tudo'].map(p=>`<button class="period-btn ${periodo===p?'active':''}" onclick="UI.relPeriodo='${p}';renderRelatorio()">${{hoje:'hoje',semana:'semana',mes:'mês',tudo:'tudo'}[p]}</button>`).join('')}
@@ -1620,7 +1624,11 @@ function renderRelContent(rtab){
   const cProsp=getMetaCount('prospectadoEm',metas.prosp.periodo);
   const cQualif=getMetaCount('qualificadoEm',metas.qualif.periodo);
   const cFech=getMetaCount('fechadoEm',metas.fech.periodo);
-  const novosHoje=S.leads.filter(l=>l.funnel==='prospeccao'&&!l.fechado&&(Date.now()-l.colAt)<86400000).length;
+  const hoje=new Date().toISOString().slice(0,10);
+  const novosHoje=S.leads.filter(l=>{
+    const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+    return l.funnel==='prospeccao'&&!l.fechado&&dE===hoje;
+  }).length;
 
   if(rtab==='geral')return`<div class="report-grid">
     ${ra.funil!==false?`<div class="report-card"><div class="report-title">📊 funil de conversão ${tip('mostra quantos leads passaram por cada etapa. identifica onde os leads estão saindo.')}</div><div class="report-desc">de cada 100 leads que entram, quantos chegam até o fechamento?</div>${steps.map(s=>`<div class="funnel-step"><div class="funnel-step-label">${s.l} ${tip(s.tip)}</div><div class="funnel-step-bar"><div class="funnel-step-fill" style="width:${Math.max(s.pct,s.v>0?8:0)}%;background:${s.c}">${s.v>0?s.v:''}</div></div><div class="funnel-step-pct" style="color:${s.c}">${s.pct}%</div>${s.min!==null?`<div class="funnel-step-ok" style="background:${s.pct>=s.min?'var(--green-bg)':'var(--red-bg)'};color:${s.pct>=s.min?'var(--green)':'var(--red)'}">${s.pct>=s.min?'✓':'!'}</div>`:'<div style="width:16px"></div>'}</div>`).join('')}</div>`:''}
@@ -1637,6 +1645,139 @@ function renderRelContent(rtab){
     ${ra.tentativas!==false?`<div class="report-card full"><div class="report-title">📈 em qual tentativa respondem? ${tip('mostra se vale fazer todas as tentativas ou se quem não responde nas primeiras raramente responde depois.')}</div><div class="report-desc">isso define se vale ir até a última tentativa ou encerrar antes.</div><div style="display:flex;gap:8px;align-items:flex-end;height:80px">${pTent.map((v,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="font-size:11px;font-weight:600;color:var(--text2)">${v}</div><div style="width:100%;background:${v===Math.max(...pTent)&&v>0?'var(--accent)':'var(--bg4)'};border-radius:4px 4px 0 0;height:${Math.round(v/maxT*60)+4}px"></div><div style="font-size:10px;color:var(--text3)">tent. ${i+1}</div></div>`).join('')}</div></div>`:''}
     ${ra.insights!==false&&insights.length?`<div class="report-card full"><div class="report-title">💡 diagnóstico automático ${tip('interpretação automática dos números com sugestões de onde agir.')}</div><div class="report-desc">o que os números estão dizendo sobre o processo de vendas.</div>${insights.map(ins=>`<div class="insight-box ${ins.t}">${ins.m}</div>`).join('')}</div>`:''}
   </div>`;
+
+  // NOVO RELATÓRIO: Produtividade Diária
+  if(rtab==='produtividade'){
+    const dataHoje=new Date().toISOString().slice(0,10);
+    // Cadastrados hoje (por data de cadastro)
+    const cadastradosHoje=S.leads.filter(l=>{
+      const dC=new Date(l.colAt).toISOString().slice(0,10);
+      return dC===dataHoje;
+    });
+    // Qualificados hoje
+    const qualificadosHoje=S.leads.filter(l=>{
+      if(!l.qualificadoEm)return false;
+      const dQ=new Date(l.qualificadoEm).toISOString().slice(0,10);
+      return dQ===dataHoje;
+    });
+    // Fechados hoje
+    const fechadosHoje=S.leads.filter(l=>{
+      if(!l.fechadoEm)return false;
+      const dF=new Date(l.fechadoEm).toISOString().slice(0,10);
+      return dF===dataHoje;
+    });
+    // Prospectados hoje (primeira tentativa feita)
+    const prospectadosHoje=S.leads.filter(l=>{
+      if(!l.prospectadoEm)return false;
+      const dP=new Date(l.prospectadoEm).toISOString().slice(0,10);
+      return dP===dataHoje;
+    });
+
+    // Breakdown de cadastrados por data de entrada
+    const cadastradosHojeEntrada=cadastradosHoje.filter(l=>{
+      const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      return dE===dataHoje;
+    }).length;
+    const cadastradosAntigos=cadastradosHoje.length-cadastradosHojeEntrada;
+
+    // Breakdown de qualificados por data de entrada
+    const qualHojeEntrada=qualificadosHoje.filter(l=>{
+      const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      return dE===dataHoje;
+    }).length;
+    const qualAntigos=qualificadosHoje.length-qualHojeEntrada;
+
+    // Breakdown de fechados por data de entrada
+    const fechHojeEntrada=fechadosHoje.filter(l=>{
+      const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      return dE===dataHoje;
+    }).length;
+    const fechAntigos=fechadosHoje.length-fechHojeEntrada;
+
+    return`<div class="report-grid">
+      <div class="report-card full"><div class="report-title">⚡ O QUE EU FIZ HOJE (${new Date().toLocaleDateString('pt-BR')})</div>
+        <div class="report-desc">resultado do meu trabalho de hoje — inclui leads que entraram hoje e leads antigos</div>
+        
+        <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">📥 Cadastrei</span><span style="font-size:20px;font-weight:600;color:var(--orange)">${cadastradosHoje.length}</span></div>
+          ${cadastradosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${cadastradosHojeEntrada} que entraram hoje<br>
+            • ${cadastradosAntigos} que entraram antes
+          </div>`:''}
+        </div>
+
+        <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">💬 Prospectei</span><span style="font-size:20px;font-weight:600;color:var(--accent)">${prospectadosHoje.length}</span></div>
+          <div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">total de tentativas de contato feitas</div>
+        </div>
+
+        <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">✅ Qualifiquei</span><span style="font-size:20px;font-weight:600;color:var(--blue)">${qualificadosHoje.length}</span></div>
+          ${qualificadosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${qualHojeEntrada} que entraram hoje<br>
+            • ${qualAntigos} que entraram antes
+          </div>`:''}
+        </div>
+
+        <div style="margin:16px 0;padding:12px;background:var(--bg3);border-radius:8px">
+          <div class="stat-row"><span style="font-size:14px;font-weight:600;color:var(--text)">🎉 Fechei</span><span style="font-size:20px;font-weight:600;color:var(--green)">${fechadosHoje.length}</span></div>
+          ${fechadosHoje.length>0?`<div style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text3)">
+            • ${fechHojeEntrada} que entraram hoje<br>
+            • ${fechAntigos} que entraram antes
+          </div>`:''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // NOVO RELATÓRIO: Análise de Funil
+  if(rtab==='analise_funil'){
+    // Agrupa leads por data de entrada
+    const porLote={};
+    S.leads.forEach(l=>{
+      const dE=l.dataEntrada?new Date(l.dataEntrada).toISOString().slice(0,10):new Date(l.colAt).toISOString().slice(0,10);
+      if(!porLote[dE])porLote[dE]={data:dE,total:0,qualificados:0,fechados:0,porDia:{}};
+      porLote[dE].total++;
+      if(l.qualificadoEm){
+        porLote[dE].qualificados++;
+        const diaQ=l.diaQualificado||'d1';
+        if(!porLote[dE].porDia[diaQ])porLote[dE].porDia[diaQ]=0;
+        porLote[dE].porDia[diaQ]++;
+      }
+      if(l.fechadoEm)porLote[dE].fechados++;
+    });
+
+    const lotes=Object.values(porLote).sort((a,b)=>b.data.localeCompare(a.data)).slice(0,10);
+
+    return`<div class="report-grid">
+      <div class="report-card full"><div class="report-title">🔬 ANÁLISE DE FUNIL POR LOTE</div>
+        <div class="report-desc">taxa de conversão dos leads por data de entrada — últimos 10 lotes</div>
+        ${lotes.map(lote=>{
+          const txQ=lote.total>0?Math.round(lote.qualificados/lote.total*100):0;
+          const txF=lote.total>0?Math.round(lote.fechados/lote.total*100):0;
+          const dataF=new Date(lote.data).toLocaleDateString('pt-BR');
+          return`<div style="margin:16px 0;padding:14px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--accent)">📅 ${dataF}</span>
+              <span style="font-size:12px;color:var(--text3)">${lote.total} leads</span>
+            </div>
+            <div class="stat-row" style="margin:8px 0">
+              <span style="font-size:12px;color:var(--text2)">✅ Qualificados</span>
+              <span style="font-size:15px;font-weight:600;color:var(--blue)">${lote.qualificados} (${txQ}%)</span>
+            </div>
+            <div class="stat-row" style="margin:8px 0">
+              <span style="font-size:12px;color:var(--text2)">🎉 Fechados</span>
+              <span style="font-size:15px;font-weight:600;color:var(--green)">${lote.fechados} (${txF}%)</span>
+            </div>
+            ${Object.keys(lote.porDia).length>0?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2)">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Qualificaram em:</div>
+              ${Object.entries(lote.porDia).map(([dia,qtd])=>`<span style="display:inline-block;margin:2px 4px;padding:2px 8px;background:var(--bg4);border-radius:12px;font-size:10px;color:var(--text2)">${dia}: ${qtd}</span>`).join('')}
+            </div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
 
   if(rtab==='vendedor')return`<div class="report-grid">
     <div class="report-card full"><div class="report-title">👤 performance do vendedor</div><div class="report-desc">progresso das metas configuradas.</div>
