@@ -757,14 +757,20 @@ async function syncConfigToSupabase(){
 
 async function saveLead(leadObj){
   if(!leadObj||!empresaId)return;
+  console.log('📤 saveLead chamado para:',leadObj.nome||leadObj.tel);
   // Cache local imediato
   const idx=S.leads.findIndex(l=>l.id===leadObj.id);
   if(idx>=0)S.leads[idx]=leadObj;else S.leads.push(leadObj);
   // Supabase async
   try{
     const row=leadToRow(leadObj);
-    await sb.from('leads').upsert(row,{onConflict:'id'});
-  }catch(e){console.warn('sync lead falhou',e)}
+    console.log('📦 Enviando para Supabase:',{id:row.id,nome:row.nome,data_entrada:row.data_entrada});
+    const result=await sb.from('leads').upsert(row,{onConflict:'id'});
+    console.log('✅ Resposta Supabase:',result);
+    if(result.error){
+      console.error('❌ ERRO Supabase:',result.error);
+    }
+  }catch(e){console.error('❌ ERRO sync lead:',e)}
 }
 async function deleteLead(id){
   S.leads=S.leads.filter(l=>l.id!==id);
@@ -1588,6 +1594,7 @@ function renderRelatorio(){
 }
 
 function renderRelContent(rtab){
+  const periodo=UI.relPeriodo||'semana';
   const ra=S.config.relatoriosAtivos||{};
   const par=S.config.params||{respProsp:20,fechQualif:25,convRetorno:40};
   const allLeads=filterLeadsByPeriod(S.leads);
