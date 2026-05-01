@@ -36,6 +36,19 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line
 .empresa-item:hover{background:var(--bg3)}
 .empresa-item.active{color:var(--accent);font-weight:500}
 .empresa-item:last-child{border-bottom:none}
+
+/* MODULE DROPDOWN */
+.module-selector{position:relative;margin-left:16px}
+.module-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);font-size:13px;color:var(--text);cursor:pointer;font-family:inherit;font-weight:500;display:flex;align-items:center;gap:6px;transition:all .15s}
+.module-btn:hover{background:var(--bg4);border-color:var(--accent)}
+.module-dropdown{position:absolute;top:calc(100% + 8px);left:0;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--brl);min-width:200px;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+.module-dropdown.open{display:block}
+.module-item{padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13px;transition:background .12s;border-bottom:1px solid var(--border)}
+.module-item:hover{background:var(--bg3)}
+.module-item.active{background:var(--bg4);color:var(--accent);font-weight:500}
+.module-item:last-child{border-bottom:none}
+.module-icon{font-size:16px}
+
 .nav-btn{padding:5px 12px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
 .nav-btn:hover{background:var(--bg3);color:var(--text)}.nav-btn.active{background:var(--bg4);color:var(--text);border-color:var(--border2)}
 .topbar-right{margin-left:auto;display:flex;gap:6px;align-items:center}
@@ -271,6 +284,13 @@ select.form-input option{background:var(--bg3)}textarea.form-input{resize:vertic
 <script>
 // ═══ CONSTANTES ═══
 const FUNNELS=[{id:'prospeccao',label:'prospecção',color:'#fb923c',short:'Prosp'},{id:'qualificacao',label:'qualificação',color:'#60a5fa',short:'Qualif'},{id:'retorno',label:'retorno',color:'#c084fc',short:'Retorno'},{id:'clientes',label:'clientes',color:'#4ade80',short:'Clientes'}];
+
+// MÓDULOS DO SISTEMA
+const MODULES=[
+  {id:'comercial',label:'Comercial',icon:'💼',desc:'CRM e vendas'},
+  {id:'financeiro',label:'Financeiro',icon:'💰',desc:'Controle financeiro'},
+  {id:'configuracoes',label:'Configurações',icon:'⚙️',desc:'Cadastros e configurações'}
+];
 
 // Tipos de tentativa
 const TIPOS_TENTATIVA={
@@ -736,7 +756,7 @@ async function initEmpresas(){
 // ═══ ESTADO ═══
 let empresaId='';
 let S={config:DEFAULT_CONFIG(),leads:[],nid:10};
-let UI={workFunnel:'prospeccao',workActive:null,searchQuery:'',queueSort:'oldest',configTab:'clinica',configSubTab:{clinica:'todos',vendedor:'todos',scripts:'todos',materiais:'Todos',relatorios:'todos'},relatorioTab:'geral',relPeriodo:'semana',matModalCat:'Todos'};
+let UI={currentModule:'comercial',workFunnel:'prospeccao',workActive:null,searchQuery:'',queueSort:'oldest',configTab:'clinica',configSubTab:{clinica:'todos',vendedor:'todos',scripts:'todos',materiais:'Todos',relatorios:'todos'},relatorioTab:'geral',relPeriodo:'semana',matModalCat:'Todos'};
 
 // ═══ SAVE/LOAD — híbrido LocalStorage + Supabase ═══
 let saveTimer=null;
@@ -1014,27 +1034,53 @@ function getQueue(fid){
   const meus=getMeusLeads();
   let leads=fid==='retorno'?meus.filter(l=>l.funnel==='retorno'&&!l.fechado&&l.retornoData&&l.retornoData<=todayStr()):meus.filter(l=>l.funnel===fid&&!l.fechado);
   
-  // FILTRO: Remove leads que completaram todas as tentativas de HOJE
-  if(fid==='prospeccao'||fid==='qualificacao'){
+  // FILTRO PRINCIPAL: Só mostra leads do DIA 1 (d1, q1)
+  // Leads em d2, d3, etc ficam escondidos até avançar o dia
+  if(fid==='prospeccao'){
     leads=leads.filter(l=>{
-      const dias=getDias(l.funnel);
       const diaAtual=l.diaProsp||'d1';
+      // Só mostra d1
+      if(diaAtual!=='d1')return false;
+      
+      // Dentro de d1, esconde quem completou todas as tentativas
+      const dias=getDias(l.funnel);
       const diaConfig=dias.find(d=>d.id===diaAtual);
-      if(!diaConfig)return true; // Se não tem config, mostra
+      if(!diaConfig)return true;
       
       const tentativasConfigDia=diaConfig.tentativas||[];
       const totalTentativasDia=tentativasConfigDia.length;
-      
-      // Conta quantas tentativas JÁ TEM RESULTADO (completadas)
       const tentativas=l.tentativas||[];
       const tentativasCompletas=tentativas.filter(t=>t.resultado&&t.resultado!=='').length;
       
-      // Se completou TODAS as tentativas configuradas para esse dia, esconde
       if(tentativasCompletas>=totalTentativasDia&&totalTentativasDia>0){
-        return false; // Remove da fila
+        return false; // Completou d1, esconde até avançar
       }
       
-      return true; // Mostra na fila
+      return true;
+    });
+  }
+  
+  if(fid==='qualificacao'){
+    leads=leads.filter(l=>{
+      const diaAtual=l.diaProsp||'q1';
+      // Só mostra q1
+      if(diaAtual!=='q1')return false;
+      
+      // Dentro de q1, esconde quem completou todas as tentativas
+      const dias=getDias(l.funnel);
+      const diaConfig=dias.find(d=>d.id===diaAtual);
+      if(!diaConfig)return true;
+      
+      const tentativasConfigDia=diaConfig.tentativas||[];
+      const totalTentativasDia=tentativasConfigDia.length;
+      const tentativas=l.tentativas||[];
+      const tentativasCompletas=tentativas.filter(t=>t.resultado&&t.resultado!=='').length;
+      
+      if(tentativasCompletas>=totalTentativasDia&&totalTentativasDia>0){
+        return false; // Completou q1, esconde até avançar
+      }
+      
+      return true;
     });
   }
   
@@ -1063,27 +1109,84 @@ function renderTopbar(){
     empAtual.nome=S.config.clinica;
     saveEmpresas(empresas);
   }
+  const currentMod=MODULES.find(m=>m.id===UI.currentModule)||MODULES[0];
   el.innerHTML=`
     <div class="brand-wrap">
       ${canSeeEmpresas()?`<span class="brand" id="brand" onclick="toggleEmpresa(event)">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span> ▾</span><div class="empresa-dropdown" id="empresa-dropdown"></div>`:`<span class="brand" style="cursor:default">✦ <span id="brand-nome">${esc(S.config.clinica||'CRM')}</span></span>`}
     </div>
+    <div class="module-selector">
+      <button class="module-btn" id="module-btn" onclick="toggleModuleDropdown(event)">
+        ${currentMod.icon} ${currentMod.label} ▾
+      </button>
+      <div class="module-dropdown" id="module-dropdown"></div>
+    </div>
+    ${UI.currentModule==='comercial'?`
     <button class="nav-btn ${tab==='work'?'active':''}" onclick="setTab('work')">⚡ trabalho</button>
     <button class="nav-btn ${tab==='kanban'?'active':''}" onclick="setTab('kanban')">⠿ funis</button>
     ${canSeeRelatorio()?`<button class="nav-btn ${tab==='relatorio'?'active':''}" onclick="setTab('relatorio')">📊 relatórios</button>`:''}
     ${canSeeConfig()?`<button class="nav-btn ${tab==='config'?'active':''}" onclick="setTab('config')">⚙ config</button>`:''}
+    `:''}
     <div class="topbar-right">
       <button class="btn sm" style="color:var(--text3)" onclick="logout()">sair</button>
-      <button class="btn-novo-lead" onclick="openNewLead()">+ novo lead</button>
-      <button class="btn" style="padding:4px 10px;font-size:11px" onclick="exportCSV()">⬇ csv</button>
+      ${UI.currentModule==='comercial'?`<button class="btn-novo-lead" onclick="openNewLead()">+ novo lead</button><button class="btn" style="padding:4px 10px;font-size:11px" onclick="exportCSV()">⬇ csv</button>`:''}
     </div>`;
   if(canSeeEmpresas())renderEmpresaDropdown();
+  renderModuleDropdown();
 }
 function render(){
   renderTopbar();
-  if(tab==='work')renderWork();
-  else if(tab==='kanban')renderKanban();
-  else if(tab==='relatorio')renderRelatorio();
-  else renderConfig();
+  // Renderiza conforme o módulo atual
+  if(UI.currentModule==='comercial'){
+    if(tab==='work')renderWork();
+    else if(tab==='kanban')renderKanban();
+    else if(tab==='relatorio')renderRelatorio();
+    else renderConfig();
+  }else if(UI.currentModule==='financeiro'){
+    renderFinanceiro();
+  }else if(UI.currentModule==='configuracoes'){
+    renderConfiguracoes();
+  }
+}
+
+function renderModuleDropdown(){
+  const el=document.getElementById('module-dropdown');
+  if(!el)return;
+  el.innerHTML=MODULES.map(m=>`
+    <div class="module-item ${m.id===UI.currentModule?'active':''}" onclick="selectModule('${m.id}')">
+      <span class="module-icon">${m.icon}</span>
+      <div style="flex:1">
+        <div style="font-weight:500">${m.label}</div>
+        <div style="font-size:11px;color:var(--text3)">${m.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleModuleDropdown(e){
+  e.stopPropagation();
+  const dropdown=document.getElementById('module-dropdown');
+  if(!dropdown)return;
+  dropdown.classList.toggle('open');
+  setTimeout(()=>{
+    const closeDropdown=()=>{
+      dropdown.classList.remove('open');
+      document.removeEventListener('click',closeDropdown);
+    };
+    document.addEventListener('click',closeDropdown);
+  },0);
+}
+
+function selectModule(moduleId){
+  UI.currentModule=moduleId;
+  // Reset tab baseado no módulo
+  if(moduleId==='comercial'){
+    tab='work';
+  }else if(moduleId==='financeiro'){
+    tab='dashboard';
+  }else if(moduleId==='configuracoes'){
+    tab='procedimentos';
+  }
+  render();
 }
 
 // ═══ WORK ═══
@@ -1333,7 +1436,10 @@ function renderLD(l){
   else if(l.funnel==='clientes')moverBtns=`<button class="action-btn accent" onclick="novaSessao('${l.id}')">+ nova sessão</button>`;
   else moverBtns=`<button class="action-btn green" onclick="moverF('${l.id}','qualificacao')">→ reativar qualif.</button><button class="action-btn orange" onclick="moverF('${l.id}','prospeccao')">→ reativar prosp.</button>`;
 
-  const diaHTML=l.funnel!=='clientes'?`<div class="dia-badge ${l.diaProsp||dias[0].id}">${dC.icons.join(' ')} ${dC.label}</div>`:'';
+  const diaHTML=l.funnel!=='clientes'?`<div style="display:flex;align-items:center;gap:8px;margin:12px 0">
+    <div class="dia-badge ${l.diaProsp||dias[0].id}">${dC.icons.join(' ')} ${dC.label}</div>
+    ${getDiaIndex(l.funnel,l.diaProsp)>0?`<button class="btn sm" onclick="voltarDia('${l.id}')" style="background:var(--bg4);color:var(--text2);border-color:var(--border2);font-size:10px">← voltar dia</button>`:''}
+  </div>`:'';
   
   const retH=l.retornoData?`<div class="alert-box ${daysDiff(l.retornoData)<=0?'danger':'info'}" style="margin-bottom:10px">🕐 retorno: <strong>${fmtDate(l.retornoData)}</strong>${daysDiff(l.retornoData)<=0?' — <strong>hoje!</strong>':''}<button onclick="limparRet('${l.id}')" style="margin-left:auto;background:none;border:none;color:inherit;cursor:pointer;font-size:11px">✕</button></div>`:'';
 
@@ -1439,6 +1545,36 @@ function renderLD(l){
 function renderCrono(l){const tq=l.toques||[];return`<div class="section-label" style="margin:12px 0 8px">cronograma de toques</div>${!tq.length?'<div style="font-size:12px;color:var(--text3)">nenhum toque.</div>':''}${tq.map((t,i)=>{const cfg=S.config.toques.find(c=>c.id===t.id)||{label:'toque'};const d=daysDiff(t.dataAgendada);let cls='',stl='var(--text3)',lbl='';if(t.feito){stl='var(--green)';lbl='feito'}else if(d===0){cls='hoje';stl='var(--accent)';lbl='HOJE'}else if(d<0){cls='vencido';stl='var(--red)';lbl=Math.abs(d)+'d atraso'}else{lbl='em '+d+'d'}return`<div class="toque-item ${cls}"><div class="toque-check ${t.feito?'done':''}" onclick="togTq('${l.id}',${i})">${t.feito?'✓':''}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">${esc(cfg.label)}</div><div style="font-size:11px;color:var(--text3)">${fmtDate(t.dataAgendada)}</div></div><span style="font-size:10px;font-weight:500;color:${stl}">${lbl}</span><a href="${waLink(l.tel)}" target="_blank" class="action-btn wa" style="padding:4px 8px;font-size:11px">WA</a></div>`;}).join('')}<button class="btn sm" style="width:100%;margin-top:4px" onclick="addTq('${l.id}')">+ toque</button>`;}
 
 // ═══ AÇÕES ═══
+function getDiaIndex(funnel,diaId){
+  const dias=getDias(funnel);
+  return dias.findIndex(d=>d.id===diaId);
+}
+
+function voltarDia(lid){
+  const l=S.leads.find(x=>x.id===lid);
+  if(!l)return;
+  
+  const dias=getDias(l.funnel);
+  const currentIdx=getDiaIndex(l.funnel,l.diaProsp);
+  
+  if(currentIdx<=0){
+    toast('Já está no primeiro dia!');
+    return;
+  }
+  
+  const previousDay=dias[currentIdx-1];
+  if(!previousDay){
+    toast('Erro: dia anterior não encontrado');
+    return;
+  }
+  
+  l.diaProsp=previousDay.id;
+  l.tentativas=criarTentativasDia(l.funnel,previousDay.id);
+  saveLeadLocal(l);
+  toast(`Lead voltou para ${previousDay.label}`);
+  render();
+}
+
 function selectLead(id){UI.workActive=id;const ld=document.getElementById('lead-detail');const l=S.leads.find(x=>x.id===id);if(ld&&l)ld.innerHTML=renderLD(l);document.querySelectorAll('.queue-item').forEach(el=>el.classList.toggle('active',(el.getAttribute('onclick')||'').includes(`(${id})`)));}
 function advQ(){
   const currentLead=S.leads.find(l=>l.id===UI.workActive);
@@ -2289,6 +2425,58 @@ function rCfgRelatorios(){
     <p style="font-size:12px;color:var(--text2);margin-bottom:4px">selecione quais relatórios aparecem na aba relatórios.</p>
     ${grupos.map(g=>`<div class="relatorio-item" onclick="if(!S.config.relatoriosAtivos)S.config.relatoriosAtivos={};S.config.relatoriosAtivos['${g.key}']=S.config.relatoriosAtivos['${g.key}']===false;save();renderConfig()"><div class="checkbox ${ra[g.key]!==false?'checked':''}">${ra[g.key]!==false?'✓':''}</div><div style="flex:1"><div style="font-size:13px;font-weight:500">${g.label}</div><div style="font-size:11px;color:var(--text3)">${g.desc}</div></div></div>`).join('')}
   </div>`;
+}
+
+// ═══ MÓDULO FINANCEIRO ═══
+function renderFinanceiro(){
+  const main=document.getElementById('main');
+  if(!main)return;
+  
+  main.innerHTML=`
+    <div style="flex:1;overflow-y:auto;padding:24px">
+      <div style="max-width:1200px;margin:0 auto">
+        <div style="margin-bottom:24px">
+          <h1 style="font-size:24px;font-weight:600;color:var(--text);margin-bottom:6px">💰 Módulo Financeiro</h1>
+          <p style="font-size:13px;color:var(--text3)">Em construção - disponível em breve!</p>
+        </div>
+        
+        <div style="padding:40px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;text-align:center">
+          <div style="font-size:48px;margin-bottom:16px">🚧</div>
+          <div style="font-size:16px;font-weight:500;color:var(--text2);margin-bottom:8px">Módulo em Desenvolvimento</div>
+          <div style="font-size:13px;color:var(--text3)">
+            Dashboard financeiro com controle de caixa, comprometido e MRP<br>
+            será implementado nas próximas sessões
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══ MÓDULO CONFIGURAÇÕES ═══
+function renderConfiguracoes(){
+  const main=document.getElementById('main');
+  if(!main)return;
+  
+  main.innerHTML=`
+    <div style="flex:1;overflow-y:auto;padding:24px">
+      <div style="max-width:1200px;margin:0 auto">
+        <div style="margin-bottom:24px">
+          <h1 style="font-size:24px;font-weight:600;color:var(--text);margin-bottom:6px">⚙️ Configurações</h1>
+          <p style="font-size:13px;color:var(--text3)">Cadastros base do sistema</p>
+        </div>
+        
+        <div style="padding:40px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;text-align:center">
+          <div style="font-size:48px;margin-bottom:16px">🚧</div>
+          <div style="font-size:16px;font-weight:500;color:var(--text2);margin-bottom:8px">Módulo em Desenvolvimento</div>
+          <div style="font-size:13px;color:var(--text3)">
+            Cadastros de procedimentos, produtos e insumos<br>
+            serão implementados nas próximas sessões
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function rCfgImportar(){
