@@ -1,5 +1,5 @@
 ﻿import { redirect } from "next/navigation";
 
-export default function Home() {
+export async function GET() {
   redirect("/comercial/trabalho");
 }
