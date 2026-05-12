@@ -86,6 +86,7 @@ export function ComercialTrabalhoClient({
           onCloseClient={comercial.handleCloseClient}
           onDisqualify={comercial.handleDisqualify}
           onMoveToRetorno={comercial.handleMoveToRetorno}
+          onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}
           onAdvanceQueue={comercial.handleAdvanceQueue}
           getLastAction={comercial.getLastAction}

@@ -46,6 +46,10 @@ export async function updateLeadCommercialFields(lead: Lead) {
   const { error } = await supabase
     .from("leads")
     .update({
+      nome: lead.nome?.trim() || "",
+      tel: lead.tel?.trim() || "",
+      esp: lead.esp?.trim() || "",
+      campanha: lead.campanha?.trim() || "",
       funnel: lead.funnel || "prospeccao",
       dia_prosp: lead.diaProsp || "d1",
       tentativas: lead.tentativas ?? [],

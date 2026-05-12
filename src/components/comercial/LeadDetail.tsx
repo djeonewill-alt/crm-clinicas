@@ -1,6 +1,8 @@
 ﻿"use client";
 
+import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
+import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import {
   canMoveLeadToPreviousDay,
@@ -19,6 +21,12 @@ type LeadDetailProps = {
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
   onMoveToRetorno: (lead: Lead) => void | Promise<void>;
+  onUpdateLeadDetails: (data: {
+    nome: string;
+    tel: string;
+    esp?: string;
+    campanha?: string;
+  }) => boolean | void | Promise<boolean | void>;
   onSetResultado: (
     lead: Lead,
     tentativaIndex: number,
@@ -56,10 +64,13 @@ export function LeadDetail({
   onCloseClient,
   onDisqualify,
   onMoveToRetorno,
+  onUpdateLeadDetails,
   onSetResultado,
   onAdvanceQueue,
   getLastAction,
 }: LeadDetailProps) {
+  const [isEditing, setIsEditing] = useState(false);
+
   if (!lead) {
     return (
       <div className="flex flex-1 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-8 text-center text-sm text-[var(--text3)]">
@@ -80,10 +91,35 @@ export function LeadDetail({
           <p className="mt-1 text-sm text-[var(--text2)]">{lead.tel}</p>
         </div>
 
-        <span className="rounded-full bg-[rgba(232,197,71,.15)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-          {lead.diaProsp || "d1"}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() => setIsEditing((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] hover:bg-[var(--bg4)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isEditing ? "Fechar edição" : "Editar"}
+          </button>
+
+          <span className="rounded-full bg-[rgba(232,197,71,.15)] px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+            {lead.diaProsp || "d1"}
+          </span>
+        </div>
       </div>
+
+      {isEditing && (
+        <LeadEditForm
+          lead={lead}
+          onCancel={() => setIsEditing(false)}
+          onSave={async (data) => {
+            const saved = await onUpdateLeadDetails(data);
+            if (saved !== false) {
+              setIsEditing(false);
+            }
+            return saved;
+          }}
+        />
+      )}
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">

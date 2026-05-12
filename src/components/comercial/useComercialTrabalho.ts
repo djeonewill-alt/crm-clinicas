@@ -25,6 +25,13 @@ type UseComercialTrabalhoParams = {
   empresaId: string | number;
 };
 
+type LeadDetailsInput = {
+  nome: string;
+  tel: string;
+  esp?: string;
+  campanha?: string;
+};
+
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -168,6 +175,7 @@ export function useComercialTrabalho({
     try {
       await updateLeadCommercialFields(updatedLead);
       setMessage(successMessage);
+      return true;
     } catch (error) {
       setLeads(previousLeads);
       setMessage(
@@ -175,6 +183,7 @@ export function useComercialTrabalho({
           ? `Erro ao salvar: ${error.message}`
           : "Erro ao salvar alteração."
       );
+      return false;
     } finally {
       setSavingLeadId(null);
     }
@@ -219,6 +228,31 @@ export function useComercialTrabalho({
     } finally {
       setSavingLeadId(null);
     }
+  }
+
+  async function handleUpdateLeadDetails(input: LeadDetailsInput) {
+    setMessage("");
+
+    if (!selectedLead) {
+      setMessage("Selecione um lead para editar.");
+      return false;
+    }
+
+    if (!input.tel.trim()) {
+      setMessage("Digite ao menos o telefone do lead.");
+      return false;
+    }
+
+    const updatedLead: Lead = {
+      ...selectedLead,
+      nome: input.nome.trim(),
+      tel: input.tel.trim(),
+      esp: input.esp?.trim() || "",
+      campanha: input.campanha?.trim() || "",
+      colAt: Date.now(),
+    };
+
+    return saveUpdatedLead(updatedLead, "Lead atualizado com sucesso.");
   }
 
   async function handleSetResultado(
@@ -405,6 +439,7 @@ export function useComercialTrabalho({
 
     handleChangeFunnel,
     handleCreateLead,
+    handleUpdateLeadDetails,
     handleSetResultado,
     handleAdvanceQueue,
     handleMoveToQualificacao,
