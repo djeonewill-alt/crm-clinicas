@@ -4,6 +4,7 @@ import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
+import { LeadMessageScripts } from "@/components/comercial/LeadMessageScripts";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import {
   canMoveLeadToPreviousDay,
@@ -164,6 +165,8 @@ export function LeadDetail({
           onMoveToRetorno={onMoveToRetorno}
         />
       </div>
+
+      <LeadMessageScripts lead={lead} />
 
       <TentativasList
         lead={lead}
