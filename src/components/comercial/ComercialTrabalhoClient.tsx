@@ -80,6 +80,10 @@ export function ComercialTrabalhoClient({
           lead={comercial.selectedLead}
           savingLeadId={comercial.savingLeadId}
           retornoDate={comercial.retornoDate}
+          leadHistory={comercial.leadHistory}
+          isLoadingLeadHistory={comercial.isLoadingLeadHistory}
+          isSavingLeadHistory={comercial.isSavingLeadHistory}
+          leadHistoryError={comercial.leadHistoryError}
           onRetornoDateChange={comercial.setRetornoDate}
           onPreviousDay={comercial.handlePreviousDay}
           onMoveToQualificacao={comercial.handleMoveToQualificacao}
@@ -88,6 +92,7 @@ export function ComercialTrabalhoClient({
           onMoveToRetorno={comercial.handleMoveToRetorno}
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}
+          onCreateLeadNote={comercial.handleCreateLeadNote}
           onAdvanceQueue={comercial.handleAdvanceQueue}
           getLastAction={comercial.getLastAction}
         />

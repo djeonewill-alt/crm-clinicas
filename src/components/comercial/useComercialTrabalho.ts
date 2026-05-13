@@ -1,7 +1,11 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
+import {
+  createLeadHistoryNote,
+  listLeadHistory,
+} from "@/lib/services/lead-history-client";
 import {
   createLeadForEmpresa,
   updateLeadCommercialFields,
@@ -15,6 +19,7 @@ import {
   getRawFunnelCount,
   moveLeadToPreviousDay,
 } from "@/lib/services/queue";
+import type { LeadHistoryItem } from "@/types/lead-history";
 import type { Lead } from "@/types/lead";
 
 export type VisibleFunnelId = (typeof FUNNELS)[number]["id"];
@@ -101,6 +106,10 @@ export function useComercialTrabalho({
   const [newLeadInterest, setNewLeadInterest] = useState("");
   const [newLeadCampaign, setNewLeadCampaign] = useState("");
   const [listMode, setListMode] = useState<ListMode>("smart");
+  const [leadHistory, setLeadHistory] = useState<LeadHistoryItem[]>([]);
+  const [isLoadingLeadHistory, setIsLoadingLeadHistory] = useState(false);
+  const [isSavingLeadHistory, setIsSavingLeadHistory] = useState(false);
+  const [leadHistoryError, setLeadHistoryError] = useState<string | null>(null);
 
   const activeFunnel = useMemo(() => {
     return FUNNELS.find((funnel) => funnel.id === workFunnel) ?? FUNNELS[0];
@@ -143,6 +152,35 @@ export function useComercialTrabalho({
 
     return preferred ?? filteredLeads[0] ?? null;
   }, [filteredLeads, selectedLeadId]);
+
+  useEffect(() => {
+    if (!selectedLead) {
+      setLeadHistory([]);
+      setLeadHistoryError(null);
+      return;
+    }
+
+    void loadLeadHistory(String(selectedLead.id));
+  }, [selectedLead?.id]);
+
+  async function loadLeadHistory(leadId: string) {
+    setIsLoadingLeadHistory(true);
+    setLeadHistoryError(null);
+
+    try {
+      const items = await listLeadHistory(leadId);
+      setLeadHistory(items);
+    } catch (error) {
+      setLeadHistory([]);
+      setLeadHistoryError(
+        error instanceof Error
+          ? `Erro ao carregar histórico: ${error.message}`
+          : "Erro ao carregar histórico."
+      );
+    } finally {
+      setIsLoadingLeadHistory(false);
+    }
+  }
 
   function handleChangeFunnel(funnelId: VisibleFunnelId) {
     setWorkFunnel(funnelId);
@@ -253,6 +291,50 @@ export function useComercialTrabalho({
     };
 
     return saveUpdatedLead(updatedLead, "Lead atualizado com sucesso.");
+  }
+
+  async function handleCreateLeadNote(description: string) {
+    setLeadHistoryError(null);
+
+    if (!selectedLead) {
+      setLeadHistoryError("Selecione um lead para registrar observação.");
+      return false;
+    }
+
+    if (!empresaId) {
+      setLeadHistoryError("Empresa atual não encontrada.");
+      return false;
+    }
+
+    const trimmedDescription = description.trim();
+
+    if (!trimmedDescription) {
+      setLeadHistoryError("Digite uma observação antes de salvar.");
+      return false;
+    }
+
+    setIsSavingLeadHistory(true);
+
+    try {
+      const createdItem = await createLeadHistoryNote({
+        leadId: String(selectedLead.id),
+        empresaId: String(empresaId),
+        description: trimmedDescription,
+      });
+
+      setLeadHistory((current) => [createdItem, ...current]);
+      setLeadHistoryError(null);
+      return true;
+    } catch (error) {
+      setLeadHistoryError(
+        error instanceof Error
+          ? `Erro ao salvar observação: ${error.message}`
+          : "Erro ao salvar observação."
+      );
+      return false;
+    } finally {
+      setIsSavingLeadHistory(false);
+    }
   }
 
   async function handleSetResultado(
@@ -410,9 +492,13 @@ export function useComercialTrabalho({
     queueCount,
     hiddenCount,
     selectedLead,
+    leadHistory,
 
     savingLeadId,
     message,
+    isLoadingLeadHistory,
+    isSavingLeadHistory,
+    leadHistoryError,
 
     retornoDate,
     setRetornoDate,
@@ -440,6 +526,8 @@ export function useComercialTrabalho({
     handleChangeFunnel,
     handleCreateLead,
     handleUpdateLeadDetails,
+    handleCreateLeadNote,
+    loadLeadHistory,
     handleSetResultado,
     handleAdvanceQueue,
     handleMoveToQualificacao,

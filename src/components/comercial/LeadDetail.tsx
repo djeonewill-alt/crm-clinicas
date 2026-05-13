@@ -3,18 +3,24 @@
 import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
+import { LeadHistory } from "@/components/comercial/LeadHistory";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import {
   canMoveLeadToPreviousDay,
   ensureTentativasForLead,
   getAttemptProgress,
 } from "@/lib/services/queue";
+import type { LeadHistoryItem } from "@/types/lead-history";
 import type { Lead } from "@/types/lead";
 
 type LeadDetailProps = {
   lead: Lead | null;
   savingLeadId: string | number | null;
   retornoDate: string;
+  leadHistory: LeadHistoryItem[];
+  isLoadingLeadHistory: boolean;
+  isSavingLeadHistory: boolean;
+  leadHistoryError: string | null;
   onRetornoDateChange: (value: string) => void;
   onPreviousDay: (lead: Lead) => void | Promise<void>;
   onMoveToQualificacao: (lead: Lead) => void | Promise<void>;
@@ -32,6 +38,9 @@ type LeadDetailProps = {
     tentativaIndex: number,
     resultado: string
   ) => void | Promise<void>;
+  onCreateLeadNote: (
+    description: string
+  ) => boolean | void | Promise<boolean | void>;
   onAdvanceQueue: (lead: Lead) => void | Promise<void>;
   getLastAction: (lead: Lead) => string;
 };
@@ -58,6 +67,10 @@ export function LeadDetail({
   lead,
   savingLeadId,
   retornoDate,
+  leadHistory,
+  isLoadingLeadHistory,
+  isSavingLeadHistory,
+  leadHistoryError,
   onRetornoDateChange,
   onPreviousDay,
   onMoveToQualificacao,
@@ -66,6 +79,7 @@ export function LeadDetail({
   onMoveToRetorno,
   onUpdateLeadDetails,
   onSetResultado,
+  onCreateLeadNote,
   onAdvanceQueue,
   getLastAction,
 }: LeadDetailProps) {
@@ -153,6 +167,14 @@ export function LeadDetail({
         tentativas={tentativas}
         savingLeadId={savingLeadId}
         onSetResultado={onSetResultado}
+      />
+
+      <LeadHistory
+        items={leadHistory}
+        isLoading={isLoadingLeadHistory}
+        isSaving={isSavingLeadHistory}
+        error={leadHistoryError}
+        onCreateNote={onCreateLeadNote}
       />
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
