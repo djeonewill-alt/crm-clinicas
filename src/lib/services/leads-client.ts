@@ -23,6 +23,7 @@ function rowToLead(row: Record<string, unknown>): Lead {
     campanha: String(row.campanha ?? ""),
     valor: Number(row.valor ?? 0),
     fechado: row.fechado === true,
+    archivedAt: row.archived_at ? String(row.archived_at) : null,
     retornoData: row.retorno_data ? String(row.retorno_data) : null,
     tentativas: Array.isArray(row.tentativas)
       ? (row.tentativas as Tentativa[])
@@ -65,6 +66,21 @@ export async function updateLeadCommercialFields(lead: Lead) {
       fechado_em: toIsoFromNumber(lead.fechadoEm),
     })
     .eq("id", lead.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function archiveLeadById(leadId: string | number): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("leads")
+    .update({
+      archived_at: new Date().toISOString(),
+    })
+    .eq("id", leadId);
 
   if (error) {
     throw new Error(error.message);

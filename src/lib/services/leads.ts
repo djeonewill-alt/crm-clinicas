@@ -29,6 +29,7 @@ export function rowToLead(row: LeadRow): Lead {
     campanha: String(row.campanha ?? ""),
     valor: Number(row.valor ?? 0),
     fechado: toBoolean(row.fechado),
+    archivedAt: row.archived_at ? String(row.archived_at) : null,
     retornoData: row.retorno_data ? String(row.retorno_data) : null,
     tentativas: toTentativas(row.tentativas),
     dataEntrada: row.data_entrada ? String(row.data_entrada) : row.col_at ? String(row.col_at) : null,
@@ -47,6 +48,7 @@ export async function getLeadsByEmpresa(empresaId: string | number): Promise<Lea
     .from("leads")
     .select("*")
     .eq("empresa_id", empresaId)
+    .is("archived_at", null)
     .order("col_at", { ascending: false });
 
   if (error) {

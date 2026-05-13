@@ -26,6 +26,7 @@ type LeadDetailProps = {
   onMoveToQualificacao: (lead: Lead) => void | Promise<void>;
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
+  onArchiveLead: () => void | Promise<void>;
   onMoveToRetorno: (lead: Lead) => void | Promise<void>;
   onUpdateLeadDetails: (data: {
     nome: string;
@@ -76,6 +77,7 @@ export function LeadDetail({
   onMoveToQualificacao,
   onCloseClient,
   onDisqualify,
+  onArchiveLead,
   onMoveToRetorno,
   onUpdateLeadDetails,
   onSetResultado,
@@ -158,6 +160,7 @@ export function LeadDetail({
           onMoveToQualificacao={onMoveToQualificacao}
           onCloseClient={onCloseClient}
           onDisqualify={onDisqualify}
+          onArchiveLead={onArchiveLead}
           onMoveToRetorno={onMoveToRetorno}
         />
       </div>

@@ -89,6 +89,11 @@ export function ComercialTrabalhoClient({
           onMoveToQualificacao={comercial.handleMoveToQualificacao}
           onCloseClient={comercial.handleCloseClient}
           onDisqualify={comercial.handleDisqualify}
+          onArchiveLead={() => {
+            if (comercial.selectedLead) {
+              void comercial.handleArchiveLead(comercial.selectedLead);
+            }
+          }}
           onMoveToRetorno={comercial.handleMoveToRetorno}
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}

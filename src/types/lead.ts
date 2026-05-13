@@ -35,6 +35,7 @@ export type Lead = {
   campanha?: string;
   valor?: number;
   fechado?: boolean;
+  archivedAt?: string | null;
   retornoData?: string | null;
   tentativas?: Tentativa[];
   dataEntrada?: string | null;

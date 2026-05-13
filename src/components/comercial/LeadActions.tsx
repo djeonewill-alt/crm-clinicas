@@ -12,6 +12,7 @@ type LeadActionsProps = {
   onMoveToQualificacao: (lead: Lead) => void | Promise<void>;
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
+  onArchiveLead: () => void | Promise<void>;
   onMoveToRetorno: (lead: Lead) => void | Promise<void>;
 };
 
@@ -39,6 +40,7 @@ export function LeadActions({
   onMoveToQualificacao,
   onCloseClient,
   onDisqualify,
+  onArchiveLead,
   onMoveToRetorno,
 }: LeadActionsProps) {
   const isSaving = savingLeadId === lead.id;
@@ -94,6 +96,15 @@ export function LeadActions({
             className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
           >
             🚫 Desqualificar
+          </button>
+
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={onArchiveLead}
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            Arquivar
           </button>
         </div>
       </div>

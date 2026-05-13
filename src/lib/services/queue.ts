@@ -128,6 +128,8 @@ export function canMoveLeadToPreviousDay(lead: Lead) {
 }
 
 export function shouldShowInSmartQueue(lead: Lead, funnel: FunnelId) {
+  if (lead.archivedAt) return false;
+
   if (funnel === "clientes") {
     return lead.funnel === "clientes";
   }
@@ -170,6 +172,7 @@ export function getAllFunnelLeads(
   sort: QueueSort = "oldest"
 ) {
   const filtered = leads.filter((lead) => {
+    if (lead.archivedAt) return false;
     if (funnel === "clientes") return lead.funnel === "clientes";
     if (funnel === "retorno") return lead.funnel === "retorno" && !lead.fechado;
     return lead.funnel === funnel && !lead.fechado;
@@ -192,13 +195,18 @@ export function sortLeadsByDate(leads: Lead[], sort: QueueSort) {
 }
 
 export function getRawFunnelCount(leads: Lead[], funnel: FunnelId) {
+  const activeLeads = leads.filter((lead) => !lead.archivedAt);
+
   if (funnel === "clientes") {
-    return leads.filter((lead) => lead.funnel === "clientes").length;
+    return activeLeads.filter((lead) => lead.funnel === "clientes").length;
   }
 
   if (funnel === "retorno") {
-    return leads.filter((lead) => lead.funnel === "retorno" && !lead.fechado).length;
+    return activeLeads.filter(
+      (lead) => lead.funnel === "retorno" && !lead.fechado
+    ).length;
   }
 
-  return leads.filter((lead) => lead.funnel === funnel && !lead.fechado).length;
+  return activeLeads.filter((lead) => lead.funnel === funnel && !lead.fechado)
+    .length;
 }

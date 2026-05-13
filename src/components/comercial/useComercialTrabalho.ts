@@ -7,6 +7,7 @@ import {
   listLeadHistory,
 } from "@/lib/services/lead-history-client";
 import {
+  archiveLeadById,
   createLeadForEmpresa,
   updateLeadCommercialFields,
 } from "@/lib/services/leads-client";
@@ -467,6 +468,41 @@ export function useComercialTrabalho({
     selectNextLeadAfter(lead.id);
   }
 
+  async function handleArchiveLead(lead: Lead) {
+    const confirmArchive = window.confirm(
+      "Arquivar este lead? Ele sairá da fila e dos funis, mas os dados e o histórico serão preservados."
+    );
+
+    if (!confirmArchive) return;
+
+    const nextLead = filteredLeads.find(
+      (item) => String(item.id) !== String(lead.id)
+    );
+
+    setSavingLeadId(lead.id);
+    setMessage("");
+
+    try {
+      await archiveLeadById(lead.id);
+
+      setLeads((current) =>
+        current.filter((item) => String(item.id) !== String(lead.id))
+      );
+      setSelectedLeadId((current) =>
+        String(current) === String(lead.id) ? nextLead?.id ?? null : current
+      );
+      setMessage("Lead arquivado. Dados e histórico preservados.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `Erro ao arquivar lead: ${error.message}`
+          : "Erro ao arquivar lead."
+      );
+    } finally {
+      setSavingLeadId(null);
+    }
+  }
+
   async function handlePreviousDay(lead: Lead) {
     const previousLead = moveLeadToPreviousDay(lead);
 
@@ -534,6 +570,7 @@ export function useComercialTrabalho({
     handleMoveToRetorno,
     handleCloseClient,
     handleDisqualify,
+    handleArchiveLead,
     handlePreviousDay,
   };
 }
