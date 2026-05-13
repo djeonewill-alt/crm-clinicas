@@ -11,8 +11,46 @@ type ComercialFunisClientProps = {
   empresaNome: string;
 };
 
+const FUNNEL_ALL = "todos";
+const FILTER_ALL = "all";
+const EMPTY_FILTER_VALUE = "__empty__";
+
 function getLeadName(lead: Lead) {
   return lead.nome?.trim() || lead.tel || "Lead sem nome";
+}
+
+function normalizeFilterValue(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toLowerCase() : EMPTY_FILTER_VALUE;
+}
+
+function getCampaignLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem campanha" : value;
+}
+
+function getInterestLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem interesse" : value;
+}
+
+function buildFilterOptions(
+  leads: Lead[],
+  getValue: (lead: Lead) => string | undefined,
+  getLabel: (value: string) => string
+) {
+  const options = new Map<string, string>();
+
+  leads.forEach((lead) => {
+    const rawValue = getValue(lead)?.trim();
+    const value = normalizeFilterValue(rawValue);
+
+    if (!options.has(value)) {
+      options.set(value, rawValue || getLabel(value));
+    }
+  });
+
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }
 
 function formatPhone(phone: string) {
@@ -61,10 +99,17 @@ export function ComercialFunisClient({
   empresaNome,
 }: ComercialFunisClientProps) {
   const [localLeads, setLocalLeads] = useState<Lead[]>(leads);
-  const [selectedFunnel, setSelectedFunnel] = useState<string>("todos");
+  const [selectedFunnel, setSelectedFunnel] = useState<string>(FUNNEL_ALL);
+  const [selectedCampaign, setSelectedCampaign] = useState(FILTER_ALL);
+  const [selectedInterest, setSelectedInterest] = useState(FILTER_ALL);
   const [search, setSearch] = useState("");
+  const [isHydrated, setIsHydrated] = useState(false);
   const [movingLeadId, setMovingLeadId] = useState<string | number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     setLocalLeads(leads);
@@ -95,14 +140,22 @@ export function ComercialFunisClient({
     );
   }, [leadsByFunnel]);
 
+  const campaignOptions = useMemo(
+    () => buildFilterOptions(localLeads, (lead) => lead.campanha, getCampaignLabel),
+    [localLeads]
+  );
+
+  const interestOptions = useMemo(
+    () => buildFilterOptions(localLeads, (lead) => lead.esp, getInterestLabel),
+    [localLeads]
+  );
+
   const visibleFunnels = FUNNELS.filter((funnel) => {
-    if (selectedFunnel === "todos") return true;
+    if (selectedFunnel === FUNNEL_ALL) return true;
     return funnel.id === selectedFunnel;
   });
 
   function filterLead(lead: Lead) {
-    if (!normalizedSearch) return true;
-
     const searchable = [
       lead.nome,
       lead.tel,
@@ -115,7 +168,33 @@ export function ComercialFunisClient({
       .join(" ")
       .toLowerCase();
 
-    return searchable.includes(normalizedSearch);
+    const matchesSearch =
+      !normalizedSearch || searchable.includes(normalizedSearch);
+    const matchesCampaign =
+      selectedCampaign === FILTER_ALL ||
+      normalizeFilterValue(lead.campanha) === selectedCampaign;
+    const matchesInterest =
+      selectedInterest === FILTER_ALL ||
+      normalizeFilterValue(lead.esp) === selectedInterest;
+
+    return matchesSearch && matchesCampaign && matchesInterest;
+  }
+
+  const filteredLeadCount = visibleFunnels.reduce((total, funnel) => {
+    return total + leadsByFunnel[funnel.id].filter(filterLead).length;
+  }, 0);
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    selectedFunnel !== FUNNEL_ALL ||
+    selectedCampaign !== FILTER_ALL ||
+    selectedInterest !== FILTER_ALL;
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedFunnel(FUNNEL_ALL);
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
   }
 
   async function handleMoveLead(lead: Lead, targetFunnel: string) {
@@ -197,13 +276,39 @@ export function ComercialFunisClient({
             placeholder="Buscar por nome, telefone, interesse, campanha..."
           />
 
+          <select
+            value={selectedCampaign}
+            onChange={(event) => setSelectedCampaign(event.target.value)}
+            className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value={FILTER_ALL}>Todas as campanhas</option>
+            {campaignOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedInterest}
+            onChange={(event) => setSelectedInterest(event.target.value)}
+            className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value={FILTER_ALL}>Todos os interesses</option>
+            {interestOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setSelectedFunnel("todos")}
+              onClick={() => setSelectedFunnel(FUNNEL_ALL)}
               className={cn(
                 "rounded-lg border px-3 py-2 text-xs font-semibold transition",
-                selectedFunnel === "todos"
+                selectedFunnel === FUNNEL_ALL
                   ? "border-[var(--accent)] bg-[var(--accent)] text-black"
                   : "border-[var(--border2)] bg-[var(--bg3)] text-[var(--text2)] hover:text-[var(--text)]"
               )}
@@ -227,6 +332,20 @@ export function ComercialFunisClient({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!isHydrated || !hasActiveFilters}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Limpar filtros
+          </button>
+        </div>
+
+        <div className="mt-3 text-xs text-[var(--text3)]">
+          {filteredLeadCount} lead(s) encontrado(s)
+          {hasActiveFilters ? " com os filtros atuais" : ""}
         </div>
       </div>
 
@@ -258,7 +377,7 @@ export function ComercialFunisClient({
         <div
           className={cn(
             "flex h-full gap-4",
-            selectedFunnel === "todos" ? "min-w-[1120px]" : "min-w-[360px]"
+            selectedFunnel === FUNNEL_ALL ? "min-w-[1120px]" : "min-w-[360px]"
           )}
         >
           {visibleFunnels.map((funnel) => {
