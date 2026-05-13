@@ -1,4 +1,5 @@
 ﻿import { createClient } from "@/lib/supabase/client";
+import { createTentativasForDay } from "@/lib/services/queue";
 import type { Lead, Tentativa } from "@/types/lead";
 
 function toIsoFromNumber(value?: number | null) {
@@ -85,6 +86,54 @@ export async function archiveLeadById(leadId: string | number): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function moveLeadToFunnel(input: {
+  leadId: string | number;
+  targetFunnel: "prospeccao" | "qualificacao";
+  currentLead?: Lead;
+}): Promise<Partial<Lead>> {
+  const supabase = createClient();
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const diaProsp = input.targetFunnel === "qualificacao" ? "q1" : "d1";
+  const tentativas = createTentativasForDay(input.targetFunnel, diaProsp);
+  const qualificadoEm =
+    input.targetFunnel === "qualificacao"
+      ? input.currentLead?.qualificadoEm ?? now
+      : input.currentLead?.qualificadoEm ?? null;
+
+  const payload: Record<string, unknown> = {
+    funnel: input.targetFunnel,
+    dia_prosp: diaProsp,
+    tentativas,
+    retorno_data: null,
+    fechado: false,
+    col_at: nowIso,
+  };
+
+  if (input.targetFunnel === "qualificacao") {
+    payload.qualificado_em = toIsoFromNumber(qualificadoEm);
+  }
+
+  const { error } = await supabase
+    .from("leads")
+    .update(payload)
+    .eq("id", input.leadId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    funnel: input.targetFunnel,
+    diaProsp,
+    tentativas,
+    retornoData: null,
+    fechado: false,
+    colAt: now,
+    qualificadoEm,
+  };
 }
 
 export async function createLeadForEmpresa(input: {

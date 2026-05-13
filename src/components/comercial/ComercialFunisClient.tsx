@@ -1,7 +1,8 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
+import { moveLeadToFunnel } from "@/lib/services/leads-client";
 import { cn } from "@/lib/utils/cn";
 import type { Lead } from "@/types/lead";
 
@@ -43,24 +44,43 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function getMoveTarget(lead: Lead) {
+  if (lead.funnel === "prospeccao") {
+    return { id: "qualificacao" as const, label: "Qualificação" };
+  }
+
+  if (lead.funnel === "qualificacao") {
+    return { id: "prospeccao" as const, label: "Prospecção" };
+  }
+
+  return null;
+}
+
 export function ComercialFunisClient({
   leads,
   empresaNome,
 }: ComercialFunisClientProps) {
+  const [localLeads, setLocalLeads] = useState<Lead[]>(leads);
   const [selectedFunnel, setSelectedFunnel] = useState<string>("todos");
   const [search, setSearch] = useState("");
+  const [movingLeadId, setMovingLeadId] = useState<string | number | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(() => {
+    setLocalLeads(leads);
+  }, [leads]);
 
   const normalizedSearch = search.trim().toLowerCase();
 
   const leadsByFunnel = useMemo(() => {
     return FUNNELS.reduce(
       (acc, funnel) => {
-        acc[funnel.id] = leads.filter((lead) => lead.funnel === funnel.id);
+        acc[funnel.id] = localLeads.filter((lead) => lead.funnel === funnel.id);
         return acc;
       },
       {} as Record<(typeof FUNNELS)[number]["id"], Lead[]>
     );
-  }, [leads]);
+  }, [localLeads]);
 
   const totalValueByFunnel = useMemo(() => {
     return FUNNELS.reduce(
@@ -98,6 +118,48 @@ export function ComercialFunisClient({
     return searchable.includes(normalizedSearch);
   }
 
+  async function handleMoveLead(lead: Lead, targetFunnel: string) {
+    if (targetFunnel !== "prospeccao" && targetFunnel !== "qualificacao") {
+      return;
+    }
+
+    if (targetFunnel === lead.funnel) return;
+
+    const targetLabel =
+      targetFunnel === "qualificacao" ? "Qualificação" : "Prospecção";
+    const confirmed = window.confirm(`Mover este lead para ${targetLabel}?`);
+
+    if (!confirmed) return;
+
+    setMovingLeadId(lead.id);
+    setStatusMessage("");
+
+    try {
+      const updatedFields = await moveLeadToFunnel({
+        leadId: lead.id,
+        targetFunnel,
+        currentLead: lead,
+      });
+
+      setLocalLeads((current) =>
+        current.map((item) =>
+          String(item.id) === String(lead.id)
+            ? { ...item, ...updatedFields }
+            : item
+        )
+      );
+      setStatusMessage(`Lead movido para ${targetLabel}.`);
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao mover lead: ${error.message}`
+          : "Erro ao mover lead."
+      );
+    } finally {
+      setMovingLeadId(null);
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
       <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg2)] p-5">
@@ -115,11 +177,17 @@ export function ComercialFunisClient({
 
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg3)] px-4 py-3 text-right">
             <div className="text-2xl font-semibold text-[var(--accent)]">
-              {leads.length}
+              {localLeads.length}
             </div>
             <div className="text-xs text-[var(--text2)]">leads carregados</div>
           </div>
         </div>
+
+        {statusMessage && (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-3 text-sm text-[var(--text2)]">
+            {statusMessage}
+          </div>
+        )}
 
         <div className="mt-5 flex flex-wrap gap-3">
           <input
@@ -270,6 +338,37 @@ export function ComercialFunisClient({
                               {formatDate(lead.dataEntrada)}
                             </span>
                           </div>
+                        </div>
+
+                        <div className="mt-3 border-t border-[var(--border)] pt-3">
+                          {getMoveTarget(lead) ? (
+                            <label className="block">
+                              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                                Mover para
+                              </span>
+                              <select
+                                value=""
+                                disabled={movingLeadId === lead.id}
+                                onChange={(event) =>
+                                  void handleMoveLead(lead, event.target.value)
+                                }
+                                className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-2 py-1.5 text-xs text-[var(--text2)] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <option value="">
+                                  {movingLeadId === lead.id
+                                    ? "Movendo..."
+                                    : "Selecionar"}
+                                </option>
+                                <option value={getMoveTarget(lead)?.id}>
+                                  {getMoveTarget(lead)?.label}
+                                </option>
+                              </select>
+                            </label>
+                          ) : (
+                            <div className="text-[11px] text-[var(--text3)]">
+                              Movimento indisponível nesta etapa.
+                            </div>
+                          )}
                         </div>
                       </article>
                     ))
