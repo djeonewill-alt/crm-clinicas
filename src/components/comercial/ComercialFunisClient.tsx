@@ -1,6 +1,13 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  buildCsv,
+  downloadCsv,
+  formatCsvBoolean,
+  formatCsvDate,
+  formatCsvMoney,
+} from "@/lib/comercial/export-csv";
 import { FUNNELS } from "@/lib/constants/crm";
 import { moveLeadToFunnel } from "@/lib/services/leads-client";
 import { cn } from "@/lib/utils/cn";
@@ -94,6 +101,16 @@ function getMoveTarget(lead: Lead) {
   return null;
 }
 
+function getFunnelLabel(funnelId: string) {
+  const funnel = FUNNELS.find((item) => item.id === funnelId);
+
+  if (funnel) return funnel.label;
+  if (funnelId === "desqualificado") return "Desqualificado";
+  if (funnelId === "remarketing") return "Remarketing";
+
+  return funnelId || "";
+}
+
 export function ComercialFunisClient({
   leads,
   empresaNome,
@@ -184,6 +201,10 @@ export function ComercialFunisClient({
     return total + leadsByFunnel[funnel.id].filter(filterLead).length;
   }, 0);
 
+  const filteredLeadsForExport = visibleFunnels.flatMap((funnel) =>
+    leadsByFunnel[funnel.id].filter(filterLead)
+  );
+
   const hasActiveFilters =
     search.trim().length > 0 ||
     selectedFunnel !== FUNNEL_ALL ||
@@ -195,6 +216,53 @@ export function ComercialFunisClient({
     setSelectedFunnel(FUNNEL_ALL);
     setSelectedCampaign(FILTER_ALL);
     setSelectedInterest(FILTER_ALL);
+  }
+
+  function handleExportCsv() {
+    const leadsToExport = filteredLeadsForExport.filter((lead) => !lead.archivedAt);
+
+    if (leadsToExport.length === 0) {
+      setStatusMessage("Nenhum lead para exportar com os filtros atuais.");
+      return;
+    }
+
+    const headers = [
+      "ID",
+      "Nome",
+      "Telefone",
+      "Campanha",
+      "Interesse/Procedimento",
+      "Funil",
+      "Dia de prospecção",
+      "Retorno",
+      "Fechado",
+      "Desqualificado",
+      "Tentativas totais",
+      "Valor",
+      "Data de entrada",
+      "Última atualização",
+    ];
+    const rows = leadsToExport.map((lead) => [
+      lead.id,
+      lead.nome,
+      lead.tel,
+      lead.campanha,
+      lead.esp,
+      getFunnelLabel(lead.funnel),
+      lead.diaProsp,
+      formatCsvDate(lead.retornoData),
+      formatCsvBoolean(lead.fechado),
+      lead.funnel === "desqualificado" ? "Sim" : "Não",
+      lead.tentativas?.length ?? 0,
+      formatCsvMoney(lead.valor),
+      formatCsvDate(lead.dataEntrada),
+      formatCsvDate(lead.colAt),
+    ]);
+    const csvContent = buildCsv(headers, rows);
+    const filename = `leads-funis-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    downloadCsv(filename, csvContent);
+    setStatusMessage(`CSV exportado com ${leadsToExport.length} lead(s).`);
   }
 
   async function handleMoveLead(lead: Lead, targetFunnel: string) {
@@ -340,6 +408,14 @@ export function ComercialFunisClient({
             className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Limpar filtros
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-3 py-2 text-xs font-semibold text-[var(--accent)] transition hover:bg-[rgba(232,197,71,.18)]"
+          >
+            Exportar CSV ({filteredLeadCount})
           </button>
         </div>
 
