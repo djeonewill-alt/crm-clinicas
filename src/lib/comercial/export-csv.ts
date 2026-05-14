@@ -1,4 +1,4 @@
-const CSV_SEPARATOR = ";";
+﻿const CSV_SEPARATOR = ";";
 const UTF8_BOM = "\uFEFF";
 const CSV_INJECTION_PREFIX = /^[=+\-@]/;
 
@@ -65,3 +65,4 @@ export function formatCsvMoney(value?: number | string | null): string {
     maximumFractionDigits: 2,
   });
 }
+
