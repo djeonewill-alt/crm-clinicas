@@ -28,6 +28,9 @@ import type { Lead } from "@/types/lead";
 export type VisibleFunnelId = (typeof FUNNELS)[number]["id"];
 export type ListMode = "smart" | "all";
 
+const FILTER_ALL = "all";
+const EMPTY_FILTER_VALUE = "__empty__";
+
 type UseComercialTrabalhoParams = {
   initialLeads: Lead[];
   empresaId: string | number;
@@ -74,6 +77,40 @@ function leadMatchesSearch(lead: Lead, normalizedSearch: string) {
     .toLowerCase();
 
   return searchable.includes(normalizedSearch);
+}
+
+function normalizeFilterValue(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toLowerCase() : EMPTY_FILTER_VALUE;
+}
+
+function getCampaignLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem campanha" : value;
+}
+
+function getInterestLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem interesse" : value;
+}
+
+function buildFilterOptions(
+  leads: Lead[],
+  getValue: (lead: Lead) => string | undefined,
+  getLabel: (value: string) => string
+) {
+  const options = new Map<string, string>();
+
+  leads.forEach((lead) => {
+    const rawValue = getValue(lead)?.trim();
+    const value = normalizeFilterValue(rawValue);
+
+    if (!options.has(value)) {
+      options.set(value, rawValue || getLabel(value));
+    }
+  });
+
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }
 
 export function getLeadName(lead: Lead) {
@@ -128,12 +165,18 @@ export function useComercialTrabalho({
   const [newLeadCampaign, setNewLeadCampaign] = useState("");
   const [listMode, setListMode] = useState<ListMode>("smart");
   const [search, setSearch] = useState("");
+  const [selectedCampaign, setSelectedCampaign] = useState(FILTER_ALL);
+  const [selectedInterest, setSelectedInterest] = useState(FILTER_ALL);
   const [leadHistory, setLeadHistory] = useState<LeadHistoryItem[]>([]);
   const [isLoadingLeadHistory, setIsLoadingLeadHistory] = useState(false);
   const [isSavingLeadHistory, setIsSavingLeadHistory] = useState(false);
   const [leadHistoryError, setLeadHistoryError] = useState<string | null>(null);
   const normalizedSearch = search.trim().toLowerCase();
   const hasActiveSearch = normalizedSearch.length > 0;
+  const hasActiveFilters =
+    hasActiveSearch ||
+    selectedCampaign !== FILTER_ALL ||
+    selectedInterest !== FILTER_ALL;
 
   const activeFunnel = useMemo(() => {
     return FUNNELS.find((funnel) => funnel.id === workFunnel) ?? FUNNELS[0];
@@ -153,19 +196,46 @@ export function useComercialTrabalho({
     );
   }, [leads, listMode]);
 
+  const campaignOptions = useMemo(
+    () => buildFilterOptions(leads, (lead) => lead.campanha, getCampaignLabel),
+    [leads]
+  );
+
+  const interestOptions = useMemo(
+    () => buildFilterOptions(leads, (lead) => lead.esp, getInterestLabel),
+    [leads]
+  );
+
   const queuesByFunnel = useMemo(() => {
-    if (!hasActiveSearch) return queuesBeforeSearch;
+    if (!hasActiveFilters) return queuesBeforeSearch;
 
     return FUNNELS.reduce(
       (acc, funnel) => {
-        acc[funnel.id] = queuesBeforeSearch[funnel.id].filter((lead) =>
-          leadMatchesSearch(lead, normalizedSearch)
-        );
+        acc[funnel.id] = queuesBeforeSearch[funnel.id].filter((lead) => {
+          const matchesCampaign =
+            selectedCampaign === FILTER_ALL ||
+            normalizeFilterValue(lead.campanha) === selectedCampaign;
+          const matchesInterest =
+            selectedInterest === FILTER_ALL ||
+            normalizeFilterValue(lead.esp) === selectedInterest;
+
+          return (
+            leadMatchesSearch(lead, normalizedSearch) &&
+            matchesCampaign &&
+            matchesInterest
+          );
+        });
         return acc;
       },
       {} as Record<VisibleFunnelId, Lead[]>
     );
-  }, [hasActiveSearch, normalizedSearch, queuesBeforeSearch]);
+  }, [
+    hasActiveFilters,
+    normalizedSearch,
+    queuesBeforeSearch,
+    selectedCampaign,
+    selectedInterest,
+  ]);
 
   const rawCounts = useMemo(() => {
     return FUNNELS.reduce(
@@ -248,6 +318,12 @@ export function useComercialTrabalho({
 
   function clearSearch() {
     setSearch("");
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
   }
 
   function selectNextLeadAfter(currentLeadId: Lead["id"]) {
@@ -799,8 +875,16 @@ export function useComercialTrabalho({
     setListMode,
     search,
     setSearch,
+    selectedCampaign,
+    setSelectedCampaign,
+    campaignOptions,
+    selectedInterest,
+    setSelectedInterest,
+    interestOptions,
     hasActiveSearch,
+    hasActiveFilters,
     clearSearch,
+    clearFilters,
 
     setSelectedLeadId,
 

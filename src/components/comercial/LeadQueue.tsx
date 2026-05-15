@@ -9,6 +9,11 @@ type VisibleFunnelId = (typeof FUNNELS)[number]["id"];
 
 type ListMode = "smart" | "all";
 
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
 type LeadQueueProps = {
   workFunnel: VisibleFunnelId;
   activeFunnelLabel: string;
@@ -18,11 +23,17 @@ type LeadQueueProps = {
   selectedLeadId: string | number | null;
   listMode: ListMode;
   search: string;
-  hasActiveSearch: boolean;
+  selectedCampaign: string;
+  campaignOptions: FilterOption[];
+  selectedInterest: string;
+  interestOptions: FilterOption[];
+  hasActiveFilters: boolean;
   onChangeFunnel: (funnelId: VisibleFunnelId) => void;
   onChangeListMode: (mode: ListMode) => void;
   onSearchChange: (value: string) => void;
-  onClearSearch: () => void;
+  onCampaignChange: (value: string) => void;
+  onInterestChange: (value: string) => void;
+  onClearFilters: () => void;
   onSelectLead: (leadId: string | number) => void;
   getLeadName: (lead: Lead) => string;
   getLastAction: (lead: Lead) => string;
@@ -42,11 +53,17 @@ export function LeadQueue({
   selectedLeadId,
   listMode,
   search,
-  hasActiveSearch,
+  selectedCampaign,
+  campaignOptions,
+  selectedInterest,
+  interestOptions,
+  hasActiveFilters,
   onChangeFunnel,
   onChangeListMode,
   onSearchChange,
-  onClearSearch,
+  onCampaignChange,
+  onInterestChange,
+  onClearFilters,
   onSelectLead,
   getLeadName,
   getLastAction,
@@ -61,13 +78,39 @@ export function LeadQueue({
           placeholder="Buscar lead..."
         />
 
-        {hasActiveSearch && (
+        <select
+          value={selectedCampaign}
+          onChange={(event) => onCampaignChange(event.target.value)}
+          className="mt-2 w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="all">Todas as campanhas</option>
+          {campaignOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={selectedInterest}
+          onChange={(event) => onInterestChange(event.target.value)}
+          className="mt-2 w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+        >
+          <option value="all">Todos os interesses</option>
+          {interestOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {hasActiveFilters && (
           <button
             type="button"
-            onClick={onClearSearch}
+            onClick={onClearFilters}
             className="mt-2 w-full rounded-lg border border-[var(--border2)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] hover:bg-[var(--bg3)] hover:text-[var(--text)]"
           >
-            Limpar busca
+            Limpar filtros
           </button>
         )}
       </div>
@@ -144,14 +187,14 @@ export function LeadQueue({
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-[var(--text3)]">
             <div className="mb-3 text-4xl">🎉</div>
             <div className="font-semibold text-[var(--green)]">
-              {hasActiveSearch ? "Nada encontrado" : "Fila limpa"}
+              {hasActiveFilters ? "Nada encontrado" : "Fila limpa"}
             </div>
             <div className="mt-1">
-              {hasActiveSearch
-                ? "Nenhum lead encontrado para esta busca."
+              {hasActiveFilters
+                ? "Nenhum lead encontrado para estes filtros."
                 : `Nenhum lead ativo em ${activeFunnelLabel.toLowerCase()}.`}
             </div>
-            {hiddenCount > 0 && !hasActiveSearch && (
+            {hiddenCount > 0 && !hasActiveFilters && (
               <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs">
                 {hiddenCount} lead(s) oculto(s) por estarem em outro dia ou já concluídos.
               </div>
