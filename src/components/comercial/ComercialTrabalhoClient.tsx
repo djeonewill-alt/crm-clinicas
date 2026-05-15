@@ -32,6 +32,7 @@ export function ComercialTrabalhoClient({
         queuesByFunnel={comercial.queuesByFunnel}
         queueLeads={comercial.filteredLeads}
         hiddenCount={comercial.hiddenCount}
+        filteredCount={comercial.filteredCount}
         selectedLeadId={comercial.selectedLead?.id ?? null}
         listMode={comercial.listMode}
         search={comercial.search}

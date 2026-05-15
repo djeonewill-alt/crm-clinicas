@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import { getAttemptProgress } from "@/lib/services/queue";
 import { cn } from "@/lib/utils/cn";
@@ -20,6 +21,7 @@ type LeadQueueProps = {
   queuesByFunnel: Record<VisibleFunnelId, Lead[]>;
   queueLeads: Lead[];
   hiddenCount: number;
+  filteredCount: number;
   selectedLeadId: string | number | null;
   listMode: ListMode;
   search: string;
@@ -50,6 +52,7 @@ export function LeadQueue({
   queuesByFunnel,
   queueLeads,
   hiddenCount,
+  filteredCount,
   selectedLeadId,
   listMode,
   search,
@@ -68,9 +71,28 @@ export function LeadQueue({
   getLeadName,
   getLastAction,
 }: LeadQueueProps) {
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
-      <div className="border-b border-[var(--border)] bg-[var(--bg2)] p-3">
+      <div className="space-y-3 border-b border-[var(--border)] bg-[var(--bg2)] p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Busca e filtros
+            </div>
+            <div className="mt-1 text-xs text-[var(--text2)]">
+              {filteredCount} lead(s) encontrado(s)
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <span className="shrink-0 rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
+              Ativos
+            </span>
+          )}
+        </div>
+
         <input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
@@ -78,41 +100,63 @@ export function LeadQueue({
           placeholder="Buscar lead..."
         />
 
-        <select
-          value={selectedCampaign}
-          onChange={(event) => onCampaignChange(event.target.value)}
-          className="mt-2 w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+        <button
+          type="button"
+          onClick={() => setShowAdvancedFilters((current) => !current)}
+          className={cn(
+            "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold transition",
+            hasActiveFilters
+              ? "border-[var(--accent)] bg-[rgba(232,197,71,.08)] text-[var(--accent)]"
+              : "border-[var(--border2)] bg-[var(--bg3)] text-[var(--text2)] hover:text-[var(--text)]"
+          )}
         >
-          <option value="all">Todas as campanhas</option>
-          {campaignOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <span>Filtros avançados</span>
+          <span>{showAdvancedFilters ? "Fechar" : "Abrir"}</span>
+        </button>
 
-        <select
-          value={selectedInterest}
-          onChange={(event) => onInterestChange(event.target.value)}
-          className="mt-2 w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
-        >
-          <option value="all">Todos os interesses</option>
-          {interestOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        {showAdvancedFilters && (
+          <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2">
+            <select
+              value={selectedCampaign}
+              onChange={(event) => onCampaignChange(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+            >
+              <option value="all">Todas as campanhas</option>
+              {campaignOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
 
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            className="mt-2 w-full rounded-lg border border-[var(--border2)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] hover:bg-[var(--bg3)] hover:text-[var(--text)]"
-          >
-            Limpar filtros
-          </button>
+            <select
+              value={selectedInterest}
+              onChange={(event) => onInterestChange(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+            >
+              <option value="all">Todos os interesses</option>
+              {interestOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={onClearFilters}
+                className="w-full rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-1.5 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)]"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
         )}
+
+        <div className="text-[11px] text-[var(--text3)]">
+          {hasActiveFilters ? "com filtros ativos" : "na fila atual"}
+        </div>
       </div>
 
       <div className="flex border-b border-[var(--border)]">
