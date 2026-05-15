@@ -8,6 +8,7 @@ import {
   formatCsvDate,
   formatCsvMoney,
 } from "@/lib/comercial/export-csv";
+import { LeadCsvImportPanel } from "@/components/comercial/LeadCsvImportPanel";
 import { FUNNELS } from "@/lib/constants/crm";
 import { moveLeadToFunnel } from "@/lib/services/leads-client";
 import { cn } from "@/lib/utils/cn";
@@ -123,6 +124,7 @@ export function ComercialFunisClient({
   const [isHydrated, setIsHydrated] = useState(false);
   const [movingLeadId, setMovingLeadId] = useState<string | number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [importPanelOpen, setImportPanelOpen] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -417,7 +419,21 @@ export function ComercialFunisClient({
           >
             Exportar CSV ({filteredLeadCount})
           </button>
+
+          <button
+            type="button"
+            onClick={() => setImportPanelOpen((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)]"
+          >
+            Importar CSV
+          </button>
         </div>
+
+        <LeadCsvImportPanel
+          leads={localLeads}
+          isOpen={importPanelOpen}
+          onClose={() => setImportPanelOpen(false)}
+        />
 
         <div className="mt-3 text-xs text-[var(--text3)]">
           {filteredLeadCount} lead(s) encontrado(s)
