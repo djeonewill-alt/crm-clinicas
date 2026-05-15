@@ -42,8 +42,12 @@ function rowToLead(row: Record<string, unknown>): Lead {
   };
 }
 
-export async function updateLeadCommercialFields(lead: Lead) {
+export async function updateLeadCommercialFields(input: {
+  empresaId: string | number;
+  lead: Lead;
+}) {
   const supabase = createClient();
+  const { empresaId, lead } = input;
 
   const { error } = await supabase
     .from("leads")
@@ -66,14 +70,18 @@ export async function updateLeadCommercialFields(lead: Lead) {
       qualificado_em: toIsoFromNumber(lead.qualificadoEm),
       fechado_em: toIsoFromNumber(lead.fechadoEm),
     })
-    .eq("id", lead.id);
+    .eq("id", lead.id)
+    .eq("empresa_id", empresaId);
 
   if (error) {
     throw new Error(error.message);
   }
 }
 
-export async function archiveLeadById(leadId: string | number): Promise<void> {
+export async function archiveLeadById(input: {
+  empresaId: string | number;
+  leadId: string | number;
+}): Promise<void> {
   const supabase = createClient();
 
   const { error } = await supabase
@@ -81,7 +89,8 @@ export async function archiveLeadById(leadId: string | number): Promise<void> {
     .update({
       archived_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", input.leadId)
+    .eq("empresa_id", input.empresaId);
 
   if (error) {
     throw new Error(error.message);
@@ -89,6 +98,7 @@ export async function archiveLeadById(leadId: string | number): Promise<void> {
 }
 
 export async function moveLeadToFunnel(input: {
+  empresaId: string | number;
   leadId: string | number;
   targetFunnel: "prospeccao" | "qualificacao";
   currentLead?: Lead;
@@ -119,7 +129,8 @@ export async function moveLeadToFunnel(input: {
   const { error } = await supabase
     .from("leads")
     .update(payload)
-    .eq("id", input.leadId);
+    .eq("id", input.leadId)
+    .eq("empresa_id", input.empresaId);
 
   if (error) {
     throw new Error(error.message);

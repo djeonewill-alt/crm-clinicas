@@ -287,6 +287,7 @@ export function ComercialFunisClient({
 
     try {
       const updatedFields = await moveLeadToFunnel({
+        empresaId,
         leadId: lead.id,
         targetFunnel,
         currentLead: lead,

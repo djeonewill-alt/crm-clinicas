@@ -212,7 +212,10 @@ export function useComercialTrabalho({
     );
 
     try {
-      await updateLeadCommercialFields(updatedLead);
+      await updateLeadCommercialFields({
+        empresaId,
+        lead: updatedLead,
+      });
       setMessage(successMessage);
       return true;
     } catch (error) {
@@ -483,7 +486,10 @@ export function useComercialTrabalho({
     setMessage("");
 
     try {
-      await archiveLeadById(lead.id);
+      await archiveLeadById({
+        empresaId,
+        leadId: lead.id,
+      });
 
       setLeads((current) =>
         current.filter((item) => String(item.id) !== String(lead.id))
