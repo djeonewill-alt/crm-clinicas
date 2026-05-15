@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import {
+  createLeadHistoryEvent,
   createLeadHistoryNote,
   listLeadHistory,
 } from "@/lib/services/lead-history-client";
@@ -21,6 +22,7 @@ import {
   moveLeadToPreviousDay,
 } from "@/lib/services/queue";
 import type { LeadHistoryItem } from "@/types/lead-history";
+import type { LeadHistoryType } from "@/types/lead-history";
 import type { Lead } from "@/types/lead";
 
 export type VisibleFunnelId = (typeof FUNNELS)[number]["id"];
@@ -202,6 +204,31 @@ export function useComercialTrabalho({
     setSelectedLeadId(nextLead?.id ?? null);
   }
 
+  async function recordLeadHistoryEvent(input: {
+    leadId: Lead["id"];
+    type: LeadHistoryType;
+    title: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      const createdItem = await createLeadHistoryEvent({
+        leadId: String(input.leadId),
+        empresaId: String(empresaId),
+        type: input.type,
+        title: input.title,
+        description: input.description,
+        metadata: input.metadata,
+      });
+
+      if (selectedLead && String(selectedLead.id) === String(input.leadId)) {
+        setLeadHistory((current) => [createdItem, ...current]);
+      }
+    } catch (error) {
+      console.error("Erro ao registrar histórico automático:", error);
+    }
+  }
+
   async function saveUpdatedLead(updatedLead: Lead, successMessage: string) {
     setSavingLeadId(updatedLead.id);
     setMessage("");
@@ -264,6 +291,19 @@ export function useComercialTrabalho({
       setNewLeadInterest("");
       setNewLeadCampaign("");
       setMessage("Novo lead criado em Prospecção / d1.");
+
+      await recordLeadHistoryEvent({
+        leadId: createdLead.id,
+        type: "status_change",
+        title: "Lead criado",
+        description: "Lead criado manualmente em Prospecção / d1.",
+        metadata: {
+          event: "lead_created",
+          source: "manual",
+          funnel: "prospeccao",
+          diaProsp: "d1",
+        },
+      });
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -297,7 +337,24 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
-    return saveUpdatedLead(updatedLead, "Lead atualizado com sucesso.");
+    const saved = await saveUpdatedLead(
+      updatedLead,
+      "Lead atualizado com sucesso."
+    );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "status_change",
+        title: "Lead atualizado",
+        description: "Dados do lead atualizados.",
+        metadata: {
+          event: "lead_updated",
+        },
+      });
+    }
+
+    return saved;
   }
 
   async function handleCreateLeadNote(description: string) {
@@ -377,7 +434,24 @@ export function useComercialTrabalho({
           : lead.respondeuAt ?? null,
     };
 
-    await saveUpdatedLead(updatedLead, "Tentativa salva com sucesso.");
+    const saved = await saveUpdatedLead(
+      updatedLead,
+      "Tentativa salva com sucesso."
+    );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "attempt",
+        title: "Tentativa registrada",
+        description: `Resultado registrado: ${resultado}.`,
+        metadata: {
+          event: "attempt_recorded",
+          tentativaIndex,
+          resultado,
+        },
+      });
+    }
   }
 
   async function handleAdvanceQueue(lead: Lead) {
@@ -389,10 +463,24 @@ export function useComercialTrabalho({
       return;
     }
 
-    await saveUpdatedLead(
+    const saved = await saveUpdatedLead(
       advancedLead,
       `Lead avançou para ${advancedLead.diaProsp}.`
     );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: advancedLead.id,
+        type: "status_change",
+        title: "Lead avançou de dia",
+        description: `Lead avançou para ${advancedLead.diaProsp}.`,
+        metadata: {
+          event: "lead_day_advanced",
+          fromDiaProsp: lead.diaProsp,
+          toDiaProsp: advancedLead.diaProsp,
+        },
+      });
+    }
 
     selectNextLeadAfter(lead.id);
   }
@@ -409,7 +497,26 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
-    await saveUpdatedLead(updatedLead, "Lead movido para Qualificação.");
+    const saved = await saveUpdatedLead(
+      updatedLead,
+      "Lead movido para Qualificação."
+    );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "status_change",
+        title: "Lead movido para Qualificação",
+        description: "Lead movido para Qualificação / q1.",
+        metadata: {
+          event: "lead_qualified",
+          fromFunnel: lead.funnel,
+          toFunnel: "qualificacao",
+          diaProsp: "q1",
+        },
+      });
+    }
+
     selectNextLeadAfter(lead.id);
   }
 
@@ -429,10 +536,25 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
-    await saveUpdatedLead(
+    const saved = await saveUpdatedLead(
       updatedLead,
       `Lead enviado para Retorno em ${formatDate(retornoDate)}.`
     );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "return_scheduled",
+        title: "Retorno agendado",
+        description: `Lead enviado para Retorno em ${formatDate(retornoDate)}.`,
+        metadata: {
+          event: "return_scheduled",
+          retornoData: retornoDate,
+          fromFunnel: lead.funnel,
+          toFunnel: "retorno",
+        },
+      });
+    }
 
     selectNextLeadAfter(lead.id);
   }
@@ -452,7 +574,25 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
-    await saveUpdatedLead(updatedLead, "Lead fechado como Cliente.");
+    const saved = await saveUpdatedLead(
+      updatedLead,
+      "Lead fechado como Cliente."
+    );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "closed",
+        title: "Lead fechado como Cliente",
+        description: "Lead fechado como Cliente.",
+        metadata: {
+          event: "lead_closed",
+          fromFunnel: lead.funnel,
+          toFunnel: "clientes",
+        },
+      });
+    }
+
     selectNextLeadAfter(lead.id);
   }
 
@@ -470,7 +610,22 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
-    await saveUpdatedLead(updatedLead, "Lead desqualificado.");
+    const saved = await saveUpdatedLead(updatedLead, "Lead desqualificado.");
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "disqualified",
+        title: "Lead desqualificado",
+        description: "Lead desqualificado.",
+        metadata: {
+          event: "lead_disqualified",
+          fromFunnel: lead.funnel,
+          toFunnel: "desqualificado",
+        },
+      });
+    }
+
     selectNextLeadAfter(lead.id);
   }
 
@@ -492,6 +647,17 @@ export function useComercialTrabalho({
       await archiveLeadById({
         empresaId,
         leadId: lead.id,
+      });
+
+      await recordLeadHistoryEvent({
+        leadId: lead.id,
+        type: "status_change",
+        title: "Lead arquivado",
+        description: "Lead arquivado. Dados e histórico preservados.",
+        metadata: {
+          event: "lead_archived",
+          fromFunnel: lead.funnel,
+        },
       });
 
       setLeads((current) =>
@@ -520,10 +686,24 @@ export function useComercialTrabalho({
       return;
     }
 
-    await saveUpdatedLead(
+    const saved = await saveUpdatedLead(
       previousLead,
       `Lead voltou para ${previousLead.diaProsp}.`
     );
+
+    if (saved) {
+      await recordLeadHistoryEvent({
+        leadId: previousLead.id,
+        type: "status_change",
+        title: "Lead voltou de dia",
+        description: `Lead voltou para ${previousLead.diaProsp}.`,
+        metadata: {
+          event: "lead_day_reverted",
+          fromDiaProsp: lead.diaProsp,
+          toDiaProsp: previousLead.diaProsp,
+        },
+      });
+    }
 
     setSelectedLeadId(previousLead.id);
   }

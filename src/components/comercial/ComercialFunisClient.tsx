@@ -10,6 +10,7 @@ import {
 } from "@/lib/comercial/export-csv";
 import { LeadCsvImportPanel } from "@/components/comercial/LeadCsvImportPanel";
 import { FUNNELS } from "@/lib/constants/crm";
+import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import { moveLeadToFunnel } from "@/lib/services/leads-client";
 import { cn } from "@/lib/utils/cn";
 import type { Lead } from "@/types/lead";
@@ -269,6 +270,26 @@ export function ComercialFunisClient({
     setStatusMessage(`CSV exportado com ${leadsToExport.length} lead(s).`);
   }
 
+  async function recordLeadHistoryEvent(input: {
+    leadId: Lead["id"];
+    title: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await createLeadHistoryEvent({
+        leadId: String(input.leadId),
+        empresaId: String(empresaId),
+        type: "status_change",
+        title: input.title,
+        description: input.description,
+        metadata: input.metadata,
+      });
+    } catch (error) {
+      console.error("Erro ao registrar histórico automático:", error);
+    }
+  }
+
   async function handleMoveLead(lead: Lead, targetFunnel: string) {
     if (targetFunnel !== "prospeccao" && targetFunnel !== "qualificacao") {
       return;
@@ -301,6 +322,17 @@ export function ComercialFunisClient({
         )
       );
       setStatusMessage(`Lead movido para ${targetLabel}.`);
+
+      await recordLeadHistoryEvent({
+        leadId: lead.id,
+        title: "Lead movido no funil",
+        description: `Lead movido para ${targetLabel}.`,
+        metadata: {
+          event: "lead_moved_from_funis",
+          fromFunnel: lead.funnel,
+          toFunnel: targetFunnel,
+        },
+      });
     } catch (error) {
       setStatusMessage(
         error instanceof Error
