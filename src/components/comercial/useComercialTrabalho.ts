@@ -169,7 +169,10 @@ export function useComercialTrabalho({
     setLeadHistoryError(null);
 
     try {
-      const items = await listLeadHistory(leadId);
+      const items = await listLeadHistory({
+        leadId,
+        empresaId: String(empresaId),
+      });
       setLeadHistory(items);
     } catch (error) {
       setLeadHistory([]);

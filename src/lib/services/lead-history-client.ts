@@ -22,15 +22,17 @@ function rowToLeadHistoryItem(row: Record<string, unknown>): LeadHistoryItem {
   };
 }
 
-export async function listLeadHistory(
-  leadId: string
-): Promise<LeadHistoryItem[]> {
+export async function listLeadHistory(input: {
+  leadId: string;
+  empresaId: string;
+}): Promise<LeadHistoryItem[]> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("lead_history")
     .select("*")
-    .eq("lead_id", leadId)
+    .eq("lead_id", input.leadId)
+    .eq("empresa_id", input.empresaId)
     .order("created_at", { ascending: false });
 
   if (error) {
