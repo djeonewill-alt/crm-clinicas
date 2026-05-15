@@ -20,6 +20,7 @@ export default async function ComercialFunisPage() {
   return (
     <ComercialFunisClient
       leads={leads}
+      empresaId={context.empresaAtual.id}
       empresaNome={context.empresaAtual.nome}
     />
   );

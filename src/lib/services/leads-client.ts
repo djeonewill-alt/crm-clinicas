@@ -172,3 +172,48 @@ export async function createLeadForEmpresa(input: {
 
   return rowToLead(data);
 }
+
+export async function importLeadsForEmpresa(input: {
+  empresaId: string | number;
+  leads: Array<{
+    nome: string;
+    tel: string;
+    esp?: string;
+    campanha?: string;
+  }>;
+}): Promise<Lead[]> {
+  if (input.leads.length === 0) return [];
+
+  if (input.leads.length > 500) {
+    throw new Error("Importação limitada a 500 leads por vez.");
+  }
+
+  const supabase = createClient();
+  const now = new Date().toISOString();
+  const tentativas = createTentativasForDay("prospeccao", "d1");
+  const payload = input.leads.map((lead) => ({
+    empresa_id: input.empresaId,
+    nome: lead.nome.trim(),
+    tel: lead.tel.trim(),
+    esp: lead.esp?.trim() || "",
+    campanha: lead.campanha?.trim() || "",
+    funnel: "prospeccao",
+    dia_prosp: "d1",
+    tentativas,
+    fechado: false,
+    valor: 0,
+    col_at: now,
+    data_entrada: now,
+  }));
+
+  const { data, error } = await supabase
+    .from("leads")
+    .insert(payload)
+    .select("*");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(rowToLead);
+}

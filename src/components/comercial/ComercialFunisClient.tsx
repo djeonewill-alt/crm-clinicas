@@ -16,6 +16,7 @@ import type { Lead } from "@/types/lead";
 
 type ComercialFunisClientProps = {
   leads: Lead[];
+  empresaId: string | number;
   empresaNome: string;
 };
 
@@ -114,6 +115,7 @@ function getFunnelLabel(funnelId: string) {
 
 export function ComercialFunisClient({
   leads,
+  empresaId,
   empresaNome,
 }: ComercialFunisClientProps) {
   const [localLeads, setLocalLeads] = useState<Lead[]>(leads);
@@ -430,9 +432,14 @@ export function ComercialFunisClient({
         </div>
 
         <LeadCsvImportPanel
+          empresaId={empresaId}
           leads={localLeads}
           isOpen={importPanelOpen}
           onClose={() => setImportPanelOpen(false)}
+          onImported={(createdLeads) => {
+            setLocalLeads((current) => [...createdLeads, ...current]);
+            setStatusMessage(`${createdLeads.length} lead(s) importado(s) via CSV.`);
+          }}
         />
 
         <div className="mt-3 text-xs text-[var(--text3)]">

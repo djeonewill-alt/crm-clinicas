@@ -4,15 +4,19 @@ import { useRef, useState, type ChangeEvent } from "react";
 import {
   analyzeLeadCsvImport,
   buildLeadImportTemplateCsv,
+  getValidLeadImportRows,
   type LeadImportPreview,
   type LeadImportRowStatus,
 } from "@/lib/comercial/import-csv";
+import { importLeadsForEmpresa } from "@/lib/services/leads-client";
 import type { Lead } from "@/types/lead";
 
 type LeadCsvImportPanelProps = {
+  empresaId: string | number;
   leads: Lead[];
   isOpen: boolean;
   onClose: () => void;
+  onImported: (createdLeads: Lead[]) => void;
 };
 
 const PREVIEW_ROW_LIMIT = 50;
@@ -50,24 +54,33 @@ function getStatusClass(status: LeadImportRowStatus) {
 }
 
 export function LeadCsvImportPanel({
+  empresaId,
   leads,
   isOpen,
   onClose,
+  onImported,
 }: LeadCsvImportPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [rawCsvText, setRawCsvText] = useState("");
   const [importPreview, setImportPreview] = useState<LeadImportPreview | null>(
     null
   );
   const [importError, setImportError] = useState("");
   const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResultMessage, setImportResultMessage] = useState("");
+  const [importedCurrentPreview, setImportedCurrentPreview] = useState(false);
 
   if (!isOpen) return null;
 
   function clearImportState() {
     setSelectedFileName("");
+    setRawCsvText("");
     setImportPreview(null);
     setImportError("");
+    setImportResultMessage("");
+    setImportedCurrentPreview(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -80,8 +93,11 @@ export function LeadCsvImportPanel({
     if (!file) return;
 
     setSelectedFileName(file.name);
+    setRawCsvText("");
     setImportPreview(null);
     setImportError("");
+    setImportResultMessage("");
+    setImportedCurrentPreview(false);
     setIsReadingFile(true);
 
     const reader = new FileReader();
@@ -92,6 +108,7 @@ export function LeadCsvImportPanel({
           throw new Error("Não foi possível ler o conteúdo do arquivo.");
         }
 
+        setRawCsvText(reader.result);
         const preview = analyzeLeadCsvImport(reader.result, leads);
         setImportPreview(preview);
       } catch (error) {
@@ -115,9 +132,78 @@ export function LeadCsvImportPanel({
     reader.readAsText(file);
   }
 
+  async function handleImportValidLeads() {
+    setImportError("");
+    setImportResultMessage("");
+
+    if (!empresaId) {
+      setImportError("Empresa atual não encontrada para importação.");
+      return;
+    }
+
+    if (!rawCsvText) {
+      setImportError("Selecione um arquivo CSV antes de importar.");
+      return;
+    }
+
+    const refreshedPreview = analyzeLeadCsvImport(rawCsvText, leads);
+    setImportPreview(refreshedPreview);
+
+    const validRows = getValidLeadImportRows(refreshedPreview);
+
+    if (validRows.length === 0) {
+      setImportResultMessage("Nenhum lead válido para importar.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Importar ${validRows.length} lead(s) válido(s) para Prospecção / d1?`
+    );
+
+    if (!confirmed) return;
+
+    setIsImporting(true);
+
+    try {
+      const createdLeads = await importLeadsForEmpresa({
+        empresaId,
+        leads: validRows.map((row) => ({
+          nome: row.nome,
+          tel: row.tel,
+          esp: row.esp,
+          campanha: row.campanha,
+        })),
+      });
+      const ignoredRows = Math.max(
+        refreshedPreview.summary.totalRows - createdLeads.length,
+        0
+      );
+
+      onImported(createdLeads);
+      setImportedCurrentPreview(true);
+      setImportResultMessage(
+        `${createdLeads.length} lead(s) importado(s). ${ignoredRows} linha(s) ignorada(s).`
+      );
+    } catch (error) {
+      setImportError(
+        error instanceof Error
+          ? `Erro ao importar leads: ${error.message}`
+          : "Erro ao importar leads."
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   const previewRows = importPreview?.rows.slice(0, PREVIEW_ROW_LIMIT) ?? [];
   const hasPreview = Boolean(importPreview);
   const hasImportState = Boolean(selectedFileName || importPreview || importError);
+  const canImport =
+    Boolean(importPreview) &&
+    (importPreview?.summary.validRows ?? 0) > 0 &&
+    (importPreview?.globalErrors.length ?? 0) === 0 &&
+    !isImporting &&
+    !importedCurrentPreview;
 
   return (
     <section className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-5">
@@ -179,12 +265,22 @@ export function LeadCsvImportPanel({
 
         <button
           type="button"
-          disabled
-          className="rounded-lg border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--text3)] opacity-70"
+          disabled={!canImport}
+          onClick={() => void handleImportValidLeads()}
+          className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-4 py-2 text-xs font-semibold text-[var(--accent)] transition hover:bg-[rgba(232,197,71,.18)] disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-transparent disabled:text-[var(--text3)] disabled:opacity-70"
         >
-          Importação real na próxima etapa
+          {isImporting
+            ? "Importando..."
+            : importedCurrentPreview
+              ? "Importação concluída"
+              : "Importar leads válidos"}
         </button>
       </div>
+
+      <p className="mt-3 text-xs text-[var(--text3)]">
+        Somente linhas válidas serão importadas. Linhas duplicadas ou inválidas serão
+        ignoradas.
+      </p>
 
       {selectedFileName && (
         <p className="mt-3 text-xs text-[var(--text3)]">
@@ -196,6 +292,12 @@ export function LeadCsvImportPanel({
       {importError && (
         <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
           {importError}
+        </div>
+      )}
+
+      {importResultMessage && (
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-3 text-sm text-[var(--text2)]">
+          {importResultMessage}
         </div>
       )}
 
