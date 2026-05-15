@@ -34,8 +34,12 @@ export function ComercialTrabalhoClient({
         hiddenCount={comercial.hiddenCount}
         selectedLeadId={comercial.selectedLead?.id ?? null}
         listMode={comercial.listMode}
+        search={comercial.search}
+        hasActiveSearch={comercial.hasActiveSearch}
         onChangeFunnel={comercial.handleChangeFunnel}
         onChangeListMode={comercial.setListMode}
+        onSearchChange={comercial.setSearch}
+        onClearSearch={comercial.clearSearch}
         onSelectLead={comercial.setSelectedLeadId}
         getLeadName={comercial.getLeadName}
         getLastAction={comercial.getLastAction}

@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import { getAttemptProgress } from "@/lib/services/queue";
 import { cn } from "@/lib/utils/cn";
@@ -18,8 +17,12 @@ type LeadQueueProps = {
   hiddenCount: number;
   selectedLeadId: string | number | null;
   listMode: ListMode;
+  search: string;
+  hasActiveSearch: boolean;
   onChangeFunnel: (funnelId: VisibleFunnelId) => void;
   onChangeListMode: (mode: ListMode) => void;
+  onSearchChange: (value: string) => void;
+  onClearSearch: () => void;
   onSelectLead: (leadId: string | number) => void;
   getLeadName: (lead: Lead) => string;
   getLastAction: (lead: Lead) => string;
@@ -38,45 +41,35 @@ export function LeadQueue({
   hiddenCount,
   selectedLeadId,
   listMode,
+  search,
+  hasActiveSearch,
   onChangeFunnel,
   onChangeListMode,
+  onSearchChange,
+  onClearSearch,
   onSelectLead,
   getLeadName,
   getLastAction,
 }: LeadQueueProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-
-  const displayedLeads = useMemo(() => {
-    if (!normalizedSearch) return queueLeads;
-
-    return queueLeads.filter((lead) => {
-      const searchable = [
-        lead.nome,
-        lead.tel,
-        lead.esp,
-        lead.campanha,
-        lead.diaProsp,
-        String(lead.valor ?? ""),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(normalizedSearch);
-    });
-  }, [queueLeads, normalizedSearch]);
-
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
       <div className="border-b border-[var(--border)] bg-[var(--bg2)] p-3">
         <input
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
           className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
           placeholder="Buscar lead..."
         />
+
+        {hasActiveSearch && (
+          <button
+            type="button"
+            onClick={onClearSearch}
+            className="mt-2 w-full rounded-lg border border-[var(--border2)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] hover:bg-[var(--bg3)] hover:text-[var(--text)]"
+          >
+            Limpar busca
+          </button>
+        )}
       </div>
 
       <div className="flex border-b border-[var(--border)]">
@@ -147,25 +140,25 @@ export function LeadQueue({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {displayedLeads.length === 0 ? (
+        {queueLeads.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-[var(--text3)]">
             <div className="mb-3 text-4xl">🎉</div>
             <div className="font-semibold text-[var(--green)]">
-              {searchQuery.trim() ? "Nada encontrado" : "Fila limpa"}
+              {hasActiveSearch ? "Nada encontrado" : "Fila limpa"}
             </div>
             <div className="mt-1">
-              {searchQuery.trim()
+              {hasActiveSearch
                 ? "Nenhum lead encontrado para esta busca."
                 : `Nenhum lead ativo em ${activeFunnelLabel.toLowerCase()}.`}
             </div>
-            {hiddenCount > 0 && !searchQuery.trim() && (
+            {hiddenCount > 0 && !hasActiveSearch && (
               <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs">
                 {hiddenCount} lead(s) oculto(s) por estarem em outro dia ou já concluídos.
               </div>
             )}
           </div>
         ) : (
-          displayedLeads.map((lead) => {
+          queueLeads.map((lead) => {
             const active = String(selectedLeadId) === String(lead.id);
             const progress = getAttemptProgress(lead);
 

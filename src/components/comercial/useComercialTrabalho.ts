@@ -58,6 +58,24 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function leadMatchesSearch(lead: Lead, normalizedSearch: string) {
+  if (!normalizedSearch) return true;
+
+  const searchable = [
+    lead.nome,
+    lead.tel,
+    lead.esp,
+    lead.campanha,
+    lead.diaProsp,
+    String(lead.valor ?? ""),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return searchable.includes(normalizedSearch);
+}
+
 export function getLeadName(lead: Lead) {
   return lead.nome?.trim() || lead.tel || "Lead sem nome";
 }
@@ -109,16 +127,19 @@ export function useComercialTrabalho({
   const [newLeadInterest, setNewLeadInterest] = useState("");
   const [newLeadCampaign, setNewLeadCampaign] = useState("");
   const [listMode, setListMode] = useState<ListMode>("smart");
+  const [search, setSearch] = useState("");
   const [leadHistory, setLeadHistory] = useState<LeadHistoryItem[]>([]);
   const [isLoadingLeadHistory, setIsLoadingLeadHistory] = useState(false);
   const [isSavingLeadHistory, setIsSavingLeadHistory] = useState(false);
   const [leadHistoryError, setLeadHistoryError] = useState<string | null>(null);
+  const normalizedSearch = search.trim().toLowerCase();
+  const hasActiveSearch = normalizedSearch.length > 0;
 
   const activeFunnel = useMemo(() => {
     return FUNNELS.find((funnel) => funnel.id === workFunnel) ?? FUNNELS[0];
   }, [workFunnel]);
 
-  const queuesByFunnel = useMemo(() => {
+  const queuesBeforeSearch = useMemo(() => {
     return FUNNELS.reduce(
       (acc, funnel) => {
         acc[funnel.id] =
@@ -132,6 +153,20 @@ export function useComercialTrabalho({
     );
   }, [leads, listMode]);
 
+  const queuesByFunnel = useMemo(() => {
+    if (!hasActiveSearch) return queuesBeforeSearch;
+
+    return FUNNELS.reduce(
+      (acc, funnel) => {
+        acc[funnel.id] = queuesBeforeSearch[funnel.id].filter((lead) =>
+          leadMatchesSearch(lead, normalizedSearch)
+        );
+        return acc;
+      },
+      {} as Record<VisibleFunnelId, Lead[]>
+    );
+  }, [hasActiveSearch, normalizedSearch, queuesBeforeSearch]);
+
   const rawCounts = useMemo(() => {
     return FUNNELS.reduce(
       (acc, funnel) => {
@@ -143,7 +178,8 @@ export function useComercialTrabalho({
   }, [leads]);
 
   const filteredLeads = queuesByFunnel[workFunnel] ?? [];
-  const queueCount = filteredLeads.length;
+  const queueCount = queuesBeforeSearch[workFunnel]?.length ?? 0;
+  const filteredCount = filteredLeads.length;
   const rawCount = rawCounts[workFunnel] ?? 0;
   const hiddenCount =
     listMode === "smart" ? Math.max(rawCount - queueCount, 0) : 0;
@@ -154,6 +190,20 @@ export function useComercialTrabalho({
     );
 
     return preferred ?? filteredLeads[0] ?? null;
+  }, [filteredLeads, selectedLeadId]);
+
+  useEffect(() => {
+    const isSelectedLeadVisible = filteredLeads.some(
+      (lead) => String(lead.id) === String(selectedLeadId)
+    );
+
+    if (isSelectedLeadVisible) return;
+
+    const nextSelectedLeadId = filteredLeads[0]?.id ?? null;
+
+    if (String(selectedLeadId) === String(nextSelectedLeadId)) return;
+
+    setSelectedLeadId(nextSelectedLeadId);
   }, [filteredLeads, selectedLeadId]);
 
   useEffect(() => {
@@ -194,6 +244,10 @@ export function useComercialTrabalho({
     const firstLead = queuesByFunnel[funnelId]?.[0];
 
     setSelectedLeadId(firstLead?.id ?? null);
+  }
+
+  function clearSearch() {
+    setSearch("");
   }
 
   function selectNextLeadAfter(currentLeadId: Lead["id"]) {
@@ -715,6 +769,7 @@ export function useComercialTrabalho({
     rawCounts,
     filteredLeads,
     queueCount,
+    filteredCount,
     hiddenCount,
     selectedLead,
     leadHistory,
@@ -742,6 +797,10 @@ export function useComercialTrabalho({
 
     listMode,
     setListMode,
+    search,
+    setSearch,
+    hasActiveSearch,
+    clearSearch,
 
     setSelectedLeadId,
 
