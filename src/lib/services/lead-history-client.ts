@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type {
+  CreateLeadHistoryEventInput,
   CreateLeadHistoryNoteInput,
   LeadHistoryItem,
   LeadHistoryType,
@@ -45,17 +46,47 @@ export async function listLeadHistory(input: {
 export async function createLeadHistoryNote(
   input: CreateLeadHistoryNoteInput
 ): Promise<LeadHistoryItem> {
+  return createLeadHistoryEvent({
+    leadId: input.leadId,
+    empresaId: input.empresaId,
+    type: "note",
+    title: "Observa\u00e7\u00e3o",
+    description: input.description,
+    metadata: {},
+  });
+}
+
+export async function createLeadHistoryEvent(
+  input: CreateLeadHistoryEventInput
+): Promise<LeadHistoryItem> {
+  const leadId = input.leadId.trim();
+  const empresaId = input.empresaId.trim();
+  const title = input.title.trim();
+  const description = input.description?.trim() || null;
+
+  if (!leadId) {
+    throw new Error("Lead não encontrado para registrar histórico.");
+  }
+
+  if (!empresaId) {
+    throw new Error("Empresa não encontrada para registrar histórico.");
+  }
+
+  if (!title) {
+    throw new Error("Título do histórico é obrigatório.");
+  }
+
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("lead_history")
     .insert({
-      lead_id: input.leadId,
-      empresa_id: input.empresaId,
-      type: "note",
-      title: "Observação",
-      description: input.description,
-      metadata: {},
+      lead_id: leadId,
+      empresa_id: empresaId,
+      type: input.type,
+      title,
+      description,
+      metadata: input.metadata ?? {},
     })
     .select("*")
     .single();

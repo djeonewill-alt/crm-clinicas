@@ -25,3 +25,12 @@ export type CreateLeadHistoryNoteInput = {
   empresaId: string;
   description: string;
 };
+
+export type CreateLeadHistoryEventInput = {
+  leadId: string;
+  empresaId: string;
+  type: LeadHistoryType;
+  title: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+};
