@@ -603,8 +603,10 @@ export function ComercialRespostasClient({
             </p>
             <h1 className="text-xl font-semibold">Respostas Comerciais</h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--text2)]">
-              Cadastre e organize respostas aprovadas para perguntas frequentes.
-              Futuramente, a IA usará essa base para sugerir respostas seguras.
+              Organize categorias e respostas aprovadas para perguntas
+              frequentes dos leads. Futuramente, a IA usará essas respostas
+              como base segura para sugerir mensagens naturais, sem inventar
+              informações.
             </p>
           </div>
 
@@ -626,8 +628,23 @@ export function ComercialRespostasClient({
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
-          Edição e desativação serão adicionadas nas próximas etapas.
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4 text-sm text-[var(--text2)]">
+          <p className="font-semibold text-[var(--text)]">Como funciona?</p>
+          <div className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--text3)]">
+            <p>
+              Categoria = o assunto da pergunta do cliente, como Preço,
+              Promoção ou Localização.
+            </p>
+            <p>
+              Resposta aprovada = o conteúdo seguro que pode ser usado no
+              atendimento.
+            </p>
+            <p>
+              Futuramente, a IA poderá adaptar a resposta ao jeito da pergunta,
+              mas sem mudar preço, promessa, condição clínica ou informação que
+              não esteja aprovada.
+            </p>
+          </div>
         </div>
 
         {categoryFormSuccess && (
@@ -653,8 +670,9 @@ export function ComercialRespostasClient({
               {editingCategoryId ? "Editar categoria" : "Nova categoria"}
             </h2>
             <p className="mt-1 text-sm text-[var(--text2)]">
-              As categorias organizam as respostas aprovadas que futuramente a
-              IA poderá consultar.
+              A categoria é o assunto da pergunta do cliente. Ela ajuda a
+              separar respostas de preço, promoção, localização, agendamento e
+              outros temas recorrentes.
             </p>
           </div>
 
@@ -672,13 +690,16 @@ export function ComercialRespostasClient({
                   }))
                 }
                 className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-                placeholder="Ex: Preço"
+                placeholder="Ex: Preço, Promoção, Localização"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                A categoria é o assunto da pergunta do cliente.
+              </p>
             </label>
 
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
-                Slug opcional
+                Identificador interno (opcional)
               </span>
               <input
                 value={categoryForm.slug}
@@ -691,11 +712,14 @@ export function ComercialRespostasClient({
                 className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
                 placeholder="preco"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Você pode deixar em branco. O sistema gera automaticamente.
+              </p>
             </label>
 
             <label className="block md:col-span-2">
               <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
-                Descrição
+                Descrição da categoria
               </span>
               <textarea
                 value={categoryForm.description}
@@ -707,13 +731,17 @@ export function ComercialRespostasClient({
                 }
                 rows={3}
                 className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-                placeholder="Ex: Perguntas sobre valores, condições e pacotes."
+                placeholder="Ex: Perguntas sobre valor, promoção, pacote, desconto e formas de pagamento."
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Use a descrição para explicar que tipo de pergunta entra nesta
+                categoria.
+              </p>
             </label>
 
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
-                Ordem
+                Ordem de exibição
               </span>
               <input
                 type="number"
@@ -726,22 +754,31 @@ export function ComercialRespostasClient({
                 }
                 className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Números menores aparecem primeiro. Pode deixar 0.
+              </p>
             </label>
 
-            <label className="flex items-center gap-2 self-end rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)]">
-              <input
-                type="checkbox"
-                checked={categoryForm.isActive}
-                onChange={(event) =>
-                  setCategoryForm((current) => ({
-                    ...current,
-                    isActive: event.target.checked,
-                  }))
-                }
-                className="h-4 w-4 accent-[var(--accent)]"
-              />
-              Ativa
-            </label>
+            <div className="self-end rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2">
+              <label className="flex items-center gap-2 text-sm text-[var(--text2)]">
+                <input
+                  type="checkbox"
+                  checked={categoryForm.isActive}
+                  onChange={(event) =>
+                    setCategoryForm((current) => ({
+                      ...current,
+                      isActive: event.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 accent-[var(--accent)]"
+                />
+                Categoria ativa
+              </label>
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Categorias inativas continuam salvas, mas não devem ser usadas
+                normalmente.
+              </p>
+            </div>
           </div>
 
           {categoryFormError && (
@@ -786,15 +823,16 @@ export function ComercialRespostasClient({
                 : "Nova resposta aprovada"}
             </h2>
             <p className="mt-1 text-sm text-[var(--text2)]">
-              Esta resposta será usada como base segura para atendimento.
-              Futuramente, a IA só poderá sugerir respostas aprovadas.
+              Esta resposta será usada como fonte segura para atendimento.
+              Futuramente, a IA poderá adaptar o tom ao contexto da conversa,
+              mas não poderá inventar informações fora do texto aprovado.
             </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
-                Categoria
+                Categoria da pergunta
               </span>
               <select
                 value={responseForm.categoryId}
@@ -814,11 +852,14 @@ export function ComercialRespostasClient({
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Escolha o assunto ao qual esta resposta pertence.
+              </p>
             </label>
 
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
-                Título
+                Título interno da resposta
               </span>
               <input
                 value={responseForm.title}
@@ -831,6 +872,9 @@ export function ComercialRespostasClient({
                 className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
                 placeholder="Ex: Preço - promoção atual"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Use um título fácil de identificar. Esse título é interno.
+              </p>
             </label>
 
             <label className="block md:col-span-2">
@@ -847,8 +891,13 @@ export function ComercialRespostasClient({
                 }
                 rows={5}
                 className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-                placeholder="Digite o texto aprovado para o atendimento."
+                placeholder="Escreva aqui o conteúdo seguro que poderá ser usado no atendimento."
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Essa resposta será a fonte segura. Futuramente, a IA poderá
+                adaptar o texto ao contexto da conversa, mas não poderá inventar
+                informações fora daqui.
+              </p>
             </label>
 
             <label className="block">
@@ -865,8 +914,12 @@ export function ComercialRespostasClient({
                 }
                 rows={3}
                 className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-                placeholder="Uma por linha ou separadas por vírgula."
+                placeholder={"Quanto custa?\nQual o valor?\nTem promoção?"}
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Escreva exemplos de perguntas que devem cair nesta resposta.
+                Uma por linha ou separadas por vírgula.
+              </p>
             </label>
 
             <label className="block">
@@ -883,8 +936,11 @@ export function ComercialRespostasClient({
                 }
                 rows={3}
                 className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-                placeholder="Separe por vírgula."
+                placeholder="preço, valor, promoção"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                As tags ajudam a organizar e encontrar respostas.
+              </p>
             </label>
 
             <label className="block">
@@ -902,6 +958,9 @@ export function ComercialRespostasClient({
                 }
                 className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Respostas com prioridade maior aparecem antes.
+              </p>
             </label>
 
             <div className="grid gap-2 md:grid-cols-3">
@@ -917,7 +976,7 @@ export function ComercialRespostasClient({
                   }
                   className="h-4 w-4 accent-[var(--accent)]"
                 />
-                Ativa
+                Resposta ativa
               </label>
 
               <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)]">
@@ -932,7 +991,7 @@ export function ComercialRespostasClient({
                   }
                   className="h-4 w-4 accent-[var(--accent)]"
                 />
-                Auto resposta futura
+                Pode usar em auto resposta futura
               </label>
 
               <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)]">
@@ -947,8 +1006,20 @@ export function ComercialRespostasClient({
                   }
                   className="h-4 w-4 accent-[var(--accent)]"
                 />
-                Precisa de humano
+                Precisa de revisão humana
               </label>
+            </div>
+
+            <div className="md:col-span-2 grid gap-2 text-xs text-[var(--text3)] md:grid-cols-3">
+              <p>Resposta ativa fica disponível para uso normal.</p>
+              <p>
+                Marque auto resposta apenas se for seguro para a IA usar no
+                futuro.
+              </p>
+              <p>
+                Use revisão humana quando uma pessoa ainda precisar aprovar o
+                envio.
+              </p>
             </div>
 
             <label className="block md:col-span-2">
@@ -967,13 +1038,18 @@ export function ComercialRespostasClient({
                 className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
                 placeholder="Uso interno da equipe."
               />
+              <p className="mt-1 text-xs text-[var(--text3)]">
+                Notas para a equipe. Essas observações não devem ser enviadas ao
+                cliente.
+              </p>
             </label>
           </div>
 
           {responseForm.canAutoReply && responseForm.requiresHuman && (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-              Esta resposta está marcada para auto resposta e humano necessário.
-              Revise essa configuração antes de usar IA automática.
+              Esta resposta está marcada como auto resposta futura, mas também
+              exige revisão humana. Isso não bloqueia o cadastro, mas antes de
+              automatizar será necessário revisar essa configuração.
             </div>
           )}
 
@@ -1011,8 +1087,11 @@ export function ComercialRespostasClient({
         <MetricCard label="Categorias" value={localCategories.length} />
         <MetricCard label="Respostas" value={localResponses.length} />
         <MetricCard label="Ativas" value={activeResponses.length} />
-        <MetricCard label="Auto resposta" value={autoReplyResponses.length} />
-        <MetricCard label="Exigem humano" value={humanResponses.length} />
+        <MetricCard
+          label="Auto resposta futura"
+          value={autoReplyResponses.length}
+        />
+        <MetricCard label="Revisão humana" value={humanResponses.length} />
       </div>
 
       <div className="mt-4 grid min-h-0 gap-4 xl:grid-cols-[320px_1fr]">
@@ -1026,7 +1105,8 @@ export function ComercialRespostasClient({
 
           {localCategories.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border2)] p-4 text-center text-sm text-[var(--text3)]">
-              Você ainda não cadastrou categorias.
+              Você ainda não cadastrou categorias. Comece criando assuntos como
+              Preço, Promoção, Localização, Agendamento ou Como funciona.
             </div>
           ) : (
             <div className="space-y-2">
@@ -1134,7 +1214,7 @@ export function ComercialRespostasClient({
                   onChange={(event) => setSelectedAutoReply(event.target.value)}
                   className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
                 >
-                  <option value={FILTER_ALL}>Todos auto</option>
+                  <option value={FILTER_ALL}>Todas auto resposta</option>
                   <option value={FILTER_YES}>Pode auto responder</option>
                   <option value={FILTER_NO}>Não pode auto responder</option>
                 </select>
@@ -1146,9 +1226,9 @@ export function ComercialRespostasClient({
                   }
                   className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
                 >
-                  <option value={FILTER_ALL}>Todos humano</option>
-                  <option value={FILTER_YES}>Precisa humano</option>
-                  <option value={FILTER_NO}>Não precisa humano</option>
+                  <option value={FILTER_ALL}>Todas revisão humana</option>
+                  <option value={FILTER_YES}>Precisa revisão humana</option>
+                  <option value={FILTER_NO}>Não precisa revisão humana</option>
                 </select>
 
                 <button
@@ -1174,7 +1254,9 @@ export function ComercialRespostasClient({
 
           {localResponses.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border2)] p-8 text-center text-sm text-[var(--text3)]">
-              Você ainda não cadastrou respostas aprovadas.
+              Você ainda não cadastrou respostas aprovadas. Depois de criar uma
+              categoria, cadastre o texto seguro que poderá ser usado no
+              atendimento.
             </div>
           ) : filteredResponses.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border2)] p-8 text-center text-sm text-[var(--text3)]">
@@ -1203,6 +1285,9 @@ export function ComercialRespostasClient({
                   </div>
 
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text2)]">
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                      Resposta aprovada
+                    </span>
                     {truncateText(response.answerText)}
                   </p>
 
@@ -1214,13 +1299,13 @@ export function ComercialRespostasClient({
                     />
                     <StatusBadge
                       active={response.canAutoReply}
-                      activeLabel="Auto: sim"
-                      inactiveLabel="Auto: não"
+                      activeLabel="Auto resposta futura: sim"
+                      inactiveLabel="Auto resposta futura: não"
                     />
                     <StatusBadge
                       active={response.requiresHuman}
-                      activeLabel="Humano: sim"
-                      inactiveLabel="Humano: não"
+                      activeLabel="Revisão humana: sim"
+                      inactiveLabel="Revisão humana: não"
                     />
                   </div>
 
@@ -1243,15 +1328,31 @@ export function ComercialRespostasClient({
                   )}
 
                   {response.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {response.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text3)]"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
+                    <div className="mt-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                        Tags
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {response.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text3)]"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {response.internalNotes && (
+                    <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                        Observações internas
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--text2)]">
+                        {response.internalNotes}
+                      </p>
                     </div>
                   )}
 
