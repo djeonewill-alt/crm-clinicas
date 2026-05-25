@@ -97,6 +97,30 @@ export async function archiveLeadById(input: {
   }
 }
 
+export async function restoreLeadById(input: {
+  empresaId: string | number;
+  leadId: string | number;
+}): Promise<Lead> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      archived_at: null,
+      col_at: new Date().toISOString(),
+    })
+    .eq("id", input.leadId)
+    .eq("empresa_id", input.empresaId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return rowToLead(data);
+}
+
 export async function moveLeadToFunnel(input: {
   empresaId: string | number;
   leadId: string | number;
