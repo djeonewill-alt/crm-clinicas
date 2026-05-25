@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
+import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
+import { restoreLeadById } from "@/lib/services/leads-client";
 import type { Lead } from "@/types/lead";
 
 type ComercialArquivadosClientProps = {
@@ -57,13 +60,69 @@ export function ComercialArquivadosClient({
   empresaId,
   empresaNome,
 }: ComercialArquivadosClientProps) {
-  const totalArquivados = leads.length;
+  const [localLeads, setLocalLeads] = useState<Lead[]>(leads);
+  const [restoringLeadId, setRestoringLeadId] = useState<
+    string | number | null
+  >(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const totalArquivados = localLeads.length;
+
+  useEffect(() => {
+    setLocalLeads(leads);
+  }, [leads]);
+
+  async function handleRestoreLead(lead: Lead) {
+    const confirmed = window.confirm(
+      "Restaurar este lead para o funil em que ele estava?"
+    );
+
+    if (!confirmed) return;
+
+    setRestoringLeadId(lead.id);
+    setStatusMessage("");
+
+    try {
+      const restoredLead = await restoreLeadById({
+        empresaId,
+        leadId: lead.id,
+      });
+
+      try {
+        await createLeadHistoryEvent({
+          leadId: String(restoredLead.id),
+          empresaId: String(empresaId),
+          type: "status_change",
+          title: "Lead restaurado",
+          description: "Lead restaurado dos arquivados.",
+          metadata: {
+            event: "lead_restored",
+            fromArchived: true,
+            restoredToFunnel: restoredLead.funnel,
+          },
+        });
+      } catch (error) {
+        console.error("Erro ao registrar histórico de restauração:", error);
+      }
+
+      setLocalLeads((current) =>
+        current.filter((item) => String(item.id) !== String(restoredLead.id))
+      );
+      setStatusMessage(
+        "Lead restaurado. Ele voltou para os funis e para a fila comercial."
+      );
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao restaurar lead: ${error.message}`
+          : "Erro ao restaurar lead."
+      );
+    } finally {
+      setRestoringLeadId(null);
+    }
+  }
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg)] p-6"
-      data-empresa-id={empresaId}
-    >
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--bg)] p-6">
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -87,18 +146,20 @@ export function ComercialArquivadosClient({
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
-          A restauração será adicionada na próxima etapa.
-        </div>
+        {statusMessage && (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)]">
+            {statusMessage}
+          </div>
+        )}
       </div>
 
-      {leads.length === 0 ? (
+      {localLeads.length === 0 ? (
         <div className="mt-4 flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--border2)] bg-[var(--bg2)] p-8 text-center text-sm text-[var(--text3)]">
           Nenhum lead arquivado.
         </div>
       ) : (
         <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {leads.map((lead) => (
+          {localLeads.map((lead) => (
             <article
               key={lead.id}
               className="rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-4"
@@ -166,6 +227,17 @@ export function ComercialArquivadosClient({
                     {getFunnelLabel(lead.funnel)} · {lead.diaProsp || "sem dia"}
                   </p>
                 </div>
+              </div>
+
+              <div className="mt-4 border-t border-[var(--border)] pt-4">
+                <button
+                  type="button"
+                  disabled={restoringLeadId === lead.id}
+                  onClick={() => void handleRestoreLead(lead)}
+                  className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-4 py-2 text-xs font-semibold text-[var(--accent)] transition hover:bg-[rgba(232,197,71,.18)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {restoringLeadId === lead.id ? "Restaurando..." : "Restaurar"}
+                </button>
               </div>
             </article>
           ))}
