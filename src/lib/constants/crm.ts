@@ -42,6 +42,7 @@ export const COMERCIAL_TABS = [
   { label: "Funis", href: "/comercial/funis" },
   { label: "Relatórios", href: "/comercial/relatorios" },
   { label: "Arquivados", href: "/comercial/arquivados" },
+  { label: "Respostas", href: "/comercial/respostas" },
 ];
 
 export const TIPOS_TENTATIVA = {
