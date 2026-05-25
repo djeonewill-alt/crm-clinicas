@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createCommercialResponse,
   createCommercialResponseCategory,
@@ -59,6 +59,13 @@ const initialResponseForm: ResponseFormState = {
   priority: 0,
 };
 
+const FILTER_ALL = "all";
+const FILTER_ACTIVE = "active";
+const FILTER_INACTIVE = "inactive";
+const FILTER_YES = "yes";
+const FILTER_NO = "no";
+const CATEGORY_NONE = "__none__";
+
 function sortCategories(categories: CommercialResponseCategory[]) {
   return [...categories].sort(
     (a, b) =>
@@ -78,6 +85,28 @@ function parseListText(value: string): string[] {
     .split(/\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function responseMatchesSearch(
+  response: CommercialResponse,
+  categories: CommercialResponseCategory[],
+  normalizedSearch: string
+) {
+  if (!normalizedSearch) return true;
+
+  const searchable = [
+    response.title,
+    response.answerText,
+    getCategoryName(categories, response.categoryId),
+    ...response.exampleQuestions,
+    ...response.tags,
+    response.internalNotes,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return searchable.includes(normalizedSearch);
 }
 
 function getCategoryName(
@@ -163,6 +192,13 @@ export function ComercialRespostasClient({
   const [responseFormSuccess, setResponseFormSuccess] = useState("");
   const [responseForm, setResponseForm] =
     useState<ResponseFormState>(initialResponseForm);
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(FILTER_ALL);
+  const [selectedStatus, setSelectedStatus] = useState(FILTER_ALL);
+  const [selectedAutoReply, setSelectedAutoReply] = useState(FILTER_ALL);
+  const [selectedRequiresHuman, setSelectedRequiresHuman] =
+    useState(FILTER_ALL);
+  const normalizedSearch = search.trim().toLowerCase();
   const activeResponses = localResponses.filter((response) => response.isActive);
   const autoReplyResponses = localResponses.filter(
     (response) => response.canAutoReply
@@ -170,6 +206,54 @@ export function ComercialRespostasClient({
   const humanResponses = localResponses.filter(
     (response) => response.requiresHuman
   );
+  const filteredResponses = useMemo(() => {
+    return localResponses.filter((response) => {
+      const matchesSearch = responseMatchesSearch(
+        response,
+        localCategories,
+        normalizedSearch
+      );
+      const matchesCategory =
+        selectedCategory === FILTER_ALL ||
+        (selectedCategory === CATEGORY_NONE
+          ? !response.categoryId
+          : response.categoryId === selectedCategory);
+      const matchesStatus =
+        selectedStatus === FILTER_ALL ||
+        (selectedStatus === FILTER_ACTIVE && response.isActive) ||
+        (selectedStatus === FILTER_INACTIVE && !response.isActive);
+      const matchesAutoReply =
+        selectedAutoReply === FILTER_ALL ||
+        (selectedAutoReply === FILTER_YES && response.canAutoReply) ||
+        (selectedAutoReply === FILTER_NO && !response.canAutoReply);
+      const matchesRequiresHuman =
+        selectedRequiresHuman === FILTER_ALL ||
+        (selectedRequiresHuman === FILTER_YES && response.requiresHuman) ||
+        (selectedRequiresHuman === FILTER_NO && !response.requiresHuman);
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesStatus &&
+        matchesAutoReply &&
+        matchesRequiresHuman
+      );
+    });
+  }, [
+    localCategories,
+    localResponses,
+    normalizedSearch,
+    selectedAutoReply,
+    selectedCategory,
+    selectedRequiresHuman,
+    selectedStatus,
+  ]);
+  const hasActiveFilters =
+    normalizedSearch.length > 0 ||
+    selectedCategory !== FILTER_ALL ||
+    selectedStatus !== FILTER_ALL ||
+    selectedAutoReply !== FILTER_ALL ||
+    selectedRequiresHuman !== FILTER_ALL;
 
   useEffect(() => {
     setLocalCategories(categories);
@@ -197,6 +281,14 @@ export function ComercialRespostasClient({
 
   function resetResponseForm() {
     setResponseForm(initialResponseForm);
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedCategory(FILTER_ALL);
+    setSelectedStatus(FILTER_ALL);
+    setSelectedAutoReply(FILTER_ALL);
+    setSelectedRequiresHuman(FILTER_ALL);
   }
 
   async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
@@ -769,13 +861,94 @@ export function ComercialRespostasClient({
             </span>
           </div>
 
+          {localResponses.length > 0 && (
+            <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-3">
+              <div className="flex flex-wrap gap-2">
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="min-w-72 flex-1 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                  placeholder="Buscar por título, resposta, perguntas, tags..."
+                />
+
+                <select
+                  value={selectedCategory}
+                  onChange={(event) => setSelectedCategory(event.target.value)}
+                  className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value={FILTER_ALL}>Todas as categorias</option>
+                  <option value={CATEGORY_NONE}>Sem categoria</option>
+                  {localCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedStatus}
+                  onChange={(event) => setSelectedStatus(event.target.value)}
+                  className="min-w-32 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value={FILTER_ALL}>Todas</option>
+                  <option value={FILTER_ACTIVE}>Ativas</option>
+                  <option value={FILTER_INACTIVE}>Inativas</option>
+                </select>
+
+                <select
+                  value={selectedAutoReply}
+                  onChange={(event) => setSelectedAutoReply(event.target.value)}
+                  className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value={FILTER_ALL}>Todos auto</option>
+                  <option value={FILTER_YES}>Pode auto responder</option>
+                  <option value={FILTER_NO}>Não pode auto responder</option>
+                </select>
+
+                <select
+                  value={selectedRequiresHuman}
+                  onChange={(event) =>
+                    setSelectedRequiresHuman(event.target.value)
+                  }
+                  className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value={FILTER_ALL}>Todos humano</option>
+                  <option value={FILTER_YES}>Precisa humano</option>
+                  <option value={FILTER_NO}>Não precisa humano</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  disabled={!hasActiveFilters}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text3)]">
+                <span>{filteredResponses.length} resposta(s) encontrada(s)</span>
+                {hasActiveFilters && (
+                  <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-0.5 font-semibold uppercase tracking-wider text-[var(--accent)]">
+                    Filtros ativos
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {localResponses.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border2)] p-8 text-center text-sm text-[var(--text3)]">
               Você ainda não cadastrou respostas aprovadas.
             </div>
+          ) : filteredResponses.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border2)] p-8 text-center text-sm text-[var(--text3)]">
+              Nenhuma resposta encontrada com os filtros atuais.
+            </div>
           ) : (
             <div className="grid gap-3 2xl:grid-cols-2">
-              {localResponses.map((response) => (
+              {filteredResponses.map((response) => (
                 <article
                   key={response.id}
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4"
