@@ -1,5 +1,7 @@
 "use client";
 
+import { FormEvent, useEffect, useState } from "react";
+import { createCommercialResponseCategory } from "@/lib/services/commercial-responses-client";
 import type {
   CommercialResponse,
   CommercialResponseCategory,
@@ -11,6 +13,29 @@ type ComercialRespostasClientProps = {
   categories: CommercialResponseCategory[];
   responses: CommercialResponse[];
 };
+
+type CategoryFormState = {
+  name: string;
+  slug: string;
+  description: string;
+  isActive: boolean;
+  orderIndex: number;
+};
+
+const initialCategoryForm: CategoryFormState = {
+  name: "",
+  slug: "",
+  description: "",
+  isActive: true,
+  orderIndex: 0,
+};
+
+function sortCategories(categories: CommercialResponseCategory[]) {
+  return [...categories].sort(
+    (a, b) =>
+      a.orderIndex - b.orderIndex || a.name.localeCompare(b.name, "pt-BR")
+  );
+}
 
 function getCategoryName(
   categories: CommercialResponseCategory[],
@@ -79,11 +104,74 @@ export function ComercialRespostasClient({
   categories,
   responses,
 }: ComercialRespostasClientProps) {
+  const [localCategories, setLocalCategories] =
+    useState<CommercialResponseCategory[]>(categories);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryFormError, setCategoryFormError] = useState("");
+  const [categoryFormSuccess, setCategoryFormSuccess] = useState("");
+  const [categoryForm, setCategoryForm] =
+    useState<CategoryFormState>(initialCategoryForm);
   const activeResponses = responses.filter((response) => response.isActive);
   const autoReplyResponses = responses.filter(
     (response) => response.canAutoReply
   );
   const humanResponses = responses.filter((response) => response.requiresHuman);
+
+  useEffect(() => {
+    setLocalCategories(categories);
+  }, [categories]);
+
+  function handleToggleCategoryForm() {
+    setShowCategoryForm((current) => !current);
+    setCategoryFormError("");
+    setCategoryFormSuccess("");
+  }
+
+  function resetCategoryForm() {
+    setCategoryForm(initialCategoryForm);
+  }
+
+  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCategoryFormError("");
+    setCategoryFormSuccess("");
+
+    if (!categoryForm.name.trim()) {
+      setCategoryFormError("Informe o nome da categoria.");
+      return;
+    }
+
+    setIsSavingCategory(true);
+
+    try {
+      const createdCategory = await createCommercialResponseCategory({
+        empresaId,
+        data: {
+          name: categoryForm.name,
+          slug: categoryForm.slug || undefined,
+          description: categoryForm.description,
+          isActive: categoryForm.isActive,
+          orderIndex: Number(categoryForm.orderIndex) || 0,
+        },
+      });
+
+      setLocalCategories((current) =>
+        sortCategories([...current, createdCategory])
+      );
+      resetCategoryForm();
+      setShowCategoryForm(false);
+      setCategoryFormSuccess("Categoria criada com sucesso.");
+    } catch (error) {
+      setCategoryFormError(
+        error instanceof Error
+          ? `Erro ao criar categoria: ${error.message}`
+          : "Erro ao criar categoria."
+      );
+    } finally {
+      setIsSavingCategory(false);
+    }
+  }
 
   return (
     <div
@@ -106,10 +194,10 @@ export function ComercialRespostasClient({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled
-              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text3)] opacity-70"
+              onClick={handleToggleCategoryForm}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:bg-[var(--bg4)] hover:text-[var(--text)]"
             >
-              Nova categoria
+              {showCategoryForm ? "Fechar categoria" : "Nova categoria"}
             </button>
             <button
               type="button"
@@ -122,12 +210,147 @@ export function ComercialRespostasClient({
         </div>
 
         <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
-          Criação e edição serão adicionadas na próxima etapa.
+          Criação de respostas e edição serão adicionadas nas próximas etapas.
         </div>
+
+        {categoryFormSuccess && (
+          <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+            {categoryFormSuccess}
+          </div>
+        )}
       </div>
 
+      {showCategoryForm && (
+        <form
+          onSubmit={handleCreateCategory}
+          className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-5"
+        >
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold">Nova categoria</h2>
+            <p className="mt-1 text-sm text-[var(--text2)]">
+              As categorias organizam as respostas aprovadas que futuramente a
+              IA poderá consultar.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
+                Nome da categoria
+              </span>
+              <input
+                value={categoryForm.name}
+                onChange={(event) =>
+                  setCategoryForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="Ex: Preço"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
+                Slug opcional
+              </span>
+              <input
+                value={categoryForm.slug}
+                onChange={(event) =>
+                  setCategoryForm((current) => ({
+                    ...current,
+                    slug: event.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="preco"
+              />
+            </label>
+
+            <label className="block md:col-span-2">
+              <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
+                Descrição
+              </span>
+              <textarea
+                value={categoryForm.description}
+                onChange={(event) =>
+                  setCategoryForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                rows={3}
+                className="w-full resize-none rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="Ex: Perguntas sobre valores, condições e pacotes."
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
+                Ordem
+              </span>
+              <input
+                type="number"
+                value={categoryForm.orderIndex}
+                onChange={(event) =>
+                  setCategoryForm((current) => ({
+                    ...current,
+                    orderIndex: Number(event.target.value),
+                  }))
+                }
+                className="w-full rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 self-end rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)]">
+              <input
+                type="checkbox"
+                checked={categoryForm.isActive}
+                onChange={(event) =>
+                  setCategoryForm((current) => ({
+                    ...current,
+                    isActive: event.target.checked,
+                  }))
+                }
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+              Ativa
+            </label>
+          </div>
+
+          {categoryFormError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {categoryFormError}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={isSavingCategory}
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSavingCategory ? "Salvando..." : "Salvar categoria"}
+            </button>
+            <button
+              type="button"
+              disabled={isSavingCategory}
+              onClick={() => {
+                setShowCategoryForm(false);
+                setCategoryFormError("");
+                resetCategoryForm();
+              }}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-4 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Categorias" value={categories.length} />
+        <MetricCard label="Categorias" value={localCategories.length} />
         <MetricCard label="Respostas" value={responses.length} />
         <MetricCard label="Ativas" value={activeResponses.length} />
         <MetricCard label="Auto resposta" value={autoReplyResponses.length} />
@@ -139,17 +362,17 @@ export function ComercialRespostasClient({
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Categorias</h2>
             <span className="rounded-full bg-[var(--bg4)] px-2 py-1 text-xs text-[var(--text2)]">
-              {categories.length}
+              {localCategories.length}
             </span>
           </div>
 
-          {categories.length === 0 ? (
+          {localCategories.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--border2)] p-4 text-center text-sm text-[var(--text3)]">
               Você ainda não cadastrou categorias.
             </div>
           ) : (
             <div className="space-y-2">
-              {categories.map((category) => (
+              {localCategories.map((category) => (
                 <article
                   key={category.id}
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-3"
@@ -207,7 +430,7 @@ export function ComercialRespostasClient({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
-                        {getCategoryName(categories, response.categoryId)}
+                        {getCategoryName(localCategories, response.categoryId)}
                       </p>
                       <h3 className="mt-1 text-sm font-semibold text-[var(--text)]">
                         {response.title}
