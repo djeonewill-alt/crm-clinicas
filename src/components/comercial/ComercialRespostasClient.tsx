@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createCommercialResponse,
   createCommercialResponseCategory,
+  deactivateCommercialResponse,
   deactivateCommercialResponseCategory,
+  updateCommercialResponse,
   updateCommercialResponseCategory,
 } from "@/lib/services/commercial-responses-client";
 import type {
@@ -197,6 +199,9 @@ export function ComercialRespostasClient({
   const [responseFormSuccess, setResponseFormSuccess] = useState("");
   const [responseForm, setResponseForm] =
     useState<ResponseFormState>(initialResponseForm);
+  const [editingResponseId, setEditingResponseId] = useState<string | null>(
+    null
+  );
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(FILTER_ALL);
   const [selectedStatus, setSelectedStatus] = useState(FILTER_ALL);
@@ -284,7 +289,16 @@ export function ComercialRespostasClient({
   }
 
   function handleToggleResponseForm() {
-    setShowResponseForm((current) => !current);
+    setShowResponseForm((current) => {
+      const next = !current;
+
+      if (!next) {
+        resetResponseForm();
+        setEditingResponseId(null);
+      }
+
+      return next;
+    });
     setResponseFormError("");
     setResponseFormSuccess("");
   }
@@ -317,6 +331,33 @@ export function ComercialRespostasClient({
     setShowCategoryForm(true);
     setCategoryFormError("");
     setCategoryFormSuccess("");
+  }
+
+  function cancelResponseForm() {
+    setShowResponseForm(false);
+    setResponseFormError("");
+    setResponseFormSuccess("");
+    setEditingResponseId(null);
+    resetResponseForm();
+  }
+
+  function handleEditResponse(response: CommercialResponse) {
+    setResponseForm({
+      categoryId: response.categoryId ?? "",
+      title: response.title,
+      answerText: response.answerText,
+      exampleQuestionsText: response.exampleQuestions.join("\n"),
+      tagsText: response.tags.join(", "),
+      isActive: response.isActive,
+      canAutoReply: response.canAutoReply,
+      requiresHuman: response.requiresHuman,
+      internalNotes: response.internalNotes ?? "",
+      priority: response.priority,
+    });
+    setEditingResponseId(response.id);
+    setShowResponseForm(true);
+    setResponseFormError("");
+    setResponseFormSuccess("");
   }
 
   function clearFilters() {
@@ -434,7 +475,7 @@ export function ComercialRespostasClient({
     }
   }
 
-  async function handleCreateResponse(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveResponse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setResponseFormError("");
     setResponseFormSuccess("");
@@ -452,33 +493,97 @@ export function ComercialRespostasClient({
     setIsSavingResponse(true);
 
     try {
-      const createdResponse = await createCommercialResponse({
-        empresaId,
-        data: {
-          categoryId: responseForm.categoryId || null,
-          title: responseForm.title,
-          answerText: responseForm.answerText,
-          exampleQuestions: parseListText(responseForm.exampleQuestionsText),
-          tags: parseListText(responseForm.tagsText),
-          isActive: responseForm.isActive,
-          canAutoReply: responseForm.canAutoReply,
-          requiresHuman: responseForm.requiresHuman,
-          internalNotes: responseForm.internalNotes,
-          priority: Number(responseForm.priority) || 0,
-        },
-      });
+      const payload = {
+        categoryId: responseForm.categoryId || null,
+        title: responseForm.title,
+        answerText: responseForm.answerText,
+        exampleQuestions: parseListText(responseForm.exampleQuestionsText),
+        tags: parseListText(responseForm.tagsText),
+        isActive: responseForm.isActive,
+        canAutoReply: responseForm.canAutoReply,
+        requiresHuman: responseForm.requiresHuman,
+        internalNotes: responseForm.internalNotes,
+        priority: Number(responseForm.priority) || 0,
+      };
 
-      setLocalResponses((current) =>
-        sortResponses([...current, createdResponse])
-      );
+      if (editingResponseId) {
+        const updatedResponse = await updateCommercialResponse({
+          empresaId,
+          responseId: editingResponseId,
+          data: payload,
+        });
+
+        setLocalResponses((current) =>
+          sortResponses(
+            current.map((response) =>
+              response.id === updatedResponse.id ? updatedResponse : response
+            )
+          )
+        );
+        setResponseFormSuccess("Resposta atualizada com sucesso.");
+      } else {
+        const createdResponse = await createCommercialResponse({
+          empresaId,
+          data: payload,
+        });
+
+        setLocalResponses((current) =>
+          sortResponses([...current, createdResponse])
+        );
+        setResponseFormSuccess("Resposta aprovada criada com sucesso.");
+      }
+
       resetResponseForm();
+      setEditingResponseId(null);
       setShowResponseForm(false);
-      setResponseFormSuccess("Resposta aprovada criada com sucesso.");
     } catch (error) {
       setResponseFormError(
         error instanceof Error
-          ? `Erro ao criar resposta: ${error.message}`
-          : "Erro ao criar resposta."
+          ? editingResponseId
+            ? `Erro ao atualizar resposta: ${error.message}`
+            : `Erro ao criar resposta: ${error.message}`
+          : editingResponseId
+            ? "Erro ao atualizar resposta."
+            : "Erro ao criar resposta."
+      );
+    } finally {
+      setIsSavingResponse(false);
+    }
+  }
+
+  async function handleDeactivateResponse(response: CommercialResponse) {
+    const confirmed = window.confirm("Desativar esta resposta aprovada?");
+
+    if (!confirmed) return;
+
+    setResponseFormError("");
+    setResponseFormSuccess("");
+    setIsSavingResponse(true);
+
+    try {
+      await deactivateCommercialResponse({
+        empresaId,
+        responseId: response.id,
+      });
+
+      setLocalResponses((current) =>
+        sortResponses(
+          current.map((item) =>
+            item.id === response.id ? { ...item, isActive: false } : item
+          )
+        )
+      );
+
+      if (editingResponseId === response.id) {
+        cancelResponseForm();
+      }
+
+      setResponseFormSuccess("Resposta desativada com sucesso.");
+    } catch (error) {
+      setResponseFormError(
+        error instanceof Error
+          ? `Erro ao desativar resposta: ${error.message}`
+          : "Erro ao desativar resposta."
       );
     } finally {
       setIsSavingResponse(false);
@@ -671,11 +776,15 @@ export function ComercialRespostasClient({
 
       {showResponseForm && (
         <form
-          onSubmit={handleCreateResponse}
+          onSubmit={handleSaveResponse}
           className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-5"
         >
           <div className="mb-4">
-            <h2 className="text-sm font-semibold">Nova resposta aprovada</h2>
+            <h2 className="text-sm font-semibold">
+              {editingResponseId
+                ? "Editar resposta aprovada"
+                : "Nova resposta aprovada"}
+            </h2>
             <p className="mt-1 text-sm text-[var(--text2)]">
               Esta resposta será usada como base segura para atendimento.
               Futuramente, a IA só poderá sugerir respostas aprovadas.
@@ -880,16 +989,16 @@ export function ComercialRespostasClient({
               disabled={isSavingResponse}
               className="rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSavingResponse ? "Salvando..." : "Salvar resposta"}
+              {isSavingResponse
+                ? "Salvando..."
+                : editingResponseId
+                  ? "Salvar alterações"
+                  : "Salvar resposta"}
             </button>
             <button
               type="button"
               disabled={isSavingResponse}
-              onClick={() => {
-                setShowResponseForm(false);
-                setResponseFormError("");
-                resetResponseForm();
-              }}
+              onClick={cancelResponseForm}
               className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-4 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancelar
@@ -1145,6 +1254,27 @@ export function ComercialRespostasClient({
                       ))}
                     </div>
                   )}
+
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleEditResponse(response)}
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] transition hover:bg-[var(--bg4)] hover:text-[var(--text)]"
+                    >
+                      Editar
+                    </button>
+
+                    {response.isActive && (
+                      <button
+                        type="button"
+                        disabled={isSavingResponse}
+                        onClick={() => void handleDeactivateResponse(response)}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Desativar
+                      </button>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>
