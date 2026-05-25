@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import { restoreLeadById } from "@/lib/services/leads-client";
@@ -11,6 +11,9 @@ type ComercialArquivadosClientProps = {
   empresaId: string | number;
   empresaNome: string;
 };
+
+const FILTER_ALL = "all";
+const EMPTY_FILTER_VALUE = "__empty__";
 
 function getLeadName(lead: Lead) {
   return lead.nome?.trim() || lead.tel || "Lead sem nome";
@@ -45,6 +48,19 @@ function formatDate(value?: string | number | null) {
   }).format(date);
 }
 
+function normalizeFilterValue(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toLowerCase() : EMPTY_FILTER_VALUE;
+}
+
+function getCampaignLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem campanha" : value;
+}
+
+function getInterestLabel(value: string) {
+  return value === EMPTY_FILTER_VALUE ? "Sem interesse" : value;
+}
+
 function getFunnelLabel(funnelId: string) {
   const funnel = FUNNELS.find((item) => item.id === funnelId);
 
@@ -53,6 +69,59 @@ function getFunnelLabel(funnelId: string) {
   if (funnelId === "remarketing") return "Remarketing";
 
   return funnelId || "sem funil";
+}
+
+function buildFilterOptions(
+  leads: Lead[],
+  getValue: (lead: Lead) => string | undefined,
+  getLabel: (value: string) => string
+) {
+  const options = new Map<string, string>();
+
+  leads.forEach((lead) => {
+    const rawValue = getValue(lead)?.trim();
+    const value = normalizeFilterValue(rawValue);
+
+    if (!options.has(value)) {
+      options.set(value, rawValue || getLabel(value));
+    }
+  });
+
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+function buildFunnelOptions(leads: Lead[]) {
+  const options = new Map<string, string>();
+
+  leads.forEach((lead) => {
+    if (!lead.funnel || options.has(lead.funnel)) return;
+    options.set(lead.funnel, getFunnelLabel(lead.funnel));
+  });
+
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+function leadMatchesSearch(lead: Lead, normalizedSearch: string) {
+  if (!normalizedSearch) return true;
+
+  const searchable = [
+    lead.nome,
+    lead.tel,
+    lead.campanha,
+    lead.esp,
+    getFunnelLabel(lead.funnel),
+    lead.diaProsp,
+    String(lead.valor ?? ""),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return searchable.includes(normalizedSearch);
 }
 
 export function ComercialArquivadosClient({
@@ -65,11 +134,69 @@ export function ComercialArquivadosClient({
     string | number | null
   >(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedCampaign, setSelectedCampaign] = useState(FILTER_ALL);
+  const [selectedInterest, setSelectedInterest] = useState(FILTER_ALL);
+  const [selectedFunnel, setSelectedFunnel] = useState(FILTER_ALL);
+  const normalizedSearch = search.trim().toLowerCase();
   const totalArquivados = localLeads.length;
 
   useEffect(() => {
     setLocalLeads(leads);
   }, [leads]);
+
+  const campaignOptions = useMemo(
+    () =>
+      buildFilterOptions(localLeads, (lead) => lead.campanha, getCampaignLabel),
+    [localLeads]
+  );
+
+  const interestOptions = useMemo(
+    () => buildFilterOptions(localLeads, (lead) => lead.esp, getInterestLabel),
+    [localLeads]
+  );
+
+  const funnelOptions = useMemo(
+    () => buildFunnelOptions(localLeads),
+    [localLeads]
+  );
+
+  const filteredLeads = useMemo(() => {
+    return localLeads.filter((lead) => {
+      const matchesSearch = leadMatchesSearch(lead, normalizedSearch);
+      const matchesCampaign =
+        selectedCampaign === FILTER_ALL ||
+        normalizeFilterValue(lead.campanha) === selectedCampaign;
+      const matchesInterest =
+        selectedInterest === FILTER_ALL ||
+        normalizeFilterValue(lead.esp) === selectedInterest;
+      const matchesFunnel =
+        selectedFunnel === FILTER_ALL || lead.funnel === selectedFunnel;
+
+      return (
+        matchesSearch && matchesCampaign && matchesInterest && matchesFunnel
+      );
+    });
+  }, [
+    localLeads,
+    normalizedSearch,
+    selectedCampaign,
+    selectedInterest,
+    selectedFunnel,
+  ]);
+
+  const hasActiveFilters =
+    normalizedSearch.length > 0 ||
+    selectedCampaign !== FILTER_ALL ||
+    selectedInterest !== FILTER_ALL ||
+    selectedFunnel !== FILTER_ALL;
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
+    setSelectedFunnel(FILTER_ALL);
+  }
 
   async function handleRestoreLead(lead: Lead) {
     const confirmed = window.confirm(
@@ -153,13 +280,83 @@ export function ComercialArquivadosClient({
         )}
       </div>
 
+      {localLeads.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-4">
+          <div className="flex flex-wrap gap-3">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="min-w-72 flex-1 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+              placeholder="Buscar por nome, telefone, campanha, interesse..."
+            />
+
+            <select
+              value={selectedCampaign}
+              onChange={(event) => setSelectedCampaign(event.target.value)}
+              className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+            >
+              <option value={FILTER_ALL}>Todas as campanhas</option>
+              {campaignOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedInterest}
+              onChange={(event) => setSelectedInterest(event.target.value)}
+              className="min-w-44 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+            >
+              <option value={FILTER_ALL}>Todos os interesses</option>
+              {interestOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedFunnel}
+              onChange={(event) => setSelectedFunnel(event.target.value)}
+              className="min-w-40 rounded-xl border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+            >
+              <option value={FILTER_ALL}>Todos os funis</option>
+              {funnelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpar filtros
+            </button>
+          </div>
+
+          <div className="mt-3 text-xs text-[var(--text3)]">
+            {filteredLeads.length} lead(s) encontrado(s)
+            {hasActiveFilters ? " com filtros ativos" : ""}
+          </div>
+        </div>
+      )}
+
       {localLeads.length === 0 ? (
         <div className="mt-4 flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--border2)] bg-[var(--bg2)] p-8 text-center text-sm text-[var(--text3)]">
           Nenhum lead arquivado.
         </div>
+      ) : filteredLeads.length === 0 ? (
+        <div className="mt-4 flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--border2)] bg-[var(--bg2)] p-8 text-center text-sm text-[var(--text3)]">
+          Nenhum lead encontrado com os filtros atuais.
+        </div>
       ) : (
         <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {localLeads.map((lead) => (
+          {filteredLeads.map((lead) => (
             <article
               key={lead.id}
               className="rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-4"
