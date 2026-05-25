@@ -9,6 +9,10 @@ import {
   updateCommercialResponse,
   updateCommercialResponseCategory,
 } from "@/lib/services/commercial-responses-client";
+import {
+  initialCommercialCategories,
+  initialCommercialResponses,
+} from "@/lib/comercial/initial-commercial-responses";
 import type {
   CommercialResponse,
   CommercialResponseCategory,
@@ -69,6 +73,10 @@ const FILTER_INACTIVE = "inactive";
 const FILTER_YES = "yes";
 const FILTER_NO = "no";
 const CATEGORY_NONE = "__none__";
+
+function normalizeImportKey(value: string) {
+  return value.trim().toLowerCase();
+}
 
 function sortCategories(categories: CommercialResponseCategory[]) {
   return [...categories].sort(
@@ -202,6 +210,10 @@ export function ComercialRespostasClient({
   const [editingResponseId, setEditingResponseId] = useState<string | null>(
     null
   );
+  const [isImportingInitialPackage, setIsImportingInitialPackage] =
+    useState(false);
+  const [importPackageMessage, setImportPackageMessage] = useState("");
+  const [importPackageError, setImportPackageError] = useState("");
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(FILTER_ALL);
   const [selectedStatus, setSelectedStatus] = useState(FILTER_ALL);
@@ -366,6 +378,124 @@ export function ComercialRespostasClient({
     setSelectedStatus(FILTER_ALL);
     setSelectedAutoReply(FILTER_ALL);
     setSelectedRequiresHuman(FILTER_ALL);
+  }
+
+  async function handleImportInitialPackage() {
+    const confirmed = window.confirm(
+      "Importar o pacote inicial de categorias e respostas aprovadas? Itens já existentes serão ignorados."
+    );
+
+    if (!confirmed) return;
+
+    setIsImportingInitialPackage(true);
+    setImportPackageMessage("");
+    setImportPackageError("");
+
+    try {
+      const categoryBySlug = new Map<string, CommercialResponseCategory>();
+      const categoryByName = new Map<string, CommercialResponseCategory>();
+
+      localCategories.forEach((category) => {
+        categoryBySlug.set(normalizeImportKey(category.slug), category);
+        categoryByName.set(normalizeImportKey(category.name), category);
+      });
+
+      const createdCategories: CommercialResponseCategory[] = [];
+      let reusedCategories = 0;
+
+      for (const category of initialCommercialCategories) {
+        const slugKey = normalizeImportKey(category.slug);
+        const nameKey = normalizeImportKey(category.name);
+        const existingCategory =
+          categoryBySlug.get(slugKey) ?? categoryByName.get(nameKey);
+
+        if (existingCategory) {
+          categoryBySlug.set(slugKey, existingCategory);
+          categoryByName.set(nameKey, existingCategory);
+          reusedCategories += 1;
+          continue;
+        }
+
+        const createdCategory = await createCommercialResponseCategory({
+          empresaId,
+          data: {
+            name: category.name,
+            slug: category.slug,
+            description: category.description,
+            isActive: true,
+            orderIndex: category.orderIndex,
+          },
+        });
+
+        createdCategories.push(createdCategory);
+        categoryBySlug.set(slugKey, createdCategory);
+        categoryByName.set(nameKey, createdCategory);
+      }
+
+      const responseByTitle = new Map<string, CommercialResponse>();
+
+      localResponses.forEach((response) => {
+        responseByTitle.set(normalizeImportKey(response.title), response);
+      });
+
+      const createdResponses: CommercialResponse[] = [];
+      let ignoredResponses = 0;
+
+      for (const response of initialCommercialResponses) {
+        const titleKey = normalizeImportKey(response.title);
+
+        if (responseByTitle.has(titleKey)) {
+          ignoredResponses += 1;
+          continue;
+        }
+
+        const category = categoryBySlug.get(
+          normalizeImportKey(response.categorySlug)
+        );
+
+        if (!category) {
+          ignoredResponses += 1;
+          continue;
+        }
+
+        const createdResponse = await createCommercialResponse({
+          empresaId,
+          data: {
+            categoryId: category.id,
+            title: response.title,
+            answerText: response.answerText,
+            exampleQuestions: response.exampleQuestions,
+            tags: response.tags,
+            isActive: true,
+            canAutoReply: response.canAutoReply,
+            requiresHuman: response.requiresHuman,
+            internalNotes: response.internalNotes ?? "",
+            priority: response.priority,
+          },
+        });
+
+        createdResponses.push(createdResponse);
+        responseByTitle.set(titleKey, createdResponse);
+      }
+
+      setLocalCategories((current) =>
+        sortCategories([...current, ...createdCategories])
+      );
+      setLocalResponses((current) =>
+        sortResponses([...current, ...createdResponses])
+      );
+      setImportPackageMessage(
+        `Importação concluída: ${createdCategories.length} categorias criadas, ${reusedCategories} categorias reutilizadas, ${createdResponses.length} respostas criadas, ${ignoredResponses} respostas ignoradas.`
+      );
+    } catch (error) {
+      setImportPackageError(
+        error instanceof Error
+          ? `Erro ao importar pacote inicial: ${error.message}`
+          : "Erro ao importar pacote inicial."
+      );
+    } finally {
+      setIsImportingInitialPackage(false);
+    }
   }
 
   async function handleSaveCategory(event: FormEvent<HTMLFormElement>) {
@@ -625,7 +755,24 @@ export function ComercialRespostasClient({
             >
               {showResponseForm ? "Fechar resposta" : "Nova resposta"}
             </button>
+            <button
+              type="button"
+              disabled={isImportingInitialPackage}
+              onClick={() => void handleImportInitialPackage()}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isImportingInitialPackage
+                ? "Importando..."
+                : "Importar pacote inicial"}
+            </button>
           </div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs leading-relaxed text-[var(--text3)]">
+          O pacote inicial cria categorias e respostas aprovadas baseadas nas
+          conversas reais analisadas. Itens já existentes são ignorados.
+          Revise valores, endereços e condições promocionais antes de usar auto
+          resposta futura.
         </div>
 
         <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4 text-sm text-[var(--text2)]">
@@ -656,6 +803,18 @@ export function ComercialRespostasClient({
         {responseFormSuccess && (
           <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
             {responseFormSuccess}
+          </div>
+        )}
+
+        {importPackageMessage && (
+          <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+            {importPackageMessage}
+          </div>
+        )}
+
+        {importPackageError && (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {importPackageError}
           </div>
         )}
       </div>
