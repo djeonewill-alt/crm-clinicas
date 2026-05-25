@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createCommercialResponse,
   createCommercialResponseCategory,
+  deactivateCommercialResponseCategory,
+  updateCommercialResponseCategory,
 } from "@/lib/services/commercial-responses-client";
 import type {
   CommercialResponse,
@@ -186,6 +188,9 @@ export function ComercialRespostasClient({
   const [categoryFormSuccess, setCategoryFormSuccess] = useState("");
   const [categoryForm, setCategoryForm] =
     useState<CategoryFormState>(initialCategoryForm);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null
+  );
   const [showResponseForm, setShowResponseForm] = useState(false);
   const [isSavingResponse, setIsSavingResponse] = useState(false);
   const [responseFormError, setResponseFormError] = useState("");
@@ -264,7 +269,16 @@ export function ComercialRespostasClient({
   }, [responses]);
 
   function handleToggleCategoryForm() {
-    setShowCategoryForm((current) => !current);
+    setShowCategoryForm((current) => {
+      const next = !current;
+
+      if (!next) {
+        resetCategoryForm();
+        setEditingCategoryId(null);
+      }
+
+      return next;
+    });
     setCategoryFormError("");
     setCategoryFormSuccess("");
   }
@@ -283,6 +297,28 @@ export function ComercialRespostasClient({
     setResponseForm(initialResponseForm);
   }
 
+  function cancelCategoryForm() {
+    setShowCategoryForm(false);
+    setCategoryFormError("");
+    setCategoryFormSuccess("");
+    setEditingCategoryId(null);
+    resetCategoryForm();
+  }
+
+  function handleEditCategory(category: CommercialResponseCategory) {
+    setCategoryForm({
+      name: category.name,
+      slug: category.slug,
+      description: category.description ?? "",
+      isActive: category.isActive,
+      orderIndex: category.orderIndex,
+    });
+    setEditingCategoryId(category.id);
+    setShowCategoryForm(true);
+    setCategoryFormError("");
+    setCategoryFormSuccess("");
+  }
+
   function clearFilters() {
     setSearch("");
     setSelectedCategory(FILTER_ALL);
@@ -291,7 +327,7 @@ export function ComercialRespostasClient({
     setSelectedRequiresHuman(FILTER_ALL);
   }
 
-  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCategoryFormError("");
     setCategoryFormSuccess("");
@@ -304,28 +340,94 @@ export function ComercialRespostasClient({
     setIsSavingCategory(true);
 
     try {
-      const createdCategory = await createCommercialResponseCategory({
-        empresaId,
-        data: {
-          name: categoryForm.name,
-          slug: categoryForm.slug || undefined,
-          description: categoryForm.description,
-          isActive: categoryForm.isActive,
-          orderIndex: Number(categoryForm.orderIndex) || 0,
-        },
-      });
+      const payload = {
+        name: categoryForm.name,
+        slug: categoryForm.slug || undefined,
+        description: categoryForm.description,
+        isActive: categoryForm.isActive,
+        orderIndex: Number(categoryForm.orderIndex) || 0,
+      };
 
-      setLocalCategories((current) =>
-        sortCategories([...current, createdCategory])
-      );
+      if (editingCategoryId) {
+        const updatedCategory = await updateCommercialResponseCategory({
+          empresaId,
+          categoryId: editingCategoryId,
+          data: payload,
+        });
+
+        setLocalCategories((current) =>
+          sortCategories(
+            current.map((category) =>
+              category.id === updatedCategory.id ? updatedCategory : category
+            )
+          )
+        );
+        setCategoryFormSuccess("Categoria atualizada com sucesso.");
+      } else {
+        const createdCategory = await createCommercialResponseCategory({
+          empresaId,
+          data: payload,
+        });
+
+        setLocalCategories((current) =>
+          sortCategories([...current, createdCategory])
+        );
+        setCategoryFormSuccess("Categoria criada com sucesso.");
+      }
+
       resetCategoryForm();
+      setEditingCategoryId(null);
       setShowCategoryForm(false);
-      setCategoryFormSuccess("Categoria criada com sucesso.");
     } catch (error) {
       setCategoryFormError(
         error instanceof Error
-          ? `Erro ao criar categoria: ${error.message}`
-          : "Erro ao criar categoria."
+          ? editingCategoryId
+            ? `Erro ao atualizar categoria: ${error.message}`
+            : `Erro ao criar categoria: ${error.message}`
+          : editingCategoryId
+            ? "Erro ao atualizar categoria."
+            : "Erro ao criar categoria."
+      );
+    } finally {
+      setIsSavingCategory(false);
+    }
+  }
+
+  async function handleDeactivateCategory(category: CommercialResponseCategory) {
+    const confirmed = window.confirm(
+      "Desativar esta categoria? As respostas vinculadas não serão apagadas."
+    );
+
+    if (!confirmed) return;
+
+    setCategoryFormError("");
+    setCategoryFormSuccess("");
+    setIsSavingCategory(true);
+
+    try {
+      await deactivateCommercialResponseCategory({
+        empresaId,
+        categoryId: category.id,
+      });
+
+      setLocalCategories((current) =>
+        sortCategories(
+          current.map((item) =>
+            item.id === category.id ? { ...item, isActive: false } : item
+          )
+        )
+      );
+
+      if (editingCategoryId === category.id) {
+        cancelCategoryForm();
+      }
+
+      setCategoryFormSuccess("Categoria desativada com sucesso.");
+    } catch (error) {
+      setCategoryFormError(
+        error instanceof Error
+          ? `Erro ao desativar categoria: ${error.message}`
+          : "Erro ao desativar categoria."
       );
     } finally {
       setIsSavingCategory(false);
@@ -438,11 +540,13 @@ export function ComercialRespostasClient({
 
       {showCategoryForm && (
         <form
-          onSubmit={handleCreateCategory}
+          onSubmit={handleSaveCategory}
           className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg2)] p-5"
         >
           <div className="mb-4">
-            <h2 className="text-sm font-semibold">Nova categoria</h2>
+            <h2 className="text-sm font-semibold">
+              {editingCategoryId ? "Editar categoria" : "Nova categoria"}
+            </h2>
             <p className="mt-1 text-sm text-[var(--text2)]">
               As categorias organizam as respostas aprovadas que futuramente a
               IA poderá consultar.
@@ -547,16 +651,16 @@ export function ComercialRespostasClient({
               disabled={isSavingCategory}
               className="rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSavingCategory ? "Salvando..." : "Salvar categoria"}
+              {isSavingCategory
+                ? "Salvando..."
+                : editingCategoryId
+                  ? "Salvar alterações"
+                  : "Salvar categoria"}
             </button>
             <button
               type="button"
               disabled={isSavingCategory}
-              onClick={() => {
-                setShowCategoryForm(false);
-                setCategoryFormError("");
-                resetCategoryForm();
-              }}
+              onClick={cancelCategoryForm}
               className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-4 py-2 text-xs font-semibold text-[var(--text2)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancelar
@@ -846,6 +950,27 @@ export function ComercialRespostasClient({
                     <span>
                       {countResponsesByCategory(localResponses, category.id)} resposta(s)
                     </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleEditCategory(category)}
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-1.5 text-xs font-semibold text-[var(--text2)] transition hover:bg-[var(--bg4)] hover:text-[var(--text)]"
+                    >
+                      Editar
+                    </button>
+
+                    {category.isActive && (
+                      <button
+                        type="button"
+                        disabled={isSavingCategory}
+                        onClick={() => void handleDeactivateCategory(category)}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Desativar
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
