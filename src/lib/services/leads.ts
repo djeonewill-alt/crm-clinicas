@@ -58,3 +58,23 @@ export async function getLeadsByEmpresa(empresaId: string | number): Promise<Lea
 
   return (data ?? []).map(rowToLead);
 }
+
+export async function getArchivedLeadsByEmpresa(
+  empresaId: string | number
+): Promise<Lead[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+
+  if (error) {
+    console.error("Erro ao buscar leads arquivados:", error.message);
+    return [];
+  }
+
+  return (data ?? []).map(rowToLead);
+}
