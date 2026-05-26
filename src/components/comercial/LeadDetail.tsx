@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
+import { LeadAssistedServicePanel } from "@/components/comercial/LeadAssistedServicePanel";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
 import { LeadMessageScripts } from "@/components/comercial/LeadMessageScripts";
@@ -165,6 +166,8 @@ export function LeadDetail({
           onMoveToRetorno={onMoveToRetorno}
         />
       </div>
+
+      <LeadAssistedServicePanel leadName={lead.nome} />
 
       <LeadMessageScripts lead={lead} />
 
