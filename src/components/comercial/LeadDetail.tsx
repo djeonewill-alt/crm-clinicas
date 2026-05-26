@@ -34,7 +34,10 @@ type LeadDetailProps = {
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
   onArchiveLead: () => void | Promise<void>;
-  onMoveToRetorno: (lead: Lead) => void | Promise<void>;
+  onMoveToRetorno: (
+    lead: Lead,
+    input?: { returnDate?: string; note?: string }
+  ) => void | Promise<void>;
   onUpdateLeadDetails: (data: {
     nome: string;
     tel: string;
@@ -186,6 +189,10 @@ export function LeadDetail({
         leadName={lead.nome}
         onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
         onMoveToQualification={() => onMoveToQualificacao(lead)}
+        onScheduleReturn={({ returnDate, note }) => {
+          onRetornoDateChange(returnDate);
+          return onMoveToRetorno(lead, { returnDate, note });
+        }}
         currentFunnel={lead.funnel}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}

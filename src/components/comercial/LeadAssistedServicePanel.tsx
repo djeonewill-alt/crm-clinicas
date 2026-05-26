@@ -22,7 +22,10 @@ type LeadAssistedServicePanelProps = {
   leadName?: string;
   onHistoryChanged?: () => Promise<void> | void;
   onMoveToQualification?: () => Promise<void> | void;
-  onMoveToReturn?: () => Promise<void> | void;
+  onScheduleReturn?: (input: {
+    returnDate: string;
+    note?: string;
+  }) => Promise<void> | void;
   currentFunnel?: string | null;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
@@ -53,7 +56,7 @@ export function LeadAssistedServicePanel({
   leadName,
   onHistoryChanged,
   onMoveToQualification,
-  onMoveToReturn,
+  onScheduleReturn,
   currentFunnel,
   commercialResponseCategories,
   commercialResponses,
@@ -69,6 +72,9 @@ export function LeadAssistedServicePanel({
   const [isRegisteringReply, setIsRegisteringReply] = useState(false);
   const [isApplyingAction, setIsApplyingAction] = useState(false);
   const [isRegisteringReview, setIsRegisteringReview] = useState(false);
+  const [returnDate, setReturnDate] = useState("");
+  const [returnNote, setReturnNote] = useState("");
+  const [isSchedulingReturn, setIsSchedulingReturn] = useState(false);
 
   useEffect(() => {
     setReceivedMessage("");
@@ -80,7 +86,16 @@ export function LeadAssistedServicePanel({
     setIsRegisteringReply(false);
     setIsApplyingAction(false);
     setIsRegisteringReview(false);
+    setReturnDate("");
+    setReturnNote("");
+    setIsSchedulingReturn(false);
   }, [leadId]);
+
+  function todayInputValue() {
+    const now = new Date();
+    const timezoneOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
+  }
 
   function handleAnalyzeMessage() {
     const trimmedMessage = receivedMessage.trim();
@@ -228,30 +243,48 @@ export function LeadAssistedServicePanel({
     }
   }
 
-  async function handleMoveToReturn() {
-    if (!onMoveToReturn) {
-      setStatusMessage("Retorno com data será implementado em uma próxima etapa.");
+  async function handleScheduleReturn() {
+    const trimmedReturnDate = returnDate.trim();
+    const trimmedReturnNote = returnNote.trim();
+
+    if (!onScheduleReturn) {
+      setStatusMessage("Ação de retorno ainda não conectada.");
       return;
     }
 
-    const confirmed = window.confirm("Mover este lead para Retorno?");
+    if (!trimmedReturnDate) {
+      setStatusMessage("Informe a data de retorno.");
+      return;
+    }
+
+    if (trimmedReturnDate < todayInputValue()) {
+      setStatusMessage("Escolha uma data de retorno de hoje em diante.");
+      return;
+    }
+
+    const confirmed = window.confirm("Agendar retorno para este lead?");
 
     if (!confirmed) return;
 
-    setIsApplyingAction(true);
+    setIsSchedulingReturn(true);
     setStatusMessage("");
 
     try {
-      await onMoveToReturn();
-      setStatusMessage("Lead movido para Retorno.");
+      await onScheduleReturn({
+        returnDate: trimmedReturnDate,
+        note: trimmedReturnNote || undefined,
+      });
+      setReturnDate("");
+      setReturnNote("");
+      setStatusMessage("Retorno agendado.");
     } catch (error) {
       setStatusMessage(
         error instanceof Error
-          ? `Erro ao mover para Retorno: ${error.message}`
-          : "Erro ao mover para Retorno."
+          ? `Erro ao agendar retorno: ${error.message}`
+          : "Erro ao agendar retorno."
       );
     } finally {
-      setIsApplyingAction(false);
+      setIsSchedulingReturn(false);
     }
   }
 
@@ -539,22 +572,41 @@ export function LeadAssistedServicePanel({
 
               {nextActionSuggestion.shouldMoveFunnel &&
                 nextActionSuggestion.suggestedFunnel === "retorno" && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={isApplyingAction || !onMoveToReturn}
-                      onClick={() => void handleMoveToReturn()}
-                      className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isApplyingAction ? "Movendo..." : "Mover para Retorno"}
-                    </button>
+                  <div className="w-full rounded-lg border border-purple-500/30 bg-purple-500/10 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-purple-300">
+                      Agendar retorno
+                    </p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-[180px_1fr]">
+                      <input
+                        type="date"
+                        value={returnDate}
+                        onChange={(event) => setReturnDate(event.target.value)}
+                        className="rounded-lg border border-purple-500/30 bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text)] outline-none"
+                      />
+                      <input
+                        value={returnNote}
+                        onChange={(event) => setReturnNote(event.target.value)}
+                        className="rounded-lg border border-purple-500/30 bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text3)]"
+                        placeholder="Ex: Cliente pediu para chamar no dia do pagamento."
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isSchedulingReturn || !onScheduleReturn}
+                        onClick={() => void handleScheduleReturn()}
+                        className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSchedulingReturn ? "Agendando..." : "Agendar Retorno"}
+                      </button>
 
-                    {!onMoveToReturn && (
-                      <span className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
-                        Retorno com data será implementado em uma próxima etapa.
-                      </span>
-                    )}
-                  </>
+                      {!onScheduleReturn && (
+                        <span className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+                          Ação de retorno ainda não conectada.
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 )}
 
               {(nextActionSuggestion.requiresHuman ||

@@ -43,6 +43,11 @@ type LeadDetailsInput = {
   campanha?: string;
 };
 
+type ScheduleReturnInput = {
+  returnDate?: string;
+  note?: string;
+};
+
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -650,8 +655,11 @@ export function useComercialTrabalho({
     selectNextLeadAfter(lead.id);
   }
 
-  async function handleMoveToRetorno(lead: Lead) {
-    if (!retornoDate) {
+  async function handleMoveToRetorno(lead: Lead, input?: ScheduleReturnInput) {
+    const scheduledReturnDate = input?.returnDate || retornoDate;
+    const returnNote = input?.note?.trim();
+
+    if (!scheduledReturnDate) {
       setMessage("Escolha uma data de retorno.");
       return;
     }
@@ -662,13 +670,13 @@ export function useComercialTrabalho({
       diaProsp: "r1",
       tentativas: createTentativasForDay("retorno", "r1"),
       fechado: false,
-      retornoData: retornoDate,
+      retornoData: scheduledReturnDate,
       colAt: Date.now(),
     };
 
     const saved = await saveUpdatedLead(
       updatedLead,
-      `Lead enviado para Retorno em ${formatDate(retornoDate)}.`
+      `Lead enviado para Retorno em ${formatDate(scheduledReturnDate)}.`
     );
 
     if (saved) {
@@ -676,10 +684,16 @@ export function useComercialTrabalho({
         leadId: updatedLead.id,
         type: "return_scheduled",
         title: "Retorno agendado",
-        description: `Lead enviado para Retorno em ${formatDate(retornoDate)}.`,
+        description: [
+          `Lead enviado para Retorno em ${formatDate(scheduledReturnDate)}.`,
+          returnNote ? `Observação: ${returnNote}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
         metadata: {
           event: "return_scheduled",
-          retornoData: retornoDate,
+          retornoData: scheduledReturnDate,
+          note: returnNote ?? null,
           fromFunnel: lead.funnel,
           toFunnel: "retorno",
         },
