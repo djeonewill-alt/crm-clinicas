@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LeadCallLogForm } from "@/components/comercial/LeadCallLogForm";
 import {
   findBestCommercialResponses,
+  normalizeCommercialSearchText,
   type CommercialResponseMatch,
 } from "@/lib/comercial/commercial-response-matcher";
 import {
@@ -32,8 +33,79 @@ type LeadAssistedServicePanelProps = {
   commercialResponses: CommercialResponse[];
 };
 
-const FUTURE_ACTIONS = [
-  "Blocos rápidos",
+type QuickReplyBlock = {
+  label: string;
+  categorySlug?: string;
+  titleIncludes?: string[];
+};
+
+const QUICK_REPLY_BLOCKS: QuickReplyBlock[] = [
+  {
+    label: "Abertura",
+    categorySlug: "primeira-abordagem",
+    titleIncludes: ["Primeira abordagem"],
+  },
+  {
+    label: "Como funciona",
+    categorySlug: "como-funciona-tratamento",
+    titleIncludes: ["Explicação simples"],
+  },
+  {
+    label: "Como funciona + valor",
+    titleIncludes: ["Como funciona e valor"],
+  },
+  {
+    label: "Preço",
+    categorySlug: "preco-promocao",
+    titleIncludes: ["Valor promocional"],
+  },
+  {
+    label: "Regiões",
+    categorySlug: "regioes-corpo",
+    titleIncludes: ["Como funciona o valor por região"],
+  },
+  {
+    label: "Unidades",
+    categorySlug: "localizacao-unidades",
+    titleIncludes: ["Unidades disponíveis"],
+  },
+  {
+    label: "Endereço Tatuapé",
+    titleIncludes: ["Endereço da unidade Tatuapé"],
+  },
+  {
+    label: "Endereço Paulista",
+    titleIncludes: ["Endereço da unidade Paulista"],
+  },
+  {
+    label: "Reserva/Sinal",
+    categorySlug: "reserva-sinal",
+    titleIncludes: ["Taxa de reserva"],
+  },
+  {
+    label: "Gestante/Pós-parto",
+    categorySlug: "gestante-pos-parto",
+  },
+  {
+    label: "Menor de idade",
+    categorySlug: "menor-responsavel-legal",
+  },
+  {
+    label: "Profissional/Certificações",
+    categorySlug: "profissional-certificacoes",
+  },
+  {
+    label: "Não usa tinta",
+    categorySlug: "pigmentacao-nao-usa-tinta",
+  },
+  {
+    label: "Flacidez",
+    categorySlug: "flacidez",
+  },
+  {
+    label: "Antes e depois",
+    categorySlug: "resultados-antes-depois",
+  },
 ];
 
 const FUNNEL_LABELS: Record<CommercialSuggestedFunnel, string> = {
@@ -77,6 +149,7 @@ export function LeadAssistedServicePanel({
   const [returnNote, setReturnNote] = useState("");
   const [isSchedulingReturn, setIsSchedulingReturn] = useState(false);
   const [showCallLogForm, setShowCallLogForm] = useState(false);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
 
   useEffect(() => {
     setReceivedMessage("");
@@ -92,7 +165,66 @@ export function LeadAssistedServicePanel({
     setReturnNote("");
     setIsSchedulingReturn(false);
     setShowCallLogForm(false);
+    setShowQuickReplies(false);
   }, [leadId]);
+
+  function getResponseCategory(response: CommercialResponse) {
+    if (!response.categoryId) return null;
+
+    return (
+      commercialResponseCategories.find(
+        (category) => category.id === response.categoryId
+      ) ?? null
+    );
+  }
+
+  function findQuickReplyResponse(block: QuickReplyBlock) {
+    const normalizedTitleIncludes =
+      block.titleIncludes?.map(normalizeCommercialSearchText) ?? [];
+    const activeResponses = commercialResponses.filter(
+      (response) => response.isActive
+    );
+    const titleMatch =
+      activeResponses.find((response) => {
+        const normalizedTitle = normalizeCommercialSearchText(response.title);
+        return normalizedTitleIncludes.some((titlePart) =>
+          normalizedTitle.includes(titlePart)
+        );
+      }) ?? null;
+
+    if (titleMatch) return titleMatch;
+
+    return (
+      activeResponses.find((response) => {
+        const category = getResponseCategory(response);
+        return Boolean(block.categorySlug) && category?.slug === block.categorySlug;
+      }) ?? null
+    );
+  }
+
+  function handleApplyQuickReply(block: QuickReplyBlock) {
+    const response = findQuickReplyResponse(block);
+
+    if (!response) {
+      setStatusMessage(
+        "Nenhuma resposta aprovada encontrada para este bloco rápido. Verifique a aba Respostas."
+      );
+      return;
+    }
+
+    const category = getResponseCategory(response);
+
+    setReplyText(response.answerText);
+    setSuggestionMatch({
+      response,
+      categoryName: category?.name ?? null,
+      categorySlug: category?.slug ?? null,
+      score: 0,
+      matchedTerms: [],
+    });
+    setNextActionSuggestion(null);
+    setStatusMessage(`Bloco rápido aplicado: ${block.label}`);
+  }
 
   function todayInputValue() {
     const now = new Date();
@@ -462,7 +594,7 @@ export function LeadAssistedServicePanel({
             <div className="flex flex-wrap gap-2">
               {suggestionMatch.response.requiresHuman && (
                 <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-                  Precisa revisão humana
+                  Revisar antes de enviar
                 </span>
               )}
 
@@ -636,21 +768,51 @@ export function LeadAssistedServicePanel({
         </div>
       )}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-1">
-        {FUTURE_ACTIONS.map((action) => (
+      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Blocos rápidos
+            </p>
+            <p className="mt-1 text-xs text-[var(--text2)]">
+              Use estes atalhos para preencher a resposta com uma mensagem
+              aprovada comum. Revise antes de enviar no WhatsApp.
+            </p>
+          </div>
+
           <button
-            key={action}
             type="button"
-            disabled
-            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-left text-xs font-semibold text-[var(--text3)] opacity-70"
+            onClick={() => setShowQuickReplies((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
           >
-            {action}
-            <span className="mt-1 block text-[10px] font-normal uppercase tracking-wider">
-              em breve
-            </span>
+            {showQuickReplies
+              ? "Ocultar blocos rápidos"
+              : "Mostrar blocos rápidos"}
           </button>
-        ))}
-      </div>
+        </div>
+
+        {showQuickReplies && (
+          <div className="mt-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {QUICK_REPLY_BLOCKS.map((block) => (
+                <button
+                  key={block.label}
+                  type="button"
+                  onClick={() => handleApplyQuickReply(block)}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-left text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                >
+                  {block.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
+              Blocos com preço, promoção, pagamento, gestante, menor de idade
+              ou certificações devem ser revisados antes do envio.
+            </p>
+          </div>
+        )}
+      </section>
 
       <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
