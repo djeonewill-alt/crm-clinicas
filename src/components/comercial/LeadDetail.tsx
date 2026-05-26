@@ -185,6 +185,8 @@ export function LeadDetail({
         empresaId={empresaId}
         leadName={lead.nome}
         onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
+        onMoveToQualification={() => onMoveToQualificacao(lead)}
+        currentFunnel={lead.funnel}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}
       />

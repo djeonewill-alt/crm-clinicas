@@ -21,6 +21,9 @@ type LeadAssistedServicePanelProps = {
   empresaId: string | number;
   leadName?: string;
   onHistoryChanged?: () => Promise<void> | void;
+  onMoveToQualification?: () => Promise<void> | void;
+  onMoveToReturn?: () => Promise<void> | void;
+  currentFunnel?: string | null;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
 };
@@ -49,6 +52,9 @@ export function LeadAssistedServicePanel({
   empresaId,
   leadName,
   onHistoryChanged,
+  onMoveToQualification,
+  onMoveToReturn,
+  currentFunnel,
   commercialResponseCategories,
   commercialResponses,
 }: LeadAssistedServicePanelProps) {
@@ -61,6 +67,8 @@ export function LeadAssistedServicePanel({
     useState<CommercialNextActionSuggestion | null>(null);
   const [isRegisteringReceived, setIsRegisteringReceived] = useState(false);
   const [isRegisteringReply, setIsRegisteringReply] = useState(false);
+  const [isApplyingAction, setIsApplyingAction] = useState(false);
+  const [isRegisteringReview, setIsRegisteringReview] = useState(false);
 
   useEffect(() => {
     setReceivedMessage("");
@@ -70,6 +78,8 @@ export function LeadAssistedServicePanel({
     setNextActionSuggestion(null);
     setIsRegisteringReceived(false);
     setIsRegisteringReply(false);
+    setIsApplyingAction(false);
+    setIsRegisteringReview(false);
   }, [leadId]);
 
   function handleAnalyzeMessage() {
@@ -186,6 +196,104 @@ export function LeadAssistedServicePanel({
       );
     } finally {
       setIsRegisteringReply(false);
+    }
+  }
+
+  async function handleMoveToQualification() {
+    if (!nextActionSuggestion) return;
+
+    if (!onMoveToQualification) {
+      setStatusMessage("Ação ainda não conectada.");
+      return;
+    }
+
+    const confirmed = window.confirm("Mover este lead para Qualificação?");
+
+    if (!confirmed) return;
+
+    setIsApplyingAction(true);
+    setStatusMessage("");
+
+    try {
+      await onMoveToQualification();
+      setStatusMessage("Lead movido para Qualificação.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao mover para Qualificação: ${error.message}`
+          : "Erro ao mover para Qualificação."
+      );
+    } finally {
+      setIsApplyingAction(false);
+    }
+  }
+
+  async function handleMoveToReturn() {
+    if (!onMoveToReturn) {
+      setStatusMessage("Retorno com data será implementado em uma próxima etapa.");
+      return;
+    }
+
+    const confirmed = window.confirm("Mover este lead para Retorno?");
+
+    if (!confirmed) return;
+
+    setIsApplyingAction(true);
+    setStatusMessage("");
+
+    try {
+      await onMoveToReturn();
+      setStatusMessage("Lead movido para Retorno.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao mover para Retorno: ${error.message}`
+          : "Erro ao mover para Retorno."
+      );
+    } finally {
+      setIsApplyingAction(false);
+    }
+  }
+
+  async function handleRegisterHumanReview() {
+    if (!nextActionSuggestion) return;
+
+    setIsRegisteringReview(true);
+    setStatusMessage("");
+
+    try {
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: "Revisão humana recomendada",
+        description: [
+          "O Atendimento Assistido recomendou revisão humana.",
+          `Motivo: ${nextActionSuggestion.title} - ${nextActionSuggestion.description}`,
+          `Risco: ${nextActionSuggestion.riskLevel}`,
+          `Razões: ${nextActionSuggestion.reasons.join(" ")}`,
+        ].join("\n"),
+        metadata: {
+          event: "human_review_recommended",
+          source: "assisted_panel",
+          actionType: nextActionSuggestion.actionType,
+          suggestedFunnel: nextActionSuggestion.suggestedFunnel,
+          riskLevel: nextActionSuggestion.riskLevel,
+          reasons: nextActionSuggestion.reasons,
+          currentFunnel: currentFunnel ?? null,
+        },
+      });
+
+      await onHistoryChanged?.();
+      setStatusMessage("Revisão humana registrada no histórico.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar revisão humana: ${error.message}`
+          : "Erro ao registrar revisão humana."
+      );
+    } finally {
+      setIsRegisteringReview(false);
     }
   }
 
@@ -406,6 +514,70 @@ export function LeadAssistedServicePanel({
             Esta é apenas uma sugestão local. O CRM não move o lead
             automaticamente nesta etapa.
           </p>
+
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Aplicar manualmente
+            </p>
+            <p className="mt-1 text-xs text-[var(--text2)]">
+              Estas ações não acontecem automaticamente. Você escolhe se quer
+              aplicar.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {nextActionSuggestion.shouldMoveFunnel &&
+                nextActionSuggestion.suggestedFunnel === "qualificacao" && (
+                  <button
+                    type="button"
+                    disabled={isApplyingAction}
+                    onClick={() => void handleMoveToQualification()}
+                    className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isApplyingAction ? "Movendo..." : "Mover para Qualificação"}
+                  </button>
+                )}
+
+              {nextActionSuggestion.shouldMoveFunnel &&
+                nextActionSuggestion.suggestedFunnel === "retorno" && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isApplyingAction || !onMoveToReturn}
+                      onClick={() => void handleMoveToReturn()}
+                      className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isApplyingAction ? "Movendo..." : "Mover para Retorno"}
+                    </button>
+
+                    {!onMoveToReturn && (
+                      <span className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+                        Retorno com data será implementado em uma próxima etapa.
+                      </span>
+                    )}
+                  </>
+                )}
+
+              {(nextActionSuggestion.requiresHuman ||
+                nextActionSuggestion.riskLevel === "high") && (
+                <button
+                  type="button"
+                  disabled={isRegisteringReview}
+                  onClick={() => void handleRegisterHumanReview()}
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRegisteringReview
+                    ? "Registrando..."
+                    : "Registrar revisão humana"}
+                </button>
+              )}
+
+              {nextActionSuggestion.suggestedFunnel === "keep_current" && (
+                <span className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+                  Nenhuma movimentação de funil sugerida agora.
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
