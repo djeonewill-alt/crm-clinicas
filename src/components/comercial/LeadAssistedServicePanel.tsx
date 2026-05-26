@@ -18,6 +18,7 @@ import type {
   CommercialResponse,
   CommercialResponseCategory,
 } from "@/types/commercial-responses";
+import type { CommercialContext } from "@/types/commercial-contexts";
 
 type LeadAssistedServicePanelProps = {
   leadId: string | number;
@@ -30,6 +31,7 @@ type LeadAssistedServicePanelProps = {
     note?: string;
   }) => Promise<void> | void;
   currentFunnel?: string | null;
+  currentCommercialContext?: CommercialContext | null;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
 };
@@ -124,6 +126,22 @@ const RISK_LABELS: Record<CommercialNextActionSuggestion["riskLevel"], string> =
     high: "alto",
   };
 
+function formatContextDate(value: string | null) {
+  if (!value) return "";
+  const [date] = value.split("T");
+  if (!date) return "";
+  const [year, month, day] = date.split("-");
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
+
+function truncateContextText(value: string | null, maxLength = 150) {
+  const text = value?.trim() ?? "";
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
+}
+
 export function LeadAssistedServicePanel({
   leadId,
   empresaId,
@@ -132,6 +150,7 @@ export function LeadAssistedServicePanel({
   onMoveToQualification,
   onScheduleReturn,
   currentFunnel,
+  currentCommercialContext,
   commercialResponseCategories,
   commercialResponses,
 }: LeadAssistedServicePanelProps) {
@@ -629,6 +648,92 @@ export function LeadAssistedServicePanel({
           </p>
         )}
       </div>
+
+      {currentCommercialContext ? (
+        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
+                Contexto ativo neste lead
+              </p>
+              <h3 className="mt-1 text-sm font-semibold text-[var(--text)]">
+                {currentCommercialContext.name}
+              </h3>
+            </div>
+
+            <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
+              Contexto comercial
+            </span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text2)]">
+            {currentCommercialContext.audienceLabel && (
+              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
+                Publico: {currentCommercialContext.audienceLabel}
+              </span>
+            )}
+            {currentCommercialContext.campaignLabel && (
+              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
+                Campanha: {currentCommercialContext.campaignLabel}
+              </span>
+            )}
+            {(currentCommercialContext.startsAt ||
+              currentCommercialContext.endsAt) && (
+              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
+                Periodo:{" "}
+                {formatContextDate(currentCommercialContext.startsAt) ||
+                  "sem inicio"}{" "}
+                ate{" "}
+                {formatContextDate(currentCommercialContext.endsAt) ||
+                  "sem fim"}
+              </span>
+            )}
+          </div>
+
+          {(currentCommercialContext.priceNotes ||
+            currentCommercialContext.safetyNotes) && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {currentCommercialContext.priceNotes && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                    Observacoes de preco
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text2)]">
+                    {truncateContextText(currentCommercialContext.priceNotes)}
+                  </p>
+                </div>
+              )}
+
+              {currentCommercialContext.safetyNotes && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                    Regras de seguranca
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text2)]">
+                    {truncateContextText(currentCommercialContext.safetyNotes)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-[var(--text3)]">
+            As proximas etapas vao priorizar respostas deste contexto. Por
+            enquanto, ele e apenas informativo.
+          </p>
+        </div>
+      ) : (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <p className="font-semibold">
+            Este lead esta sem contexto comercial especifico.
+          </p>
+          <p className="mt-1 leading-relaxed">
+            O Atendimento Assistido esta usando apenas a base global de
+            respostas. Para campanhas com preco ou abordagem diferente,
+            selecione um contexto no detalhe do lead.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">

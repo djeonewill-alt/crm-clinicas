@@ -124,6 +124,10 @@ export function LeadDetail({
   const progress = getAttemptProgress(lead);
   const tentativas = ensureTentativasForLead(lead);
   const isSaving = savingLeadId === lead.id;
+  const currentCommercialContext =
+    commercialContexts.find(
+      (context) => context.id === lead.commercialContextId
+    ) ?? null;
 
   return (
     <div className="rounded-2xl border border-[var(--border2)] bg-[var(--bg2)] p-5">
@@ -208,6 +212,7 @@ export function LeadDetail({
           return onMoveToRetorno(lead, { returnDate, note });
         }}
         currentFunnel={lead.funnel}
+        currentCommercialContext={currentCommercialContext}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}
       />
