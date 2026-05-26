@@ -33,6 +33,7 @@ export type Lead = {
   diaProsp: string;
   esp?: string;
   campanha?: string;
+  commercialContextId: string | null;
   valor?: number;
   fechado?: boolean;
   archivedAt?: string | null;

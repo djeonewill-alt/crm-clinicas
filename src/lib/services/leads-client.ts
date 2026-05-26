@@ -22,6 +22,9 @@ function rowToLead(row: Record<string, unknown>): Lead {
     diaProsp: String(row.dia_prosp ?? "d1"),
     esp: String(row.esp ?? ""),
     campanha: String(row.campanha ?? ""),
+    commercialContextId: row.commercial_context_id
+      ? String(row.commercial_context_id)
+      : null,
     valor: Number(row.valor ?? 0),
     fechado: row.fechado === true,
     archivedAt: row.archived_at ? String(row.archived_at) : null,
@@ -76,6 +79,31 @@ export async function updateLeadCommercialFields(input: {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function updateLeadCommercialContext(input: {
+  empresaId: string | number;
+  leadId: string | number;
+  commercialContextId: string | null;
+}): Promise<Lead> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      commercial_context_id: input.commercialContextId,
+      col_at: new Date().toISOString(),
+    })
+    .eq("id", input.leadId)
+    .eq("empresa_id", input.empresaId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return rowToLead(data);
 }
 
 export async function archiveLeadById(input: {

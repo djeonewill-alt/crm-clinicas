@@ -10,6 +10,7 @@ import {
 import {
   archiveLeadById,
   createLeadForEmpresa,
+  updateLeadCommercialContext,
   updateLeadCommercialFields,
 } from "@/lib/services/leads-client";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/lib/services/queue";
 import type { LeadHistoryItem } from "@/types/lead-history";
 import type { LeadHistoryType } from "@/types/lead-history";
+import type { CommercialContext } from "@/types/commercial-contexts";
 import type { Lead } from "@/types/lead";
 
 export type VisibleFunnelId = (typeof FUNNELS)[number]["id"];
@@ -34,6 +36,7 @@ const EMPTY_FILTER_VALUE = "__empty__";
 type UseComercialTrabalhoParams = {
   initialLeads: Lead[];
   empresaId: string | number;
+  commercialContexts?: CommercialContext[];
 };
 
 type LeadDetailsInput = {
@@ -154,6 +157,7 @@ export function getLastAction(lead: Lead) {
 export function useComercialTrabalho({
   initialLeads,
   empresaId,
+  commercialContexts = [],
 }: UseComercialTrabalhoParams) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [workFunnel, setWorkFunnel] = useState<VisibleFunnelId>("prospeccao");
@@ -490,6 +494,72 @@ export function useComercialTrabalho({
     }
 
     return saved;
+  }
+
+  async function handleUpdateCommercialContext(contextId: string | null) {
+    setMessage("");
+
+    if (!selectedLead) {
+      setMessage("Selecione um lead para alterar o contexto.");
+      return false;
+    }
+
+    const previousContextId = selectedLead.commercialContextId ?? null;
+    const newContextId = contextId || null;
+
+    if (previousContextId === newContextId) {
+      setMessage("Contexto comercial mantido.");
+      return true;
+    }
+
+    const newContext =
+      commercialContexts.find((context) => context.id === newContextId) ?? null;
+
+    const previousLeads = leads;
+    setSavingLeadId(selectedLead.id);
+
+    try {
+      const updatedLead = await updateLeadCommercialContext({
+        empresaId,
+        leadId: selectedLead.id,
+        commercialContextId: newContextId,
+      });
+
+      setLeads((current) =>
+        current.map((lead) =>
+          String(lead.id) === String(updatedLead.id) ? updatedLead : lead
+        )
+      );
+      setMessage("Contexto comercial atualizado.");
+
+      await recordLeadHistoryEvent({
+        leadId: updatedLead.id,
+        type: "note",
+        title: "Contexto comercial atualizado",
+        description: newContext
+          ? `Contexto comercial alterado para: ${newContext.name}`
+          : "Contexto comercial removido do lead.",
+        metadata: {
+          event: "commercial_context_updated",
+          source: "lead_detail",
+          previousContextId,
+          newContextId,
+          newContextName: newContext?.name ?? null,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      setLeads(previousLeads);
+      setMessage(
+        error instanceof Error
+          ? `Erro ao salvar contexto: ${error.message}`
+          : "Erro ao salvar contexto."
+      );
+      return false;
+    } finally {
+      setSavingLeadId(null);
+    }
   }
 
   async function handleCreateLeadNote(description: string) {
@@ -908,6 +978,7 @@ export function useComercialTrabalho({
     handleChangeFunnel,
     handleCreateLead,
     handleUpdateLeadDetails,
+    handleUpdateCommercialContext,
     handleCreateLeadNote,
     loadLeadHistory,
     handleSetResultado,

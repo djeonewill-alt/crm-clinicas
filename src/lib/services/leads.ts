@@ -27,6 +27,9 @@ export function rowToLead(row: LeadRow): Lead {
     diaProsp: String(row.dia_prosp ?? "d1"),
     esp: String(row.esp ?? ""),
     campanha: String(row.campanha ?? ""),
+    commercialContextId: row.commercial_context_id
+      ? String(row.commercial_context_id)
+      : null,
     valor: Number(row.valor ?? 0),
     fechado: toBoolean(row.fechado),
     archivedAt: row.archived_at ? String(row.archived_at) : null,

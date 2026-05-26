@@ -4,6 +4,7 @@ import {
   listActiveCommercialResponses,
   listCommercialResponseCategories,
 } from "@/lib/services/commercial-responses";
+import { listActiveCommercialContexts } from "@/lib/services/commercial-contexts";
 import { getLeadsByEmpresa } from "@/lib/services/leads";
 
 export default async function ComercialTrabalhoPage() {
@@ -19,11 +20,17 @@ export default async function ComercialTrabalhoPage() {
     );
   }
 
-  const [leads, commercialResponseCategories, commercialResponses] =
+  const [
+    leads,
+    commercialResponseCategories,
+    commercialResponses,
+    commercialContexts,
+  ] =
     await Promise.all([
       getLeadsByEmpresa(context.empresaAtual.id),
       listCommercialResponseCategories(context.empresaAtual.id),
       listActiveCommercialResponses(context.empresaAtual.id),
+      listActiveCommercialContexts(context.empresaAtual.id),
     ]);
 
   return (
@@ -33,6 +40,7 @@ export default async function ComercialTrabalhoPage() {
       empresaNome={context.empresaAtual.nome}
       commercialResponseCategories={commercialResponseCategories}
       commercialResponses={commercialResponses}
+      commercialContexts={commercialContexts}
     />
   );
 }

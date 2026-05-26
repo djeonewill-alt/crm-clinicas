@@ -10,6 +10,7 @@ import type {
   CommercialResponse,
   CommercialResponseCategory,
 } from "@/types/commercial-responses";
+import type { CommercialContext } from "@/types/commercial-contexts";
 import type { Lead } from "@/types/lead";
 
 type ComercialTrabalhoClientProps = {
@@ -18,6 +19,7 @@ type ComercialTrabalhoClientProps = {
   empresaNome: string;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
+  commercialContexts: CommercialContext[];
 };
 
 export function ComercialTrabalhoClient({
@@ -26,10 +28,12 @@ export function ComercialTrabalhoClient({
   empresaNome,
   commercialResponseCategories,
   commercialResponses,
+  commercialContexts,
 }: ComercialTrabalhoClientProps) {
   const comercial = useComercialTrabalho({
     initialLeads,
     empresaId,
+    commercialContexts,
   });
 
   return (
@@ -123,6 +127,8 @@ export function ComercialTrabalhoClient({
           getLastAction={comercial.getLastAction}
           commercialResponseCategories={commercialResponseCategories}
           commercialResponses={commercialResponses}
+          commercialContexts={commercialContexts}
+          onUpdateCommercialContext={comercial.handleUpdateCommercialContext}
         />
       </section>
     </div>

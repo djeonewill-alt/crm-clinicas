@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
 import { LeadAssistedServicePanel } from "@/components/comercial/LeadAssistedServicePanel";
+import { LeadCommercialContextSelector } from "@/components/comercial/LeadCommercialContextSelector";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
 import { LeadMessageScripts } from "@/components/comercial/LeadMessageScripts";
@@ -16,6 +17,7 @@ import type {
   CommercialResponse,
   CommercialResponseCategory,
 } from "@/types/commercial-responses";
+import type { CommercialContext } from "@/types/commercial-contexts";
 import type { LeadHistoryItem } from "@/types/lead-history";
 import type { Lead } from "@/types/lead";
 
@@ -57,6 +59,10 @@ type LeadDetailProps = {
   getLastAction: (lead: Lead) => string;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
+  commercialContexts: CommercialContext[];
+  onUpdateCommercialContext: (
+    contextId: string | null
+  ) => boolean | void | Promise<boolean | void>;
 };
 
 function getLeadName(lead: Lead) {
@@ -101,6 +107,8 @@ export function LeadDetail({
   getLastAction,
   commercialResponseCategories,
   commercialResponses,
+  commercialContexts,
+  onUpdateCommercialContext,
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showLegacyScripts, setShowLegacyScripts] = useState(false);
@@ -182,6 +190,12 @@ export function LeadDetail({
           onMoveToRetorno={onMoveToRetorno}
         />
       </div>
+
+      <LeadCommercialContextSelector
+        currentContextId={lead.commercialContextId ?? null}
+        contexts={commercialContexts}
+        onChangeContext={onUpdateCommercialContext}
+      />
 
       <LeadAssistedServicePanel
         leadId={lead.id}
