@@ -5,6 +5,11 @@ import {
   findBestCommercialResponses,
   type CommercialResponseMatch,
 } from "@/lib/comercial/commercial-response-matcher";
+import {
+  suggestCommercialNextAction,
+  type CommercialNextActionSuggestion,
+  type CommercialSuggestedFunnel,
+} from "@/lib/comercial/commercial-next-action-suggester";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import type {
   CommercialResponse,
@@ -21,9 +26,23 @@ type LeadAssistedServicePanelProps = {
 };
 
 const FUTURE_ACTIONS = [
-  "Sugerir próxima ação",
   "Blocos rápidos",
 ];
+
+const FUNNEL_LABELS: Record<CommercialSuggestedFunnel, string> = {
+  prospeccao: "Prospecção",
+  qualificacao: "Qualificação",
+  retorno: "Retorno",
+  clientes: "Clientes",
+  keep_current: "Manter funil atual",
+};
+
+const RISK_LABELS: Record<CommercialNextActionSuggestion["riskLevel"], string> =
+  {
+    low: "baixo",
+    medium: "médio",
+    high: "alto",
+  };
 
 export function LeadAssistedServicePanel({
   leadId,
@@ -38,6 +57,8 @@ export function LeadAssistedServicePanel({
   const [statusMessage, setStatusMessage] = useState("");
   const [suggestionMatch, setSuggestionMatch] =
     useState<CommercialResponseMatch | null>(null);
+  const [nextActionSuggestion, setNextActionSuggestion] =
+    useState<CommercialNextActionSuggestion | null>(null);
   const [isRegisteringReceived, setIsRegisteringReceived] = useState(false);
   const [isRegisteringReply, setIsRegisteringReply] = useState(false);
 
@@ -46,6 +67,7 @@ export function LeadAssistedServicePanel({
     setReplyText("");
     setStatusMessage("");
     setSuggestionMatch(null);
+    setNextActionSuggestion(null);
     setIsRegisteringReceived(false);
     setIsRegisteringReply(false);
   }, [leadId]);
@@ -65,6 +87,12 @@ export function LeadAssistedServicePanel({
     });
 
     if (!result.bestMatch) {
+      setNextActionSuggestion(
+        suggestCommercialNextAction({
+          message: trimmedMessage,
+          bestMatch: null,
+        })
+      );
       setSuggestionMatch(null);
       setStatusMessage(
         "Nenhuma resposta aprovada encontrada para essa mensagem. Revise manualmente ou crie uma nova resposta aprovada depois."
@@ -72,7 +100,13 @@ export function LeadAssistedServicePanel({
       return;
     }
 
+    const nextAction = suggestCommercialNextAction({
+      message: trimmedMessage,
+      bestMatch: result.bestMatch,
+    });
+
     setSuggestionMatch(result.bestMatch);
+    setNextActionSuggestion(nextAction);
     setReplyText(result.bestMatch.response.answerText);
     setStatusMessage("Resposta aprovada encontrada e preenchida.");
   }
@@ -207,6 +241,7 @@ export function LeadAssistedServicePanel({
             onChange={(event) => {
               setReceivedMessage(event.target.value);
               setSuggestionMatch(null);
+              setNextActionSuggestion(null);
             }}
             rows={5}
             className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
@@ -307,7 +342,74 @@ export function LeadAssistedServicePanel({
         </div>
       )}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {nextActionSuggestion && (
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+                Próxima ação sugerida
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                {nextActionSuggestion.title}
+              </p>
+              <p className="mt-1 text-sm text-[var(--text2)]">
+                {nextActionSuggestion.description}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {nextActionSuggestion.shouldMoveFunnel &&
+                nextActionSuggestion.suggestedFunnel === "qualificacao" && (
+                  <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300">
+                    Mover para Qualificação
+                  </span>
+                )}
+
+              {nextActionSuggestion.shouldMoveFunnel &&
+                nextActionSuggestion.suggestedFunnel === "retorno" && (
+                  <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-purple-300">
+                    Mover para Retorno
+                  </span>
+                )}
+
+              {nextActionSuggestion.requiresHuman && (
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                  Precisa humano
+                </span>
+              )}
+
+              {nextActionSuggestion.riskLevel === "high" && (
+                <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-red-300">
+                  Risco alto
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-xs text-[var(--text2)] sm:grid-cols-3">
+            <div>Funil sugerido: {FUNNEL_LABELS[nextActionSuggestion.suggestedFunnel]}</div>
+            <div>
+              Recomenda mover:{" "}
+              {nextActionSuggestion.shouldMoveFunnel ? "sim" : "não"}
+            </div>
+            <div>Risco: {RISK_LABELS[nextActionSuggestion.riskLevel]}</div>
+          </div>
+
+          {nextActionSuggestion.reasons.length > 0 && (
+            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+              <span className="font-semibold text-[var(--text)]">Razões: </span>
+              {nextActionSuggestion.reasons.join(" ")}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-[var(--text3)]">
+            Esta é apenas uma sugestão local. O CRM não move o lead
+            automaticamente nesta etapa.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-1">
         {FUTURE_ACTIONS.map((action) => (
           <button
             key={action}
