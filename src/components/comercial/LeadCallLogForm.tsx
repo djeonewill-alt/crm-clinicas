@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 
 type LeadCallLogFormProps = {
@@ -62,6 +62,102 @@ export function LeadCallLogForm({
   const [nextContactDate, setNextContactDate] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      discardAudio();
+      stopMediaStream();
+    };
+  }, []);
+
+  function stopMediaStream() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }
+
+  function discardAudio() {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+    }
+
+    audioUrlRef.current = null;
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingError("");
+  }
+
+  async function handleStartRecording() {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setRecordingError("Seu navegador não permite gravação de áudio nesta tela.");
+      return;
+    }
+
+    try {
+      discardAudio();
+      setRecordingError("");
+      audioChunksRef.current = [];
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        const nextAudioUrl = URL.createObjectURL(blob);
+
+        audioUrlRef.current = nextAudioUrl;
+        setAudioBlob(blob);
+        setAudioUrl(nextAudioUrl);
+        setIsRecording(false);
+        stopMediaStream();
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      stopMediaStream();
+      setIsRecording(false);
+      setRecordingError(
+        error instanceof Error
+          ? `Não foi possível iniciar a gravação: ${error.message}`
+          : "Não foi possível iniciar a gravação."
+      );
+    }
+  }
+
+  function handleStopRecording() {
+    const recorder = mediaRecorderRef.current;
+
+    if (!recorder || recorder.state === "inactive") {
+      stopMediaStream();
+      setIsRecording(false);
+      return;
+    }
+
+    recorder.stop();
+  }
 
   async function handleSave() {
     if (!callResult) {
@@ -127,6 +223,7 @@ export function LeadCallLogForm({
       setSummary("");
       setNextAction("");
       setNextContactDate("");
+      discardAudio();
       setStatusMessage("Ligação registrada no histórico.");
     } catch (error) {
       setStatusMessage(
@@ -201,6 +298,74 @@ export function LeadCallLogForm({
           placeholder="Ex: Chamar dia 16 para enviar Pix."
         />
       </label>
+
+      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+            Resumo por áudio
+          </p>
+          <p className="mt-1 text-xs text-[var(--text2)]">
+            Grave um resumo logo após a ligação. Nesta etapa, o áudio fica
+            apenas no navegador para você ouvir e usar como apoio. A transcrição
+            automática será adicionada depois.
+          </p>
+          <p className="mt-2 text-xs text-[var(--text3)]">
+            Grave apenas o seu resumo após a ligação. Evite gravar a voz do
+            cliente sem autorização.
+          </p>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isRecording}
+            onClick={() => void handleStartRecording()}
+            className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Iniciar gravação
+          </button>
+
+          <button
+            type="button"
+            disabled={!isRecording}
+            onClick={handleStopRecording}
+            className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Parar gravação
+          </button>
+
+          <button
+            type="button"
+            disabled={!audioBlob && !audioUrl}
+            onClick={discardAudio}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Descartar áudio
+          </button>
+        </div>
+
+        {isRecording && (
+          <p className="mt-2 text-xs font-semibold text-red-300">
+            Gravando...
+          </p>
+        )}
+
+        {recordingError && (
+          <p className="mt-2 text-xs text-red-300">{recordingError}</p>
+        )}
+
+        {audioUrl && (
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+            <audio controls src={audioUrl} className="w-full" />
+            <p className="mt-2 text-xs text-[var(--text2)]">
+              Áudio gravado localmente. Ele ainda não será salvo no histórico.
+            </p>
+            <p className="mt-1 text-xs text-[var(--text3)]">
+              Ouça o áudio e escreva ou ajuste o resumo no campo de resumo.
+            </p>
+          </div>
+        )}
+      </section>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
