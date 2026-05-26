@@ -6,18 +6,26 @@ import { LeadQueue } from "@/components/comercial/LeadQueue";
 import { LeadDetail } from "@/components/comercial/LeadDetail";
 import { ComercialWorkHeader } from "@/components/comercial/ComercialWorkHeader";
 import { useComercialTrabalho } from "@/components/comercial/useComercialTrabalho";
+import type {
+  CommercialResponse,
+  CommercialResponseCategory,
+} from "@/types/commercial-responses";
 import type { Lead } from "@/types/lead";
 
 type ComercialTrabalhoClientProps = {
   initialLeads: Lead[];
   empresaId: string | number;
   empresaNome: string;
+  commercialResponseCategories: CommercialResponseCategory[];
+  commercialResponses: CommercialResponse[];
 };
 
 export function ComercialTrabalhoClient({
   initialLeads,
   empresaId,
   empresaNome,
+  commercialResponseCategories,
+  commercialResponses,
 }: ComercialTrabalhoClientProps) {
   const comercial = useComercialTrabalho({
     initialLeads,
@@ -113,6 +121,8 @@ export function ComercialTrabalhoClient({
           onRefreshLeadHistory={comercial.loadLeadHistory}
           onAdvanceQueue={comercial.handleAdvanceQueue}
           getLastAction={comercial.getLastAction}
+          commercialResponseCategories={commercialResponseCategories}
+          commercialResponses={commercialResponses}
         />
       </section>
     </div>

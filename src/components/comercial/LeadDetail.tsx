@@ -12,6 +12,10 @@ import {
   ensureTentativasForLead,
   getAttemptProgress,
 } from "@/lib/services/queue";
+import type {
+  CommercialResponse,
+  CommercialResponseCategory,
+} from "@/types/commercial-responses";
 import type { LeadHistoryItem } from "@/types/lead-history";
 import type { Lead } from "@/types/lead";
 
@@ -48,6 +52,8 @@ type LeadDetailProps = {
   onRefreshLeadHistory: (leadId: string) => void | Promise<void>;
   onAdvanceQueue: (lead: Lead) => void | Promise<void>;
   getLastAction: (lead: Lead) => string;
+  commercialResponseCategories: CommercialResponseCategory[];
+  commercialResponses: CommercialResponse[];
 };
 
 function getLeadName(lead: Lead) {
@@ -90,6 +96,8 @@ export function LeadDetail({
   onRefreshLeadHistory,
   onAdvanceQueue,
   getLastAction,
+  commercialResponseCategories,
+  commercialResponses,
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showLegacyScripts, setShowLegacyScripts] = useState(false);
@@ -177,6 +185,8 @@ export function LeadDetail({
         empresaId={empresaId}
         leadName={lead.nome}
         onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
+        commercialResponseCategories={commercialResponseCategories}
+        commercialResponses={commercialResponses}
       />
 
       <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">

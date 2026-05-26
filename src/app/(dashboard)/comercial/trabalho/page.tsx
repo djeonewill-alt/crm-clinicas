@@ -1,5 +1,9 @@
-﻿import { ComercialTrabalhoClient } from "@/components/comercial/ComercialTrabalhoClient";
+import { ComercialTrabalhoClient } from "@/components/comercial/ComercialTrabalhoClient";
 import { getDashboardContext } from "@/lib/services/dashboard-context";
+import {
+  listActiveCommercialResponses,
+  listCommercialResponseCategories,
+} from "@/lib/services/commercial-responses";
 import { getLeadsByEmpresa } from "@/lib/services/leads";
 
 export default async function ComercialTrabalhoPage() {
@@ -15,13 +19,20 @@ export default async function ComercialTrabalhoPage() {
     );
   }
 
-  const leads = await getLeadsByEmpresa(context.empresaAtual.id);
+  const [leads, commercialResponseCategories, commercialResponses] =
+    await Promise.all([
+      getLeadsByEmpresa(context.empresaAtual.id),
+      listCommercialResponseCategories(context.empresaAtual.id),
+      listActiveCommercialResponses(context.empresaAtual.id),
+    ]);
 
   return (
     <ComercialTrabalhoClient
       initialLeads={leads}
       empresaId={context.empresaAtual.id}
       empresaNome={context.empresaAtual.nome}
+      commercialResponseCategories={commercialResponseCategories}
+      commercialResponses={commercialResponses}
     />
   );
 }
