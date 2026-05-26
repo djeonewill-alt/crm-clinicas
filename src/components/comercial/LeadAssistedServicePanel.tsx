@@ -185,6 +185,8 @@ export function LeadAssistedServicePanel({
   const [newResponseIsActive, setNewResponseIsActive] = useState(true);
   const [newResponseCanAutoReply, setNewResponseCanAutoReply] = useState(false);
   const [newResponseRequiresHuman, setNewResponseRequiresHuman] = useState(true);
+  const [newResponseUseCurrentContext, setNewResponseUseCurrentContext] =
+    useState(true);
   const [isCreatingApprovedResponse, setIsCreatingApprovedResponse] =
     useState(false);
   const [approvedResponseMessage, setApprovedResponseMessage] = useState("");
@@ -224,6 +226,7 @@ export function LeadAssistedServicePanel({
     setNewResponseIsActive(true);
     setNewResponseCanAutoReply(false);
     setNewResponseRequiresHuman(true);
+    setNewResponseUseCurrentContext(true);
     setApprovedResponseMessage("");
     setIsCreatingApprovedResponse(false);
   }
@@ -235,6 +238,7 @@ export function LeadAssistedServicePanel({
       if (!current) {
         setNewResponseAnswerText(replyText);
         setNewResponseQuestions(receivedMessage);
+        setNewResponseUseCurrentContext(true);
         setApprovedResponseMessage("");
       }
 
@@ -293,6 +297,16 @@ export function LeadAssistedServicePanel({
       response,
       categoryName: category?.name ?? null,
       categorySlug: category?.slug ?? null,
+      contextScope:
+        currentCommercialContext && response.contextId === currentCommercialContext.id
+          ? "current_context"
+          : response.contextId === null
+            ? "global"
+            : "other_context",
+      contextName:
+        currentCommercialContext && response.contextId === currentCommercialContext.id
+          ? currentCommercialContext.name
+          : null,
       score: 0,
       matchedTerms: [],
     });
@@ -318,6 +332,8 @@ export function LeadAssistedServicePanel({
       message: trimmedMessage,
       categories: commercialResponseCategories,
       responses: localCommercialResponses,
+      currentContextId: currentCommercialContext?.id ?? null,
+      currentContextName: currentCommercialContext?.name ?? null,
     });
 
     if (!result.bestMatch) {
@@ -588,6 +604,10 @@ export function LeadAssistedServicePanel({
           canAutoReply: newResponseCanAutoReply,
           requiresHuman: newResponseRequiresHuman,
           internalNotes: newResponseInternalNotes,
+          contextId:
+            currentCommercialContext && newResponseUseCurrentContext
+              ? currentCommercialContext.id
+              : null,
           priority: 50,
         },
       });
@@ -820,6 +840,18 @@ export function LeadAssistedServicePanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {suggestionMatch.contextScope === "current_context" && (
+                <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
+                  Resposta do contexto
+                </span>
+              )}
+
+              {suggestionMatch.contextScope === "global" && (
+                <span className="rounded-full border border-[var(--border2)] bg-[var(--bg3)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text2)]">
+                  Resposta global
+                </span>
+              )}
+
               {suggestionMatch.response.requiresHuman && (
                 <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
                   Revisar antes de enviar
@@ -833,6 +865,20 @@ export function LeadAssistedServicePanel({
               )}
             </div>
           </div>
+
+          <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+            {suggestionMatch.contextScope === "current_context"
+              ? `Esta resposta pertence ao contexto: ${
+                  suggestionMatch.contextName ?? "contexto atual"
+                }.`
+              : "Esta resposta e global e pode ser usada quando nao houver resposta especifica do contexto."}
+          </p>
+
+          <p className="mt-2 text-xs text-[var(--text3)]">
+            {currentCommercialContext
+              ? "O matcher considera respostas globais e respostas deste contexto. Respostas de outros contextos sao ignoradas."
+              : "Sem contexto no lead: o matcher considera apenas respostas globais."}
+          </p>
 
           <div className="mt-3 grid gap-2 text-xs text-[var(--text2)] sm:grid-cols-2">
             <div>Pontuação: {suggestionMatch.score.toFixed(1)}</div>
@@ -1185,6 +1231,25 @@ export function LeadAssistedServicePanel({
                 Precisa revisão humana
               </label>
             </div>
+
+            {currentCommercialContext && (
+              <label className="mt-3 flex items-center gap-2 text-xs text-[var(--text2)]">
+                <input
+                  type="checkbox"
+                  checked={newResponseUseCurrentContext}
+                  onChange={(event) =>
+                    setNewResponseUseCurrentContext(event.target.checked)
+                  }
+                />
+                Vincular esta resposta ao contexto atual
+              </label>
+            )}
+
+            <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+              {currentCommercialContext
+                ? "Use o vinculo ao contexto quando a resposta so vale para este publico/campanha. Desmarque para salvar como resposta global."
+                : "Sem contexto no lead. Esta resposta sera salva como global."}
+            </p>
 
             <div className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
               <p>
