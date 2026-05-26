@@ -12,6 +12,7 @@ import {
   type CommercialNextActionSuggestion,
   type CommercialSuggestedFunnel,
 } from "@/lib/comercial/commercial-next-action-suggester";
+import { createCommercialResponse } from "@/lib/services/commercial-responses-client";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import type {
   CommercialResponse,
@@ -150,6 +151,28 @@ export function LeadAssistedServicePanel({
   const [isSchedulingReturn, setIsSchedulingReturn] = useState(false);
   const [showCallLogForm, setShowCallLogForm] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [localCommercialResponses, setLocalCommercialResponses] =
+    useState(commercialResponses);
+  const [showApprovedResponseForm, setShowApprovedResponseForm] =
+    useState(false);
+  const [newResponseCategoryId, setNewResponseCategoryId] = useState("");
+  const [newResponseTitle, setNewResponseTitle] = useState("");
+  const [newResponseAnswerText, setNewResponseAnswerText] = useState("");
+  const [newResponseQuestions, setNewResponseQuestions] = useState("");
+  const [newResponseTags, setNewResponseTags] = useState("");
+  const [newResponseInternalNotes, setNewResponseInternalNotes] = useState(
+    "Resposta criada a partir do Atendimento Assistido."
+  );
+  const [newResponseIsActive, setNewResponseIsActive] = useState(true);
+  const [newResponseCanAutoReply, setNewResponseCanAutoReply] = useState(false);
+  const [newResponseRequiresHuman, setNewResponseRequiresHuman] = useState(true);
+  const [isCreatingApprovedResponse, setIsCreatingApprovedResponse] =
+    useState(false);
+  const [approvedResponseMessage, setApprovedResponseMessage] = useState("");
+
+  useEffect(() => {
+    setLocalCommercialResponses(commercialResponses);
+  }, [commercialResponses]);
 
   useEffect(() => {
     setReceivedMessage("");
@@ -166,7 +189,39 @@ export function LeadAssistedServicePanel({
     setIsSchedulingReturn(false);
     setShowCallLogForm(false);
     setShowQuickReplies(false);
+    setShowApprovedResponseForm(false);
+    resetApprovedResponseForm();
   }, [leadId]);
+
+  function resetApprovedResponseForm() {
+    setNewResponseCategoryId("");
+    setNewResponseTitle("");
+    setNewResponseAnswerText("");
+    setNewResponseQuestions("");
+    setNewResponseTags("");
+    setNewResponseInternalNotes(
+      "Resposta criada a partir do Atendimento Assistido."
+    );
+    setNewResponseIsActive(true);
+    setNewResponseCanAutoReply(false);
+    setNewResponseRequiresHuman(true);
+    setApprovedResponseMessage("");
+    setIsCreatingApprovedResponse(false);
+  }
+
+  function toggleApprovedResponseForm() {
+    setShowApprovedResponseForm((current) => {
+      const next = !current;
+
+      if (!current) {
+        setNewResponseAnswerText(replyText);
+        setNewResponseQuestions(receivedMessage);
+        setApprovedResponseMessage("");
+      }
+
+      return next;
+    });
+  }
 
   function getResponseCategory(response: CommercialResponse) {
     if (!response.categoryId) return null;
@@ -181,7 +236,7 @@ export function LeadAssistedServicePanel({
   function findQuickReplyResponse(block: QuickReplyBlock) {
     const normalizedTitleIncludes =
       block.titleIncludes?.map(normalizeCommercialSearchText) ?? [];
-    const activeResponses = commercialResponses.filter(
+    const activeResponses = localCommercialResponses.filter(
       (response) => response.isActive
     );
     const titleMatch =
@@ -243,7 +298,7 @@ export function LeadAssistedServicePanel({
     const result = findBestCommercialResponses({
       message: trimmedMessage,
       categories: commercialResponseCategories,
-      responses: commercialResponses,
+      responses: localCommercialResponses,
     });
 
     if (!result.bestMatch) {
@@ -462,6 +517,74 @@ export function LeadAssistedServicePanel({
       );
     } finally {
       setIsRegisteringReview(false);
+    }
+  }
+
+  function parseLines(value: string) {
+    return value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function parseTags(value: string) {
+    return value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  async function handleCreateApprovedResponse() {
+    const title = newResponseTitle.trim();
+    const answerText = newResponseAnswerText.trim();
+
+    if (!newResponseCategoryId) {
+      setApprovedResponseMessage("Selecione uma categoria.");
+      return;
+    }
+
+    if (!title) {
+      setApprovedResponseMessage("Informe um título interno.");
+      return;
+    }
+
+    if (!answerText) {
+      setApprovedResponseMessage("Informe a resposta aprovada.");
+      return;
+    }
+
+    setIsCreatingApprovedResponse(true);
+    setApprovedResponseMessage("");
+
+    try {
+      const createdResponse = await createCommercialResponse({
+        empresaId,
+        data: {
+          categoryId: newResponseCategoryId,
+          title,
+          answerText,
+          exampleQuestions: parseLines(newResponseQuestions),
+          tags: parseTags(newResponseTags),
+          isActive: newResponseIsActive,
+          canAutoReply: newResponseCanAutoReply,
+          requiresHuman: newResponseRequiresHuman,
+          internalNotes: newResponseInternalNotes,
+          priority: 50,
+        },
+      });
+
+      setLocalCommercialResponses((current) => [createdResponse, ...current]);
+      resetApprovedResponseForm();
+      setShowApprovedResponseForm(false);
+      setStatusMessage("Resposta aprovada criada com sucesso.");
+    } catch (error) {
+      setApprovedResponseMessage(
+        error instanceof Error
+          ? `Erro ao criar resposta aprovada: ${error.message}`
+          : "Erro ao criar resposta aprovada."
+      );
+    } finally {
+      setIsCreatingApprovedResponse(false);
     }
   }
 
@@ -810,6 +933,183 @@ export function LeadAssistedServicePanel({
               Blocos com preço, promoção, pagamento, gestante, menor de idade
               ou certificações devem ser revisados antes do envio.
             </p>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Salvar como resposta aprovada
+            </p>
+            <p className="mt-1 text-xs text-[var(--text2)]">
+              Use quando você editou uma resposta, consultou a especialista ou
+              criou uma resposta melhor para uma pergunta nova. Depois de
+              salvar, ela ficará disponível na base de respostas comerciais.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleApprovedResponseForm}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+          >
+            {showApprovedResponseForm
+              ? "Ocultar criação de resposta aprovada"
+              : "Mostrar criação de resposta aprovada"}
+          </button>
+        </div>
+
+        {showApprovedResponseForm && (
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Categoria
+                <select
+                  value={newResponseCategoryId}
+                  onChange={(event) =>
+                    setNewResponseCategoryId(event.target.value)
+                  }
+                  className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {commercialResponseCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Título interno
+                <input
+                  value={newResponseTitle}
+                  onChange={(event) => setNewResponseTitle(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                  placeholder="Ex: Pergunta sobre queloide / cuidado com pele sensível"
+                />
+              </label>
+            </div>
+
+            <label className="mt-3 block text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Resposta aprovada
+              <textarea
+                value={newResponseAnswerText}
+                onChange={(event) =>
+                  setNewResponseAnswerText(event.target.value)
+                }
+                rows={5}
+                className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="Escreva a resposta aprovada que poderá ser reutilizada."
+              />
+            </label>
+
+            <label className="mt-3 block text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Perguntas parecidas
+              <textarea
+                value={newResponseQuestions}
+                onChange={(event) =>
+                  setNewResponseQuestions(event.target.value)
+                }
+                rows={3}
+                className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="Coloque uma pergunta por linha."
+              />
+              <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-[var(--text3)]">
+                Coloque uma pergunta por linha. Isso ajuda o CRM a encontrar
+                essa resposta depois.
+              </span>
+            </label>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Tags
+                <input
+                  value={newResponseTags}
+                  onChange={(event) => setNewResponseTags(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                  placeholder="Ex: queloide, pele sensível, contraindicação"
+                />
+              </label>
+
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Observações internas
+                <input
+                  value={newResponseInternalNotes}
+                  onChange={(event) =>
+                    setNewResponseInternalNotes(event.target.value)
+                  }
+                  className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                />
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 text-xs text-[var(--text2)]">
+                <input
+                  type="checkbox"
+                  checked={newResponseIsActive}
+                  onChange={(event) =>
+                    setNewResponseIsActive(event.target.checked)
+                  }
+                />
+                Ativa
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-[var(--text2)]">
+                <input
+                  type="checkbox"
+                  checked={newResponseCanAutoReply}
+                  onChange={(event) =>
+                    setNewResponseCanAutoReply(event.target.checked)
+                  }
+                />
+                Candidata a auto resposta futura
+              </label>
+
+              <label className="flex items-center gap-2 text-xs text-[var(--text2)]">
+                <input
+                  type="checkbox"
+                  checked={newResponseRequiresHuman}
+                  onChange={(event) =>
+                    setNewResponseRequiresHuman(event.target.checked)
+                  }
+                />
+                Precisa revisão humana
+              </label>
+            </div>
+
+            <div className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+              <p>
+                Não salve como resposta aprovada informações que ainda não
+                foram confirmadas pela especialista ou pela clínica.
+              </p>
+              <p>
+                Valores, promoções, contraindicações, gestantes, menores de
+                idade e certificações devem ser marcados como revisão humana.
+              </p>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isCreatingApprovedResponse}
+                onClick={() => void handleCreateApprovedResponse()}
+                className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCreatingApprovedResponse
+                  ? "Salvando..."
+                  : "Salvar na base de respostas"}
+              </button>
+
+              {approvedResponseMessage && (
+                <span className="text-xs text-[var(--text2)]">
+                  {approvedResponseMessage}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </section>
