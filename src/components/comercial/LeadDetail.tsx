@@ -17,6 +17,7 @@ import type { Lead } from "@/types/lead";
 
 type LeadDetailProps = {
   lead: Lead | null;
+  empresaId: string | number;
   savingLeadId: string | number | null;
   retornoDate: string;
   leadHistory: LeadHistoryItem[];
@@ -44,6 +45,7 @@ type LeadDetailProps = {
   onCreateLeadNote: (
     description: string
   ) => boolean | void | Promise<boolean | void>;
+  onRefreshLeadHistory: (leadId: string) => void | Promise<void>;
   onAdvanceQueue: (lead: Lead) => void | Promise<void>;
   getLastAction: (lead: Lead) => string;
 };
@@ -68,6 +70,7 @@ function formatDate(value?: string | null) {
 
 export function LeadDetail({
   lead,
+  empresaId,
   savingLeadId,
   retornoDate,
   leadHistory,
@@ -84,6 +87,7 @@ export function LeadDetail({
   onUpdateLeadDetails,
   onSetResultado,
   onCreateLeadNote,
+  onRefreshLeadHistory,
   onAdvanceQueue,
   getLastAction,
 }: LeadDetailProps) {
@@ -167,7 +171,12 @@ export function LeadDetail({
         />
       </div>
 
-      <LeadAssistedServicePanel leadName={lead.nome} />
+      <LeadAssistedServicePanel
+        leadId={lead.id}
+        empresaId={empresaId}
+        leadName={lead.nome}
+        onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
+      />
 
       <LeadMessageScripts lead={lead} />
 

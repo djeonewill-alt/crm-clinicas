@@ -89,6 +89,7 @@ export function ComercialTrabalhoClient({
 
         <LeadDetail
           lead={comercial.selectedLead}
+          empresaId={empresaId}
           savingLeadId={comercial.savingLeadId}
           retornoDate={comercial.retornoDate}
           leadHistory={comercial.leadHistory}
@@ -109,6 +110,7 @@ export function ComercialTrabalhoClient({
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}
           onCreateLeadNote={comercial.handleCreateLeadNote}
+          onRefreshLeadHistory={comercial.loadLeadHistory}
           onAdvanceQueue={comercial.handleAdvanceQueue}
           getLastAction={comercial.getLastAction}
         />

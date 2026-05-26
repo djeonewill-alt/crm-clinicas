@@ -1,27 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 
 type LeadAssistedServicePanelProps = {
+  leadId: string | number;
+  empresaId: string | number;
   leadName?: string;
+  onHistoryChanged?: () => Promise<void> | void;
 };
 
 const FUTURE_ACTIONS = [
   "Analisar e sugerir resposta",
-  "Registrar como enviada",
   "Sugerir próxima ação",
   "Blocos rápidos",
 ];
 
 export function LeadAssistedServicePanel({
+  leadId,
+  empresaId,
   leadName,
+  onHistoryChanged,
 }: LeadAssistedServicePanelProps) {
   const [receivedMessage, setReceivedMessage] = useState("");
   const [replyText, setReplyText] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [isRegisteringReceived, setIsRegisteringReceived] = useState(false);
+  const [isRegisteringReply, setIsRegisteringReply] = useState(false);
 
-  function handleRegisterReceived() {
-    setStatusMessage("Registro no histórico será adicionado na próxima etapa.");
+  useEffect(() => {
+    setReceivedMessage("");
+    setReplyText("");
+    setStatusMessage("");
+    setIsRegisteringReceived(false);
+    setIsRegisteringReply(false);
+  }, [leadId]);
+
+  async function handleRegisterReceived() {
+    const trimmedMessage = receivedMessage.trim();
+
+    if (!trimmedMessage) {
+      setStatusMessage("Cole a mensagem recebida antes de registrar.");
+      return;
+    }
+
+    setIsRegisteringReceived(true);
+    setStatusMessage("");
+
+    try {
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: "Mensagem recebida do cliente",
+        description: trimmedMessage,
+        metadata: {
+          event: "customer_message_received",
+          source: "whatsapp_manual",
+          messageText: trimmedMessage,
+          assistedPanel: true,
+        },
+      });
+
+      await onHistoryChanged?.();
+      setStatusMessage("Mensagem recebida registrada no histórico.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar mensagem recebida: ${error.message}`
+          : "Erro ao registrar mensagem recebida."
+      );
+    } finally {
+      setIsRegisteringReceived(false);
+    }
+  }
+
+  async function handleRegisterReplySent() {
+    const trimmedReply = replyText.trim();
+
+    if (!trimmedReply) {
+      setStatusMessage("Escreva ou cole a resposta antes de registrar.");
+      return;
+    }
+
+    setIsRegisteringReply(true);
+    setStatusMessage("");
+
+    try {
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: "Resposta enviada ao cliente",
+        description: trimmedReply,
+        metadata: {
+          event: "commercial_reply_sent",
+          source: "whatsapp_manual",
+          replyText: trimmedReply,
+          assistedPanel: true,
+        },
+      });
+
+      await onHistoryChanged?.();
+      setStatusMessage("Resposta enviada registrada no histórico.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar resposta enviada: ${error.message}`
+          : "Erro ao registrar resposta enviada."
+      );
+    } finally {
+      setIsRegisteringReply(false);
+    }
   }
 
   async function handleCopyReply() {
@@ -80,10 +170,11 @@ export function LeadAssistedServicePanel({
           />
           <button
             type="button"
-            onClick={handleRegisterReceived}
-            className="mt-2 rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)]"
+            disabled={isRegisteringReceived}
+            onClick={() => void handleRegisterReceived()}
+            className="mt-2 rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Registrar recebida
+            {isRegisteringReceived ? "Registrando..." : "Registrar recebida"}
           </button>
         </div>
 
@@ -98,17 +189,28 @@ export function LeadAssistedServicePanel({
             className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
             placeholder="A resposta sugerida aparecerá aqui. Por enquanto, você pode escrever ou colar uma resposta manualmente."
           />
-          <button
-            type="button"
-            onClick={() => void handleCopyReply()}
-            className="mt-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)]"
-          >
-            Copiar resposta
-          </button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleCopyReply()}
+              className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)]"
+            >
+              Copiar resposta
+            </button>
+
+            <button
+              type="button"
+              disabled={isRegisteringReply}
+              onClick={() => void handleRegisterReplySent()}
+              className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRegisteringReply ? "Registrando..." : "Registrar como enviada"}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {FUTURE_ACTIONS.map((action) => (
           <button
             key={action}
