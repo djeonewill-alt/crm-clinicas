@@ -66,6 +66,9 @@ export function LeadCallLogForm({
   const [recordingError, setRecordingError] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState("");
+  const [transcriptionMessage, setTranscriptionMessage] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -92,6 +95,8 @@ export function LeadCallLogForm({
     setAudioBlob(null);
     setAudioUrl(null);
     setRecordingError("");
+    setTranscriptionError("");
+    setTranscriptionMessage("");
   }
 
   async function handleStartRecording() {
@@ -107,6 +112,8 @@ export function LeadCallLogForm({
     try {
       discardAudio();
       setRecordingError("");
+      setTranscriptionError("");
+      setTranscriptionMessage("");
       audioChunksRef.current = [];
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -157,6 +164,66 @@ export function LeadCallLogForm({
     }
 
     recorder.stop();
+  }
+
+  async function handleTranscribeAudio() {
+    if (!audioBlob) {
+      setTranscriptionError("Grave um áudio antes de transcrever.");
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError("");
+    setTranscriptionMessage("");
+
+    const formData = new FormData();
+    const audioFile = new File([audioBlob], "call-summary.webm", {
+      type: audioBlob.type || "audio/webm",
+    });
+
+    formData.append("audio", audioFile);
+
+    try {
+      const response = await fetch("/api/comercial/calls/transcribe-summary", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        transcript?: unknown;
+        error?: unknown;
+      };
+
+      if (!response.ok) {
+        const errorMessage =
+          typeof data.error === "string"
+            ? data.error
+            : "Erro ao transcrever áudio.";
+
+        setTranscriptionError(
+          errorMessage === "OPENAI_API_KEY não configurada."
+            ? "Transcrição ainda não configurada. Adicione a OPENAI_API_KEY no ambiente para usar este recurso."
+            : errorMessage
+        );
+        return;
+      }
+
+      const transcript =
+        typeof data.transcript === "string" ? data.transcript.trim() : "";
+
+      if (!transcript) {
+        setTranscriptionError("A transcrição voltou vazia. Tente gravar novamente.");
+        return;
+      }
+
+      setSummary(transcript);
+      setTranscriptionMessage(
+        "Transcrição preenchida no resumo. Revise antes de salvar."
+      );
+    } catch {
+      setTranscriptionError("Erro ao transcrever áudio.");
+    } finally {
+      setIsTranscribing(false);
+    }
   }
 
   async function handleSave() {
@@ -224,6 +291,8 @@ export function LeadCallLogForm({
       setNextAction("");
       setNextContactDate("");
       discardAudio();
+      setTranscriptionError("");
+      setTranscriptionMessage("");
       setStatusMessage("Ligação registrada no histórico.");
     } catch (error) {
       setStatusMessage(
@@ -363,6 +432,28 @@ export function LeadCallLogForm({
             <p className="mt-1 text-xs text-[var(--text3)]">
               Ouça o áudio e escreva ou ajuste o resumo no campo de resumo.
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isTranscribing || !audioBlob}
+                onClick={() => void handleTranscribeAudio()}
+                className="rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isTranscribing ? "Transcrevendo..." : "Transcrever áudio"}
+              </button>
+              <span className="text-xs text-[var(--text3)]">
+                A transcrição serve como rascunho. Revise o texto antes de
+                salvar no histórico.
+              </span>
+            </div>
+            {transcriptionMessage && (
+              <p className="mt-2 text-xs text-[var(--text2)]">
+                {transcriptionMessage}
+              </p>
+            )}
+            {transcriptionError && (
+              <p className="mt-2 text-xs text-red-300">{transcriptionError}</p>
+            )}
           </div>
         )}
       </section>
