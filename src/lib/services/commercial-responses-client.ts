@@ -38,6 +38,7 @@ function rowToCommercialResponse(row: CommercialResponseRow): CommercialResponse
     id: String(row.id ?? ""),
     empresaId: String(row.empresa_id ?? ""),
     categoryId: row.category_id ? String(row.category_id) : null,
+    contextId: row.context_id ? String(row.context_id) : null,
     title: String(row.title ?? ""),
     answerText: String(row.answer_text ?? ""),
     exampleQuestions: toStringArray(row.example_questions),
@@ -93,6 +94,7 @@ function buildResponsePayload(data: CommercialResponseFormInput) {
 
   return {
     category_id: data.categoryId || null,
+    context_id: data.contextId || null,
     title,
     answer_text: answerText,
     example_questions: normalizeStringArray(data.exampleQuestions),

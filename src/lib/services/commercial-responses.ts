@@ -32,6 +32,7 @@ function rowToCommercialResponse(row: CommercialResponseRow): CommercialResponse
     id: String(row.id ?? ""),
     empresaId: String(row.empresa_id ?? ""),
     categoryId: row.category_id ? String(row.category_id) : null,
+    contextId: row.context_id ? String(row.context_id) : null,
     title: String(row.title ?? ""),
     answerText: String(row.answer_text ?? ""),
     exampleQuestions: toStringArray(row.example_questions),

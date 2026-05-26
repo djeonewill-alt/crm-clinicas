@@ -14,6 +14,7 @@ export type CommercialResponse = {
   id: string;
   empresaId: string;
   categoryId?: string | null;
+  contextId: string | null;
   title: string;
   answerText: string;
   exampleQuestions: string[];
@@ -37,6 +38,7 @@ export type CommercialResponseCategoryFormInput = {
 
 export type CommercialResponseFormInput = {
   categoryId?: string | null;
+  contextId?: string | null;
   title: string;
   answerText: string;
   exampleQuestions?: string[];
