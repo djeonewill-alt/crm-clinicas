@@ -92,6 +92,7 @@ export function LeadDetail({
   getLastAction,
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showLegacyScripts, setShowLegacyScripts] = useState(false);
 
   if (!lead) {
     return (
@@ -178,7 +179,31 @@ export function LeadDetail({
         onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
       />
 
-      <LeadMessageScripts lead={lead} />
+      <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Mensagens prontas antigas
+            </p>
+            <p className="mt-1 text-sm text-[var(--text2)]">
+              Esses scripts continuam disponíveis como apoio, mas o fluxo
+              principal agora é pelo Atendimento Assistido.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowLegacyScripts((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+          >
+            {showLegacyScripts
+              ? "Ocultar scripts antigos"
+              : "Mostrar scripts antigos"}
+          </button>
+        </div>
+      </section>
+
+      {showLegacyScripts && <LeadMessageScripts lead={lead} />}
 
       <TentativasList
         lead={lead}
