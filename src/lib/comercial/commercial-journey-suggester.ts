@@ -81,15 +81,16 @@ export function suggestCommercialJourneyNextStep(input: {
     if (stats.isComplete && ["d3", "d4", "d5"].includes(diaProsp)) {
       return createSuggestion({
         type: "move_to_recovery",
-        title: "Cadencia quase esgotada",
+        title: "Enviar para recuperacao futura",
         description:
-          "O lead ja recebeu varias tentativas sem resposta. Avalie mover para recuperacao futura ou arquivamento estrategico.",
+          "O lead recebeu as tentativas previstas e nao respondeu. Arquive como recuperacao futura para reaproveitar em campanhas posteriores.",
         recommendedFunnel: "arquivados",
-        actionLabel: "Avaliar recuperacao",
+        actionLabel: "Enviar para recuperacao futura",
         riskLevel: "medium",
         reasons: [
-          `Etapa atual: ${lead.diaProsp || "sem etapa"}.`,
-          "Todas as tentativas da etapa estao concluidas.",
+          "Tentativas da etapa concluidas.",
+          "Lead sem resposta apos cadencia.",
+          "Pode ser reativado em campanha futura.",
         ],
       });
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import { suggestCommercialJourneyNextStep } from "@/lib/comercial/commercial-journey-suggester";
 import { getAttemptProgress } from "@/lib/services/queue";
@@ -10,6 +11,7 @@ type LeadJourneyCardProps = {
   lead: Lead;
   tentativas?: Tentativa[];
   currentCommercialContext?: CommercialContext | null;
+  onSendToRecovery?: () => void | Promise<void>;
 };
 
 function getFunnelLabel(funnelId: string) {
@@ -52,7 +54,9 @@ export function LeadJourneyCard({
   lead,
   tentativas,
   currentCommercialContext,
+  onSendToRecovery,
 }: LeadJourneyCardProps) {
+  const [isSendingToRecovery, setIsSendingToRecovery] = useState(false);
   const progress = getAttemptProgress({ ...lead, tentativas });
   const funnelLabel = getFunnelLabel(lead.funnel);
   const dayLabel = getDayLabel(lead.diaProsp);
@@ -61,6 +65,26 @@ export function LeadJourneyCard({
       ? `${progress.completed}/${progress.total} tentativas concluidas`
       : "Nenhuma tentativa configurada para esta etapa.";
   const suggestion = suggestCommercialJourneyNextStep({ lead, tentativas });
+  const canSendToRecovery =
+    suggestion.type === "move_to_recovery" && Boolean(onSendToRecovery);
+
+  async function handleSendToRecovery() {
+    if (!onSendToRecovery) return;
+
+    const confirmed = window.confirm(
+      "Enviar este lead para recuperacao futura? Ele saira da fila principal, mas podera ser restaurado depois em Arquivados."
+    );
+
+    if (!confirmed) return;
+
+    setIsSendingToRecovery(true);
+
+    try {
+      await onSendToRecovery();
+    } finally {
+      setIsSendingToRecovery(false);
+    }
+  }
 
   return (
     <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
@@ -144,6 +168,25 @@ export function LeadJourneyCard({
                 {reason}
               </span>
             ))}
+          </div>
+        )}
+
+        {canSendToRecovery && (
+          <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] p-3">
+            <p className="text-xs leading-relaxed text-[var(--text3)]">
+              Recuperacao futura arquiva o lead sem apagar dados. Ele pode ser
+              reativado depois em campanhas ou promocoes.
+            </p>
+            <button
+              type="button"
+              onClick={handleSendToRecovery}
+              disabled={isSendingToRecovery}
+              className="mt-2 rounded-lg border border-[rgba(232,197,71,.55)] bg-[rgba(232,197,71,.16)] px-3 py-2 text-xs font-semibold text-[var(--accent)] transition hover:bg-[rgba(232,197,71,.24)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSendingToRecovery
+                ? "Enviando..."
+                : "Enviar para recuperacao futura"}
+            </button>
           </div>
         )}
       </div>

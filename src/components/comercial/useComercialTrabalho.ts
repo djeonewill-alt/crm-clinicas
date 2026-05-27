@@ -52,6 +52,13 @@ type ScheduleReturnInput = {
   note?: string;
 };
 
+type ArchiveLeadOptions = {
+  recovery?: boolean;
+  source?: string;
+  reason?: string;
+  skipConfirm?: boolean;
+};
+
 export type MarkLeadAttemptResult = {
   marked: boolean;
   message: string;
@@ -1002,10 +1009,14 @@ export function useComercialTrabalho({
     selectNextLeadAfter(lead.id);
   }
 
-  async function handleArchiveLead(lead: Lead) {
-    const confirmArchive = window.confirm(
-      "Arquivar este lead? Ele sairá da fila e dos funis, mas os dados e o histórico serão preservados."
-    );
+  async function handleArchiveLead(lead: Lead, options?: ArchiveLeadOptions) {
+    const isRecovery = options?.recovery === true;
+    const confirmMessage = isRecovery
+      ? "Enviar este lead para recuperação futura? Ele sairá da fila principal, mas poderá ser restaurado depois em Arquivados."
+      : "Arquivar este lead? Ele sairá da fila e dos funis, mas os dados e o histórico serão preservados.";
+    const confirmArchive = options?.skipConfirm
+      ? true
+      : window.confirm(confirmMessage);
 
     if (!confirmArchive) return;
 
@@ -1025,12 +1036,25 @@ export function useComercialTrabalho({
       await recordLeadHistoryEvent({
         leadId: lead.id,
         type: "status_change",
-        title: "Lead arquivado",
-        description: "Lead arquivado. Dados e histórico preservados.",
-        metadata: {
-          event: "lead_archived",
-          fromFunnel: lead.funnel,
-        },
+        title: isRecovery
+          ? "Lead enviado para recuperação futura"
+          : "Lead arquivado",
+        description: isRecovery
+          ? "Lead arquivado como recuperação futura. Dados e histórico preservados para reativação posterior."
+          : "Lead arquivado. Dados e histórico preservados.",
+        metadata: isRecovery
+          ? {
+              event: "lead_sent_to_recovery",
+              source: options?.source ?? "manual",
+              reason: options?.reason ?? "cadence_exhausted",
+              funnelBefore: lead.funnel,
+              diaProsp: lead.diaProsp,
+              tentativas: lead.tentativas ?? [],
+            }
+          : {
+              event: "lead_archived",
+              fromFunnel: lead.funnel,
+            },
       });
 
       setLeads((current) =>
@@ -1039,7 +1063,11 @@ export function useComercialTrabalho({
       setSelectedLeadId((current) =>
         String(current) === String(lead.id) ? nextLead?.id ?? null : current
       );
-      setMessage("Lead arquivado. Dados e histórico preservados.");
+      setMessage(
+        isRecovery
+          ? "Lead enviado para recuperação futura. Ele pode ser restaurado em Arquivados."
+          : "Lead arquivado. Dados e histórico preservados."
+      );
     } catch (error) {
       setMessage(
         error instanceof Error

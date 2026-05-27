@@ -39,6 +39,7 @@ type LeadDetailProps = {
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
   onArchiveLead: () => void | Promise<void>;
+  onSendToRecovery: () => void | Promise<void>;
   onMoveToRetorno: (
     lead: Lead,
     input?: { returnDate?: string; note?: string }
@@ -112,6 +113,7 @@ export function LeadDetail({
   onCloseClient,
   onDisqualify,
   onArchiveLead,
+  onSendToRecovery,
   onMoveToRetorno,
   onUpdateLeadDetails,
   onSetResultado,
@@ -217,6 +219,7 @@ export function LeadDetail({
         lead={lead}
         tentativas={tentativas}
         currentCommercialContext={currentCommercialContext}
+        onSendToRecovery={onSendToRecovery}
       />
 
       <LeadCommercialContextSelector

@@ -120,6 +120,16 @@ export function ComercialTrabalhoClient({
               void comercial.handleArchiveLead(comercial.selectedLead);
             }
           }}
+          onSendToRecovery={() => {
+            if (comercial.selectedLead) {
+              void comercial.handleArchiveLead(comercial.selectedLead, {
+                recovery: true,
+                source: "journey_card",
+                reason: "cadence_exhausted",
+                skipConfirm: true,
+              });
+            }
+          }}
           onMoveToRetorno={comercial.handleMoveToRetorno}
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}

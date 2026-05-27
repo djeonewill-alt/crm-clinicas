@@ -256,10 +256,14 @@ export function ComercialArquivadosClient({
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
               Comercial / Arquivados · {empresaNome}
             </p>
-            <h1 className="text-xl font-semibold">Leads Arquivados</h1>
+            <h1 className="text-xl font-semibold">
+              Leads arquivados e recuperação futura
+            </h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--text2)]">
               Leads arquivados saem da fila, dos funis e dos relatórios
-              principais, mas os dados e o histórico são preservados.
+              principais, mas os dados e o histórico são preservados. Aqui
+              também ficam leads sem resposta, pausados ou guardados para
+              reativação futura.
             </p>
           </div>
 
