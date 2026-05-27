@@ -82,6 +82,8 @@ export function ComercialTrabalhoClient({
             phone={comercial.newLeadPhone}
             interest={comercial.newLeadInterest}
             campaign={comercial.newLeadCampaign}
+            suggestedContextName={comercial.newLeadSuggestedContext?.name ?? null}
+            contextSuggestionMessage={comercial.newLeadContextSuggestionMessage}
             isSaving={comercial.savingLeadId === "new-lead"}
             onNameChange={comercial.setNewLeadName}
             onPhoneChange={comercial.setNewLeadPhone}

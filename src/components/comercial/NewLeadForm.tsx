@@ -3,6 +3,8 @@
   phone: string;
   interest: string;
   campaign: string;
+  suggestedContextName?: string | null;
+  contextSuggestionMessage?: string;
   isSaving: boolean;
   onNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
@@ -17,6 +19,8 @@ export function NewLeadForm({
   phone,
   interest,
   campaign,
+  suggestedContextName,
+  contextSuggestionMessage,
   isSaving,
   onNameChange,
   onPhoneChange,
@@ -83,6 +87,13 @@ export function NewLeadForm({
             className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             placeholder="Instagram, tráfego, indicação..."
           />
+          {(suggestedContextName || contextSuggestionMessage) && (
+            <p className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+              {suggestedContextName
+                ? `Contexto sugerido: ${suggestedContextName}`
+                : contextSuggestionMessage}
+            </p>
+          )}
         </div>
       </div>
 

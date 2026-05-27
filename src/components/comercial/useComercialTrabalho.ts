@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
+import { resolveCommercialContextForCampaign } from "@/lib/comercial/commercial-context-resolver";
 import {
   createLeadHistoryEvent,
   createLeadHistoryNote,
@@ -249,6 +250,18 @@ export function useComercialTrabalho({
     () => buildFilterOptions(leads, (lead) => lead.esp, getInterestLabel),
     [leads]
   );
+  const newLeadContextResolution = useMemo(
+    () =>
+      resolveCommercialContextForCampaign({
+        campaign: newLeadCampaign,
+        contexts: commercialContexts,
+      }),
+    [commercialContexts, newLeadCampaign]
+  );
+  const newLeadSuggestedContext = newLeadContextResolution.context;
+  const newLeadContextSuggestionMessage = newLeadCampaign.trim()
+    ? "Base global: nenhum contexto compatível encontrado."
+    : "";
 
   const queuesByFunnel = useMemo(() => {
     if (!hasActiveFilters) return queuesBeforeSearch;
@@ -446,12 +459,18 @@ export function useComercialTrabalho({
     setSavingLeadId("new-lead");
 
     try {
+      const contextResolution = resolveCommercialContextForCampaign({
+        campaign: newLeadCampaign,
+        contexts: commercialContexts,
+      });
+      const autoContext = contextResolution.context;
       const createdLead = await createLeadForEmpresa({
         empresaId,
         nome: newLeadName,
         tel: newLeadPhone,
         esp: newLeadInterest,
         campanha: newLeadCampaign,
+        commercialContextId: autoContext?.id ?? null,
         tentativas: createTentativasForDay("prospeccao", "d1"),
       });
 
@@ -464,7 +483,11 @@ export function useComercialTrabalho({
       setNewLeadPhone("");
       setNewLeadInterest("");
       setNewLeadCampaign("");
-      setMessage("Novo lead criado em Prospecção / d1.");
+      setMessage(
+        autoContext
+          ? `Novo lead criado em Prospecção / d1. Contexto aplicado automaticamente: ${autoContext.name}.`
+          : "Novo lead criado em Prospecção / d1."
+      );
 
       await recordLeadHistoryEvent({
         leadId: createdLead.id,
@@ -476,6 +499,11 @@ export function useComercialTrabalho({
           source: "manual",
           funnel: "prospeccao",
           diaProsp: "d1",
+          commercialContextAutoApplied: Boolean(autoContext),
+          commercialContextId: autoContext?.id ?? null,
+          commercialContextName: autoContext?.name ?? null,
+          campaignUsedForContext: newLeadCampaign.trim() || null,
+          commercialContextMatchReason: contextResolution.reason,
         },
       });
     } catch (error) {
@@ -1085,6 +1113,8 @@ export function useComercialTrabalho({
     setNewLeadInterest,
     newLeadCampaign,
     setNewLeadCampaign,
+    newLeadSuggestedContext,
+    newLeadContextSuggestionMessage,
 
     listMode,
     setListMode,

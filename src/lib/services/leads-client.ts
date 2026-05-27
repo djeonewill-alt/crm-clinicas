@@ -205,6 +205,7 @@ export async function createLeadForEmpresa(input: {
   tel: string;
   esp?: string;
   campanha?: string;
+  commercialContextId?: string | null;
   tentativas: Tentativa[];
 }) {
   const supabase = createClient();
@@ -218,6 +219,7 @@ export async function createLeadForEmpresa(input: {
       tel: input.tel.trim(),
       esp: input.esp?.trim() || "",
       campanha: input.campanha?.trim() || "",
+      commercial_context_id: input.commercialContextId || null,
       funnel: "prospeccao",
       dia_prosp: "d1",
       tentativas: input.tentativas,
