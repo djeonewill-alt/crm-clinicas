@@ -259,24 +259,47 @@ export function LeadAssistedServicePanel({
   function findQuickReplyResponse(block: QuickReplyBlock) {
     const normalizedTitleIncludes =
       block.titleIncludes?.map(normalizeCommercialSearchText) ?? [];
-    const activeResponses = localCommercialResponses.filter(
-      (response) => response.isActive
-    );
-    const titleMatch =
-      activeResponses.find((response) => {
-        const normalizedTitle = normalizeCommercialSearchText(response.title);
-        return normalizedTitleIncludes.some((titlePart) =>
-          normalizedTitle.includes(titlePart)
-        );
-      }) ?? null;
+    const currentContextId = currentCommercialContext?.id ?? null;
+    const scopedResponses = localCommercialResponses.filter((response) => {
+      if (!response.isActive) return false;
 
-    if (titleMatch) return titleMatch;
+      if (currentContextId) {
+        return (
+          response.contextId === null || response.contextId === currentContextId
+        );
+      }
+
+      return response.contextId === null;
+    });
+    const contextResponses = currentContextId
+      ? scopedResponses.filter(
+          (response) => response.contextId === currentContextId
+        )
+      : [];
+    const globalResponses = scopedResponses.filter(
+      (response) => response.contextId === null
+    );
+
+    function matchesTitle(response: CommercialResponse) {
+      if (normalizedTitleIncludes.length === 0) return false;
+
+      const normalizedTitle = normalizeCommercialSearchText(response.title);
+      return normalizedTitleIncludes.some((titlePart) =>
+        normalizedTitle.includes(titlePart)
+      );
+    }
+
+    function matchesCategory(response: CommercialResponse) {
+      const category = getResponseCategory(response);
+      return Boolean(block.categorySlug) && category?.slug === block.categorySlug;
+    }
 
     return (
-      activeResponses.find((response) => {
-        const category = getResponseCategory(response);
-        return Boolean(block.categorySlug) && category?.slug === block.categorySlug;
-      }) ?? null
+      contextResponses.find(matchesTitle) ??
+      contextResponses.find(matchesCategory) ??
+      globalResponses.find(matchesTitle) ??
+      globalResponses.find(matchesCategory) ??
+      null
     );
   }
 
@@ -290,28 +313,41 @@ export function LeadAssistedServicePanel({
       return;
     }
 
+    if (
+      response.contextId &&
+      (!currentCommercialContext ||
+        response.contextId !== currentCommercialContext.id)
+    ) {
+      setStatusMessage("Resposta ignorada por pertencer a outro contexto.");
+      return;
+    }
+
     const category = getResponseCategory(response);
+    const contextScope =
+      currentCommercialContext &&
+      response.contextId === currentCommercialContext.id
+        ? "current_context"
+        : "global";
 
     setReplyText(response.answerText);
     setSuggestionMatch({
       response,
       categoryName: category?.name ?? null,
       categorySlug: category?.slug ?? null,
-      contextScope:
-        currentCommercialContext && response.contextId === currentCommercialContext.id
-          ? "current_context"
-          : response.contextId === null
-            ? "global"
-            : "other_context",
+      contextScope,
       contextName:
-        currentCommercialContext && response.contextId === currentCommercialContext.id
-          ? currentCommercialContext.name
+        contextScope === "current_context"
+          ? currentCommercialContext?.name ?? null
           : null,
       score: 0,
       matchedTerms: [],
     });
     setNextActionSuggestion(null);
-    setStatusMessage(`Bloco rápido aplicado: ${block.label}`);
+    setStatusMessage(
+      contextScope === "current_context"
+        ? `Bloco rápido aplicado do contexto: ${currentCommercialContext?.name}.`
+        : "Bloco rápido global aplicado como apoio."
+    );
   }
 
   function todayInputValue() {
@@ -842,13 +878,15 @@ export function LeadAssistedServicePanel({
             <div className="flex flex-wrap gap-2">
               {suggestionMatch.contextScope === "current_context" && (
                 <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
-                  Resposta do contexto
+                  {suggestionMatch.score === 0
+                    ? "Bloco do contexto"
+                    : "Resposta do contexto"}
                 </span>
               )}
 
               {suggestionMatch.contextScope === "global" && (
                 <span className="rounded-full border border-[var(--border2)] bg-[var(--bg3)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text2)]">
-                  Resposta global
+                  {suggestionMatch.score === 0 ? "Bloco global" : "Resposta global"}
                 </span>
               )}
 
@@ -867,7 +905,14 @@ export function LeadAssistedServicePanel({
           </div>
 
           <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
-            {suggestionMatch.contextScope === "current_context"
+            {suggestionMatch.score === 0 &&
+            suggestionMatch.contextScope === "current_context"
+              ? `Resposta aplicada do contexto: ${
+                  suggestionMatch.contextName ?? "contexto atual"
+                }.`
+              : suggestionMatch.score === 0
+                ? "Resposta global usada como apoio."
+                : suggestionMatch.contextScope === "current_context"
               ? `Esta resposta pertence ao contexto: ${
                   suggestionMatch.contextName ?? "contexto atual"
                 }.`
@@ -1049,8 +1094,13 @@ export function LeadAssistedServicePanel({
               Blocos rápidos
             </p>
             <p className="mt-1 text-xs text-[var(--text2)]">
-              Use estes atalhos para preencher a resposta com uma mensagem
-              aprovada comum. Revise antes de enviar no WhatsApp.
+              Os blocos rápidos priorizam respostas do contexto comercial do
+              lead. Se não houver resposta específica, usam uma resposta global.
+            </p>
+            <p className="mt-1 text-xs text-[var(--text3)]">
+              {currentCommercialContext
+                ? `Contexto atual: ${currentCommercialContext.name}. Respostas de outros contextos são ignoradas.`
+                : "Este lead está sem contexto. Os blocos rápidos usam apenas respostas globais."}
             </p>
           </div>
 
