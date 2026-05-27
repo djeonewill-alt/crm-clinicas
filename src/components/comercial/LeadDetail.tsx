@@ -253,6 +253,7 @@ export function LeadDetail({
           return onMoveToRetorno(lead, { returnDate, note });
         }}
         currentFunnel={lead.funnel}
+        currentJourneyStep={lead.diaProsp}
         currentCommercialContext={currentCommercialContext}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}

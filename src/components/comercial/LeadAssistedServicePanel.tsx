@@ -25,6 +25,14 @@ type AttemptMarkResult = {
   message: string;
 };
 
+type AiAdaptationResult = {
+  adaptedReply: string;
+  confidence: number;
+  requiresHumanReview: boolean;
+  safetyNotes: string[];
+  usedApprovedAnswerOnly: boolean;
+};
+
 type LeadAssistedServicePanelProps = {
   leadId: string | number;
   empresaId: string | number;
@@ -43,6 +51,7 @@ type LeadAssistedServicePanelProps = {
     note?: string;
   }) => Promise<void> | void;
   currentFunnel?: string | null;
+  currentJourneyStep?: string | null;
   currentCommercialContext?: CommercialContext | null;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
@@ -164,6 +173,7 @@ export function LeadAssistedServicePanel({
   onCallLoggedAttempt,
   onScheduleReturn,
   currentFunnel,
+  currentJourneyStep,
   currentCommercialContext,
   commercialResponseCategories,
   commercialResponses,
@@ -175,6 +185,12 @@ export function LeadAssistedServicePanel({
     useState<CommercialResponseMatch | null>(null);
   const [nextActionSuggestion, setNextActionSuggestion] =
     useState<CommercialNextActionSuggestion | null>(null);
+  const [isAdaptingWithAi, setIsAdaptingWithAi] = useState(false);
+  const [aiAdaptationError, setAiAdaptationError] = useState("");
+  const [aiAdaptationInfo, setAiAdaptationInfo] = useState("");
+  const [aiSafetyNotes, setAiSafetyNotes] = useState<string[]>([]);
+  const [aiRequiresHumanReview, setAiRequiresHumanReview] = useState(false);
+  const [aiAdapted, setAiAdapted] = useState(false);
   const [isRegisteringReceived, setIsRegisteringReceived] = useState(false);
   const [isRegisteringReply, setIsRegisteringReply] = useState(false);
   const [isApplyingAction, setIsApplyingAction] = useState(false);
@@ -215,6 +231,7 @@ export function LeadAssistedServicePanel({
     setStatusMessage("");
     setSuggestionMatch(null);
     setNextActionSuggestion(null);
+    resetAiAdaptationState();
     setIsRegisteringReceived(false);
     setIsRegisteringReply(false);
     setIsApplyingAction(false);
@@ -243,6 +260,15 @@ export function LeadAssistedServicePanel({
     setNewResponseUseCurrentContext(true);
     setApprovedResponseMessage("");
     setIsCreatingApprovedResponse(false);
+  }
+
+  function resetAiAdaptationState() {
+    setIsAdaptingWithAi(false);
+    setAiAdaptationError("");
+    setAiAdaptationInfo("");
+    setAiSafetyNotes([]);
+    setAiRequiresHumanReview(false);
+    setAiAdapted(false);
   }
 
   function toggleApprovedResponseForm() {
@@ -344,6 +370,7 @@ export function LeadAssistedServicePanel({
         : "global";
 
     setReplyText(response.answerText);
+    resetAiAdaptationState();
     setSuggestionMatch({
       response,
       categoryName: category?.name ?? null,
@@ -370,13 +397,64 @@ export function LeadAssistedServicePanel({
     return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
   }
 
-  function handleAnalyzeMessage() {
+  async function adaptApprovedResponseWithAi(input: {
+    customerMessage: string;
+    match: CommercialResponseMatch;
+  }): Promise<AiAdaptationResult> {
+    const response = input.match.response;
+
+    const result = await fetch("/api/comercial/ai/adapt-approved-response", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customerMessage: input.customerMessage,
+        approvedAnswerText: response.answerText,
+        approvedResponseTitle: response.title,
+        approvedResponseCategory: input.match.categoryName,
+        contextName: currentCommercialContext?.name ?? null,
+        contextPriceNotes: currentCommercialContext?.priceNotes ?? null,
+        contextPaymentNotes: currentCommercialContext?.paymentNotes ?? null,
+        contextScheduleNotes: currentCommercialContext?.scheduleNotes ?? null,
+        contextUnitsNotes: currentCommercialContext?.unitsNotes ?? null,
+        contextSafetyNotes: currentCommercialContext?.safetyNotes ?? null,
+        leadName: leadName ?? null,
+        leadFunnel: currentFunnel ?? null,
+        leadJourneyStep: currentJourneyStep ?? null,
+        requiresHuman: response.requiresHuman,
+        canAutoReply: response.canAutoReply,
+      }),
+    });
+
+    const data = (await result.json().catch(() => ({}))) as
+      | AiAdaptationResult
+      | { error?: string };
+
+    if (!result.ok) {
+      throw new Error(
+        "error" in data && data.error
+          ? data.error
+          : "Erro ao adaptar resposta com IA."
+      );
+    }
+
+    if (!("adaptedReply" in data) || !data.adaptedReply?.trim()) {
+      throw new Error("Resposta inválida da IA.");
+    }
+
+    return data;
+  }
+
+  async function handleAnalyzeMessage() {
     const trimmedMessage = receivedMessage.trim();
 
     if (!trimmedMessage) {
       setStatusMessage("Cole a mensagem recebida antes de analisar.");
       return;
     }
+
+    resetAiAdaptationState();
 
     const result = findBestCommercialResponses({
       message: trimmedMessage,
@@ -394,6 +472,7 @@ export function LeadAssistedServicePanel({
         })
       );
       setSuggestionMatch(null);
+      setReplyText("");
       setStatusMessage(
         "Nenhuma resposta aprovada encontrada para essa mensagem. Revise manualmente ou crie uma nova resposta aprovada depois."
       );
@@ -408,7 +487,40 @@ export function LeadAssistedServicePanel({
     setSuggestionMatch(result.bestMatch);
     setNextActionSuggestion(nextAction);
     setReplyText(result.bestMatch.response.answerText);
-    setStatusMessage("Resposta aprovada encontrada e preenchida.");
+    setStatusMessage("Resposta aprovada encontrada. Adaptando com IA...");
+    setIsAdaptingWithAi(true);
+
+    try {
+      const adapted = await adaptApprovedResponseWithAi({
+        customerMessage: trimmedMessage,
+        match: result.bestMatch,
+      });
+
+      setReplyText(adapted.adaptedReply);
+      setAiAdapted(true);
+      setAiRequiresHumanReview(
+        adapted.requiresHumanReview || result.bestMatch.response.requiresHuman
+      );
+      setAiSafetyNotes(adapted.safetyNotes);
+      setAiAdaptationInfo("Adaptada com IA usando resposta aprovada.");
+      setStatusMessage("Resposta aprovada adaptada com IA.");
+    } catch (error) {
+      setReplyText(result.bestMatch.response.answerText);
+      setAiAdapted(false);
+      setAiRequiresHumanReview(result.bestMatch.response.requiresHuman);
+      setAiSafetyNotes([]);
+      setAiAdaptationError(
+        error instanceof Error
+          ? error.message
+          : "Erro ao adaptar resposta com IA."
+      );
+      setAiAdaptationInfo("Fallback para resposta aprovada original.");
+      setStatusMessage(
+        "Não foi possível adaptar com IA. Usei a resposta aprovada original."
+      );
+    } finally {
+      setIsAdaptingWithAi(false);
+    }
   }
 
   async function handleRegisterReceived() {
@@ -473,6 +585,12 @@ export function LeadAssistedServicePanel({
           source: "whatsapp_manual",
           replyText: trimmedReply,
           assistedPanel: true,
+          aiAdapted,
+          approvedResponseId: suggestionMatch?.response.id ?? null,
+          approvedResponseTitle: suggestionMatch?.response.title ?? null,
+          requiresHumanReview:
+            aiRequiresHumanReview ||
+            suggestionMatch?.response.requiresHuman === true,
         },
       });
 
@@ -774,6 +892,7 @@ export function LeadAssistedServicePanel({
               setReceivedMessage(event.target.value);
               setSuggestionMatch(null);
               setNextActionSuggestion(null);
+              resetAiAdaptationState();
             }}
             rows={5}
             className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
@@ -789,10 +908,13 @@ export function LeadAssistedServicePanel({
           </button>
           <button
             type="button"
-            onClick={handleAnalyzeMessage}
-            className="ml-2 mt-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)]"
+            disabled={isAdaptingWithAi}
+            onClick={() => void handleAnalyzeMessage()}
+            className="ml-2 mt-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Analisar e sugerir resposta
+            {isAdaptingWithAi
+              ? "Adaptando com IA..."
+              : "Analisar e sugerir resposta"}
           </button>
         </div>
 
@@ -862,7 +984,26 @@ export function LeadAssistedServicePanel({
                 </span>
               )}
 
-              {suggestionMatch.response.requiresHuman && (
+              {suggestionMatch.response.requiresHuman &&
+                !aiRequiresHumanReview && (
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                  Revisar antes de enviar
+                </span>
+              )}
+
+              {aiAdapted && (
+                <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300">
+                  Adaptada com IA
+                </span>
+              )}
+
+              {aiAdaptationInfo && !aiAdapted && (
+                <span className="rounded-full border border-[var(--border2)] bg-[var(--bg3)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text2)]">
+                  Fallback para resposta aprovada
+                </span>
+              )}
+
+              {aiRequiresHumanReview && (
                 <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
                   Revisar antes de enviar
                 </span>
@@ -896,6 +1037,26 @@ export function LeadAssistedServicePanel({
               ? "O matcher considera respostas globais e respostas deste contexto. Respostas de outros contextos sao ignoradas."
               : "Sem contexto no lead: o matcher considera apenas respostas globais."}
           </p>
+
+          {(aiAdaptationInfo || aiAdaptationError || aiSafetyNotes.length > 0) && (
+            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+              {aiAdaptationInfo && (
+                <p className="font-semibold text-[var(--text)]">
+                  {aiAdaptationInfo}
+                </p>
+              )}
+              {aiAdaptationError && (
+                <p className="mt-1 text-amber-300">{aiAdaptationError}</p>
+              )}
+              {aiSafetyNotes.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-[var(--text3)]">
+                  {aiSafetyNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 grid gap-2 text-xs text-[var(--text2)] sm:grid-cols-2">
             <div>Pontuação: {suggestionMatch.score.toFixed(1)}</div>
