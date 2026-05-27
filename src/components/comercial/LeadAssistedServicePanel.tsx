@@ -391,6 +391,7 @@ export function LeadAssistedServicePanel({
   const [receivedMessage, setReceivedMessage] = useState("");
   const [replyText, setReplyText] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [copyFeedbackMessage, setCopyFeedbackMessage] = useState("");
   const [suggestionMatch, setSuggestionMatch] =
     useState<CommercialResponseMatch | null>(null);
   const [nextActionSuggestion, setNextActionSuggestion] =
@@ -436,9 +437,20 @@ export function LeadAssistedServicePanel({
   }, [commercialResponses]);
 
   useEffect(() => {
+    if (!copyFeedbackMessage) return;
+
+    const timer = window.setTimeout(() => {
+      setCopyFeedbackMessage("");
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [copyFeedbackMessage]);
+
+  useEffect(() => {
     setReceivedMessage("");
     setReplyText("");
     setStatusMessage("");
+    setCopyFeedbackMessage("");
     setSuggestionMatch(null);
     setNextActionSuggestion(null);
     resetAiAdaptationState();
@@ -1053,23 +1065,28 @@ export function LeadAssistedServicePanel({
 
     if (!trimmedReply) {
       setStatusMessage("Escreva uma resposta antes de copiar.");
+      setCopyFeedbackMessage("");
       return;
     }
 
     if (!navigator.clipboard) {
-      setStatusMessage(
+      const message =
         "Não foi possível copiar automaticamente. Selecione o texto manualmente."
-      );
+      setStatusMessage(message);
+      setCopyFeedbackMessage(message);
       return;
     }
 
     try {
       await navigator.clipboard.writeText(trimmedReply);
-      setStatusMessage("Resposta copiada.");
+      const message = "Mensagem copiada. Agora cole no WhatsApp com Ctrl+V.";
+      setStatusMessage(message);
+      setCopyFeedbackMessage(message);
     } catch {
-      setStatusMessage(
+      const message =
         "Não foi possível copiar automaticamente. Selecione o texto manualmente."
-      );
+      setStatusMessage(message);
+      setCopyFeedbackMessage(message);
     }
   }
 
@@ -1200,6 +1217,11 @@ export function LeadAssistedServicePanel({
                 : "Salvar esta resposta na base"}
             </button>
           </div>
+          {copyFeedbackMessage && (
+            <p className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300">
+              {copyFeedbackMessage}
+            </p>
+          )}
         </div>
       </div>
 
