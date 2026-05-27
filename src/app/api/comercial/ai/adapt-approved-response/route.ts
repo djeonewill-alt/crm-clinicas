@@ -16,6 +16,20 @@ type AdaptApprovedResponseInput = {
   leadJourneyStep?: string | null;
   requiresHuman?: boolean;
   canAutoReply?: boolean;
+  recentHistory?: RecentHistoryInput[];
+  conversationStage?: string | null;
+  hasPriorConversation?: boolean;
+  shouldAvoidGreeting?: boolean;
+  shouldAvoidEmoji?: boolean;
+  shouldOfferEvaluationNow?: boolean;
+};
+
+type RecentHistoryInput = {
+  title?: string | null;
+  description?: string | null;
+  type?: string | null;
+  createdAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type AdaptApprovedResponseOutput = {
@@ -39,6 +53,39 @@ function sanitizeText(value: unknown) {
 function sanitizeOptionalText(value: unknown) {
   const text = sanitizeText(value);
   return text || null;
+}
+
+function sanitizeMetadata(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const safeMetadata: Record<string, unknown> = {};
+
+  for (const key of ["event", "source", "callResult", "suggestedFunnel"]) {
+    const item = record[key];
+    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      safeMetadata[key] = item;
+    }
+  }
+
+  return Object.keys(safeMetadata).length ? safeMetadata : null;
+}
+
+function sanitizeRecentHistory(value: unknown): RecentHistoryInput[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.slice(0, 10).map((item) => {
+    const record =
+      item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+
+    return {
+      title: sanitizeOptionalText(record.title),
+      description: sanitizeOptionalText(record.description),
+      type: sanitizeOptionalText(record.type),
+      createdAt: sanitizeOptionalText(record.createdAt),
+      metadata: sanitizeMetadata(record.metadata),
+    };
+  });
 }
 
 function clampConfidence(value: unknown) {
@@ -109,6 +156,14 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       funnel: sanitizeOptionalText(input.leadFunnel),
       journeyStep: sanitizeOptionalText(input.leadJourneyStep),
     },
+    conversation: {
+      recentHistory: sanitizeRecentHistory(input.recentHistory),
+      stage: sanitizeOptionalText(input.conversationStage),
+      hasPriorConversation: input.hasPriorConversation === true,
+      shouldAvoidGreeting: input.shouldAvoidGreeting === true,
+      shouldAvoidEmoji: input.shouldAvoidEmoji === true,
+      shouldOfferEvaluationNow: input.shouldOfferEvaluationNow === true,
+    },
     flags: {
       requiresHuman: input.requiresHuman === true,
       canAutoReply: input.canAutoReply === true,
@@ -145,14 +200,26 @@ export async function POST(request: Request) {
   const model = process.env.OPENAI_RESPONSE_MODEL || "gpt-5.4-mini";
   const systemPrompt = [
     "Você é um assistente comercial para uma clínica estética.",
-    "Sua tarefa é adaptar uma resposta aprovada ao jeito que o cliente perguntou.",
+    "Sua tarefa é adaptar uma resposta aprovada ao jeito que o cliente perguntou e ao estágio real da conversa.",
     "Você não pode inventar informações.",
-    "Use apenas: mensagem do cliente, resposta aprovada, contexto comercial fornecido e observações de segurança.",
+    "Use apenas: mensagem do cliente, resposta aprovada, contexto comercial fornecido, histórico recente e observações de segurança.",
+    "Responda como atendente humano no meio de uma conversa de WhatsApp.",
+    "Se hasPriorConversation for true, não cumprimente e não reinicie a conversa.",
+    "Não use 'Oi', 'Olá' ou 'Claro' em respostas de continuação.",
+    "Não use emoji em toda resposta. Use no máximo 1 emoji e apenas em abertura ou quando soar natural.",
+    "Se shouldAvoidEmoji for true, prefira não usar emoji.",
+    "Se a pergunta for curta ou de continuação, responda curto e direto.",
+    "Extraia da resposta aprovada apenas a parte necessária para responder à pergunta atual.",
+    "Não coloque uma moldura genérica de WhatsApp se a resposta já puder ser direta.",
+    "Não ofereça avaliação, agendamento, sinal ou reserva fora da hora.",
+    "Se shouldOfferEvaluationNow for false, não use frases como: 'Quer agendar?', 'Vamos marcar sua avaliação?' ou 'Você quer garantir seu horário?'.",
+    "Se shouldOfferEvaluationNow for false, você pode mencionar avaliação apenas como confirmação técnica quando necessário.",
+    "Se shouldOfferEvaluationNow for true, pode conduzir com cuidado para o próximo passo.",
     "Não invente preço, promoção, agenda, quantidade de sessões, condição de pagamento, diagnóstico clínico ou promessa de resultado.",
     "Não confirme pagamento, horário ou avaliação se isso não estiver explicitamente informado.",
     "Se a pergunta exigir informação que não está na resposta aprovada/contexto, marque requiresHumanReview true.",
     "Se houver risco, mantenha a resposta curta e diga que a equipe/especialista pode confirmar.",
-    "Tom: natural, humano, cordial, brasileiro, WhatsApp, sem exagero, sem parecer robô. Use no máximo 1 emoji quando fizer sentido.",
+    "Tom: natural, humano, cordial, brasileiro, WhatsApp, sem exagero, sem parecer robô.",
     "Devolva apenas JSON válido no schema solicitado.",
   ].join("\n");
 

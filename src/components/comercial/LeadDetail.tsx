@@ -258,6 +258,7 @@ export function LeadDetail({
         currentFunnel={lead.funnel}
         currentJourneyStep={lead.diaProsp}
         currentCommercialContext={currentCommercialContext}
+        leadHistory={leadHistory}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}
       />

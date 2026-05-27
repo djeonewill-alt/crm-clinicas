@@ -19,6 +19,7 @@ import type {
   CommercialResponseCategory,
 } from "@/types/commercial-responses";
 import type { CommercialContext } from "@/types/commercial-contexts";
+import type { LeadHistoryItem } from "@/types/lead-history";
 
 type AttemptMarkResult = {
   marked: boolean;
@@ -31,6 +32,24 @@ type AiAdaptationResult = {
   requiresHumanReview: boolean;
   safetyNotes: string[];
   usedApprovedAnswerOnly: boolean;
+};
+
+type ConversationStage =
+  | "opening"
+  | "direct_follow_up"
+  | "information_answer"
+  | "qualification"
+  | "schedule_intent"
+  | "payment_or_reservation"
+  | "return_follow_up"
+  | "unknown";
+
+type RecentAiHistoryItem = {
+  title?: string | null;
+  description?: string | null;
+  type?: string | null;
+  createdAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type LeadAssistedServicePanelProps = {
@@ -53,6 +72,7 @@ type LeadAssistedServicePanelProps = {
   currentFunnel?: string | null;
   currentJourneyStep?: string | null;
   currentCommercialContext?: CommercialContext | null;
+  leadHistory?: LeadHistoryItem[];
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
 };
@@ -147,6 +167,14 @@ const RISK_LABELS: Record<CommercialNextActionSuggestion["riskLevel"], string> =
     high: "alto",
   };
 
+const RELEVANT_HISTORY_EVENTS = new Set([
+  "customer_message_received",
+  "commercial_reply_sent",
+  "call_logged",
+  "return_scheduled",
+  "commercial_context_updated",
+]);
+
 function formatContextDate(value: string | null) {
   if (!value) return "";
   const [date] = value.split("T");
@@ -163,6 +191,187 @@ function truncateContextText(value: string | null, maxLength = 150) {
   return `${text.slice(0, maxLength).trim()}...`;
 }
 
+function getHistoryEvent(item: LeadHistoryItem) {
+  const event = item.metadata?.event;
+  return typeof event === "string" ? event : "";
+}
+
+function getRecentAiHistory(history: LeadHistoryItem[] = []) {
+  return history
+    .filter((item) => RELEVANT_HISTORY_EVENTS.has(getHistoryEvent(item)))
+    .slice(0, 10)
+    .map<RecentAiHistoryItem>((item) => ({
+      title: item.title,
+      description: item.description,
+      type: item.type,
+      createdAt: item.created_at,
+      metadata: item.metadata,
+    }))
+    .reverse();
+}
+
+function includesAny(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+function detectConversationStage(input: {
+  message: string;
+  recentHistory: RecentAiHistoryItem[];
+  currentFunnel?: string | null;
+}): ConversationStage {
+  const normalized = normalizeCommercialSearchText(input.message);
+  const hasPriorConversation = input.recentHistory.length > 0;
+
+  if (
+    includesAny(normalized, [
+      "pix",
+      "sinal",
+      "reserva",
+      "pagamento",
+      "cartao",
+      "comprovante",
+      "pagar",
+      "parcela",
+    ])
+  ) {
+    return "payment_or_reservation";
+  }
+
+  if (
+    includesAny(normalized, [
+      "agendar",
+      "agenda",
+      "horario",
+      "disponibilidade",
+      "marcar",
+      "sabado",
+      "vaga",
+      "avaliacao",
+    ])
+  ) {
+    return "schedule_intent";
+  }
+
+  if (
+    includesAny(normalized, [
+      "mes que vem",
+      "vou ver",
+      "depois",
+      "te chamo",
+      "chamar depois",
+      "falo com",
+      "confirmar depois",
+    ])
+  ) {
+    return "return_follow_up";
+  }
+
+  if (
+    includesAny(normalized, [
+      "quero fazer",
+      "como faco",
+      "qual unidade",
+      "unidade",
+      "quando tem",
+      "tenho interesse",
+    ])
+  ) {
+    return hasPriorConversation ? "qualification" : "opening";
+  }
+
+  if (
+    includesAny(normalized, [
+      "valor",
+      "preco",
+      "quanto",
+      "funciona",
+      "onde",
+      "endereco",
+      "sessao",
+      "sessoes",
+      "foto",
+      "tinta",
+      "resultado",
+      "antes",
+      "depois",
+      "flacidez",
+      "doe",
+    ])
+  ) {
+    return hasPriorConversation && normalized.split(" ").length <= 8
+      ? "direct_follow_up"
+      : "information_answer";
+  }
+
+  if (
+    !hasPriorConversation &&
+    input.currentFunnel === "prospeccao" &&
+    includesAny(normalized, ["interesse", "informacoes", "anuncio"])
+  ) {
+    return "opening";
+  }
+
+  if (hasPriorConversation && normalized.split(" ").length <= 8) {
+    return "direct_follow_up";
+  }
+
+  return hasPriorConversation ? "information_answer" : "unknown";
+}
+
+function shouldOfferEvaluationNow(input: {
+  stage: ConversationStage;
+  message: string;
+  recentHistory: RecentAiHistoryItem[];
+}) {
+  const normalized = normalizeCommercialSearchText(input.message);
+
+  if (
+    input.stage === "schedule_intent" ||
+    input.stage === "payment_or_reservation"
+  ) {
+    return true;
+  }
+
+  if (
+    includesAny(normalized, [
+      "quero fazer",
+      "como agendar",
+      "como marcar",
+      "quero agendar",
+      "quero reservar",
+      "tem horario",
+      "tem vaga",
+    ])
+  ) {
+    return true;
+  }
+
+  const historyText = input.recentHistory
+    .map((item) => `${item.title ?? ""} ${item.description ?? ""}`)
+    .join(" ");
+  const normalizedHistory = normalizeCommercialSearchText(historyText);
+
+  return (
+    includesAny(normalizedHistory, ["valor", "preco", "unidade"]) &&
+    includesAny(normalized, ["quero", "fazer", "agendar", "marcar"])
+  );
+}
+
+function getConversationStageLabel(stage: ConversationStage) {
+  const labels: Record<ConversationStage, string> = {
+    opening: "abertura",
+    direct_follow_up: "pergunta objetiva",
+    information_answer: "dúvida informativa",
+    qualification: "qualificação",
+    schedule_intent: "intenção de agenda",
+    payment_or_reservation: "pagamento/reserva",
+    return_follow_up: "retorno",
+    unknown: "indefinido",
+  };
+
+  return labels[stage];
+}
+
 export function LeadAssistedServicePanel({
   leadId,
   empresaId,
@@ -175,6 +384,7 @@ export function LeadAssistedServicePanel({
   currentFunnel,
   currentJourneyStep,
   currentCommercialContext,
+  leadHistory = [],
   commercialResponseCategories,
   commercialResponses,
 }: LeadAssistedServicePanelProps) {
@@ -402,6 +612,18 @@ export function LeadAssistedServicePanel({
     match: CommercialResponseMatch;
   }): Promise<AiAdaptationResult> {
     const response = input.match.response;
+    const recentHistory = getRecentAiHistory(leadHistory);
+    const conversationStage = detectConversationStage({
+      message: input.customerMessage,
+      recentHistory,
+      currentFunnel,
+    });
+    const hasPriorConversation = recentHistory.length > 0;
+    const canOfferEvaluation = shouldOfferEvaluationNow({
+      stage: conversationStage,
+      message: input.customerMessage,
+      recentHistory,
+    });
 
     const result = await fetch("/api/comercial/ai/adapt-approved-response", {
       method: "POST",
@@ -424,6 +646,12 @@ export function LeadAssistedServicePanel({
         leadJourneyStep: currentJourneyStep ?? null,
         requiresHuman: response.requiresHuman,
         canAutoReply: response.canAutoReply,
+        recentHistory,
+        conversationStage,
+        hasPriorConversation,
+        shouldAvoidGreeting: hasPriorConversation,
+        shouldAvoidEmoji: hasPriorConversation,
+        shouldOfferEvaluationNow: canOfferEvaluation,
       }),
     });
 
@@ -489,6 +717,13 @@ export function LeadAssistedServicePanel({
     setReplyText(result.bestMatch.response.answerText);
     setStatusMessage("Resposta aprovada encontrada. Adaptando com IA...");
     setIsAdaptingWithAi(true);
+    const recentHistoryForAi = getRecentAiHistory(leadHistory);
+    const conversationStage = detectConversationStage({
+      message: trimmedMessage,
+      recentHistory: recentHistoryForAi,
+      currentFunnel,
+    });
+    const stageLabel = getConversationStageLabel(conversationStage);
 
     try {
       const adapted = await adaptApprovedResponseWithAi({
@@ -502,7 +737,11 @@ export function LeadAssistedServicePanel({
         adapted.requiresHumanReview || result.bestMatch.response.requiresHuman
       );
       setAiSafetyNotes(adapted.safetyNotes);
-      setAiAdaptationInfo("Adaptada com IA usando resposta aprovada.");
+      setAiAdaptationInfo(
+        recentHistoryForAi.length > 0
+          ? `Adaptada com IA usando resposta aprovada e histórico recente (${stageLabel}).`
+          : `Adaptada com IA usando resposta aprovada (${stageLabel}).`
+      );
       setStatusMessage("Resposta aprovada adaptada com IA.");
     } catch (error) {
       setReplyText(result.bestMatch.response.answerText);
