@@ -51,6 +51,19 @@ type ScheduleReturnInput = {
   note?: string;
 };
 
+export type MarkLeadAttemptResult = {
+  marked: boolean;
+  message: string;
+};
+
+type MarkLeadAttemptInput = {
+  leadId: string | number;
+  attemptType: "message" | "call";
+  source: "assisted_reply_sent" | "call_logged";
+  result?: string;
+  note?: string;
+};
+
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -98,6 +111,28 @@ function getCampaignLabel(value: string) {
 
 function getInterestLabel(value: string) {
   return value === EMPTY_FILTER_VALUE ? "Sem interesse" : value;
+}
+
+function getAttemptTipo(attemptType: MarkLeadAttemptInput["attemptType"]) {
+  return attemptType === "call" ? "ligacao" : "mensagem";
+}
+
+function getAttemptResult(input: MarkLeadAttemptInput) {
+  if (input.attemptType === "message") return "enviada";
+
+  const resultMap: Record<string, string> = {
+    answered: "respondeu",
+    no_answer: "nao-atendeu",
+    dropped: "caiu",
+    busy: "ocupado",
+    asked_return: "respondeu",
+    not_interested: "rejeitou",
+    scheduled: "respondeu",
+    pay_later: "respondeu",
+    needs_human: "respondeu",
+  };
+
+  return resultMap[input.result ?? ""] ?? "respondeu";
 }
 
 function buildFilterOptions(
@@ -659,6 +694,102 @@ export function useComercialTrabalho({
     }
   }
 
+  async function handleMarkNextLeadAttempt(
+    input: MarkLeadAttemptInput
+  ): Promise<MarkLeadAttemptResult> {
+    const lead =
+      leads.find((item) => String(item.id) === String(input.leadId)) ?? null;
+
+    if (!lead) {
+      return {
+        marked: false,
+        message: "Registro salvo, mas o lead não está mais visível na fila.",
+      };
+    }
+
+    const attemptTipo = getAttemptTipo(input.attemptType);
+    const tentativas = ensureTentativasForLead(lead);
+    const tentativaIndex = tentativas.findIndex(
+      (tentativa) => tentativa.tipo === attemptTipo && !tentativa.resultado
+    );
+
+    if (tentativaIndex < 0) {
+      return {
+        marked: false,
+        message: "Registro salvo, mas não havia tentativa pendente para marcar.",
+      };
+    }
+
+    const now = new Date();
+    const resultado = getAttemptResult(input);
+    const updatedTentativas = tentativas.map((tentativa, index) => {
+      if (index !== tentativaIndex) return tentativa;
+
+      return {
+        ...tentativa,
+        resultado,
+        hora: now.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        feitoEm: now.toISOString(),
+        obs: input.note?.trim() || tentativa.obs || "",
+      };
+    });
+
+    const updatedLead: Lead = {
+      ...lead,
+      tentativas: updatedTentativas,
+      colAt: Date.now(),
+      prospectadoEm: lead.prospectadoEm ?? Date.now(),
+      respondeuAt:
+        resultado === "respondeu"
+          ? Date.now()
+          : lead.respondeuAt ?? null,
+    };
+
+    const saved = await saveUpdatedLead(
+      updatedLead,
+      "Tentativa marcada automaticamente."
+    );
+
+    if (!saved) {
+      return {
+        marked: false,
+        message:
+          "Registro salvo, mas não foi possível marcar a tentativa automaticamente.",
+      };
+    }
+
+    await recordLeadHistoryEvent({
+      leadId: updatedLead.id,
+      type: "attempt",
+      title:
+        input.attemptType === "call"
+          ? "Tentativa de ligação marcada"
+          : "Tentativa de mensagem marcada",
+      description:
+        input.attemptType === "call"
+          ? "Tentativa de ligação marcada a partir do registro de ligação."
+          : "Tentativa de mensagem marcada a partir da resposta enviada.",
+      metadata: {
+        event: "attempt_marked_from_assisted_flow",
+        attemptType: input.attemptType,
+        source: input.source,
+        tentativaIndex,
+        resultado,
+      },
+    });
+
+    return {
+      marked: true,
+      message:
+        input.attemptType === "call"
+          ? "Tentativa de ligação marcada."
+          : "Tentativa de mensagem marcada.",
+    };
+  }
+
   async function handleAdvanceQueue(lead: Lead) {
     const advancedLead = advanceLeadToNextDayIfComplete(lead);
 
@@ -982,6 +1113,7 @@ export function useComercialTrabalho({
     handleCreateLeadNote,
     loadLeadHistory,
     handleSetResultado,
+    handleMarkNextLeadAttempt,
     handleAdvanceQueue,
     handleMoveToQualificacao,
     handleMoveToRetorno,

@@ -20,12 +20,24 @@ import type {
 } from "@/types/commercial-responses";
 import type { CommercialContext } from "@/types/commercial-contexts";
 
+type AttemptMarkResult = {
+  marked: boolean;
+  message: string;
+};
+
 type LeadAssistedServicePanelProps = {
   leadId: string | number;
   empresaId: string | number;
   leadName?: string;
   onHistoryChanged?: () => Promise<void> | void;
   onMoveToQualification?: () => Promise<void> | void;
+  onCommercialReplySentAttempt?: () =>
+    | Promise<AttemptMarkResult>
+    | AttemptMarkResult;
+  onCallLoggedAttempt?: (input: {
+    callResult?: string;
+    note?: string;
+  }) => Promise<AttemptMarkResult> | AttemptMarkResult;
   onScheduleReturn?: (input: {
     returnDate: string;
     note?: string;
@@ -148,6 +160,8 @@ export function LeadAssistedServicePanel({
   leadName,
   onHistoryChanged,
   onMoveToQualification,
+  onCommercialReplySentAttempt,
+  onCallLoggedAttempt,
   onScheduleReturn,
   currentFunnel,
   currentCommercialContext,
@@ -463,7 +477,21 @@ export function LeadAssistedServicePanel({
       });
 
       await onHistoryChanged?.();
-      setStatusMessage("Resposta enviada registrada no histórico.");
+      let attemptMessage = "";
+
+      if (onCommercialReplySentAttempt) {
+        try {
+          const attemptResult = await onCommercialReplySentAttempt();
+          attemptMessage = ` ${attemptResult.message}`;
+        } catch {
+          attemptMessage =
+            " Registro salvo, mas não foi possível marcar a tentativa automaticamente.";
+        }
+      }
+
+      setStatusMessage(
+        `Resposta enviada registrada no histórico.${attemptMessage}`
+      );
     } catch (error) {
       setStatusMessage(
         error instanceof Error
@@ -1307,6 +1335,7 @@ export function LeadAssistedServicePanel({
               leadId={leadId}
               empresaId={empresaId}
               onHistoryChanged={onHistoryChanged}
+              onCallLoggedAttempt={onCallLoggedAttempt}
             />
           </div>
         )}

@@ -15,6 +15,7 @@ import {
   ensureTentativasForLead,
   getAttemptProgress,
 } from "@/lib/services/queue";
+import type { MarkLeadAttemptResult } from "@/components/comercial/useComercialTrabalho";
 import type {
   CommercialResponse,
   CommercialResponseCategory,
@@ -53,6 +54,13 @@ type LeadDetailProps = {
     tentativaIndex: number,
     resultado: string
   ) => void | Promise<void>;
+  onMarkNextLeadAttempt: (input: {
+    leadId: string | number;
+    attemptType: "message" | "call";
+    source: "assisted_reply_sent" | "call_logged";
+    result?: string;
+    note?: string;
+  }) => Promise<MarkLeadAttemptResult>;
   onCreateLeadNote: (
     description: string
   ) => boolean | void | Promise<boolean | void>;
@@ -107,6 +115,7 @@ export function LeadDetail({
   onMoveToRetorno,
   onUpdateLeadDetails,
   onSetResultado,
+  onMarkNextLeadAttempt,
   onCreateLeadNote,
   onRefreshLeadHistory,
   onAdvanceQueue,
@@ -222,6 +231,23 @@ export function LeadDetail({
         leadName={lead.nome}
         onHistoryChanged={() => onRefreshLeadHistory(String(lead.id))}
         onMoveToQualification={() => onMoveToQualificacao(lead)}
+        onCommercialReplySentAttempt={() =>
+          onMarkNextLeadAttempt({
+            leadId: lead.id,
+            attemptType: "message",
+            source: "assisted_reply_sent",
+            note: "Resposta registrada como enviada pelo Atendimento Assistido.",
+          })
+        }
+        onCallLoggedAttempt={({ callResult, note }) =>
+          onMarkNextLeadAttempt({
+            leadId: lead.id,
+            attemptType: "call",
+            source: "call_logged",
+            result: callResult,
+            note,
+          })
+        }
         onScheduleReturn={({ returnDate, note }) => {
           onRetornoDateChange(returnDate);
           return onMoveToRetorno(lead, { returnDate, note });

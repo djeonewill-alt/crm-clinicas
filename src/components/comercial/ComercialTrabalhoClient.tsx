@@ -121,6 +121,7 @@ export function ComercialTrabalhoClient({
           onMoveToRetorno={comercial.handleMoveToRetorno}
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}
+          onMarkNextLeadAttempt={comercial.handleMarkNextLeadAttempt}
           onCreateLeadNote={comercial.handleCreateLeadNote}
           onRefreshLeadHistory={comercial.loadLeadHistory}
           onAdvanceQueue={comercial.handleAdvanceQueue}

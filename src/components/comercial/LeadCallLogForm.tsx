@@ -7,6 +7,18 @@ type LeadCallLogFormProps = {
   leadId: string | number;
   empresaId: string | number;
   onHistoryChanged?: () => Promise<void> | void;
+  onCallLoggedAttempt?: (input: {
+    callResult?: string;
+    note?: string;
+  }) =>
+    | Promise<{
+        marked: boolean;
+        message: string;
+      }>
+    | {
+        marked: boolean;
+        message: string;
+      };
 };
 
 type CallResult =
@@ -55,6 +67,7 @@ export function LeadCallLogForm({
   leadId,
   empresaId,
   onHistoryChanged,
+  onCallLoggedAttempt,
 }: LeadCallLogFormProps) {
   const [callResult, setCallResult] = useState<CallResult | "">("");
   const [summary, setSummary] = useState("");
@@ -286,6 +299,21 @@ export function LeadCallLogForm({
       });
 
       await onHistoryChanged?.();
+      let attemptMessage = "";
+
+      if (onCallLoggedAttempt) {
+        try {
+          const attemptResult = await onCallLoggedAttempt({
+            callResult,
+            note: finalSummary,
+          });
+          attemptMessage = ` ${attemptResult.message}`;
+        } catch {
+          attemptMessage =
+            " Registro salvo, mas não foi possível marcar a tentativa automaticamente.";
+        }
+      }
+
       setCallResult("");
       setSummary("");
       setNextAction("");
@@ -293,7 +321,7 @@ export function LeadCallLogForm({
       discardAudio();
       setTranscriptionError("");
       setTranscriptionMessage("");
-      setStatusMessage("Ligação registrada no histórico.");
+      setStatusMessage(`Ligação registrada no histórico.${attemptMessage}`);
     } catch (error) {
       setStatusMessage(
         error instanceof Error
