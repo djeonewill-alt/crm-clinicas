@@ -695,101 +695,45 @@ export function LeadAssistedServicePanel({
           Atendimento Assistido
         </p>
         <p className="mt-1 text-sm text-[var(--text2)]">
-          Use este painel enquanto atende o lead no WhatsApp. Cole a mensagem
-          recebida, prepare a resposta e copie para enviar manualmente.
+          Cole a mensagem do cliente, gere uma resposta sugerida, revise, copie
+          para o WhatsApp e registre o envio.
         </p>
-        {leadName && (
-          <p className="mt-2 text-xs font-semibold text-[var(--text2)]">
-            Lead atual: {leadName}
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text2)]">
+          {leadName && <span>Lead: {leadName}</span>}
+          <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 font-semibold text-[var(--text2)]">
+            {currentCommercialContext
+              ? `Contexto: ${currentCommercialContext.name}`
+              : "Base global"}
+          </span>
+          {currentCommercialContext?.priceNotes && (
+            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
+              Preco: {truncateContextText(currentCommercialContext.priceNotes)}
+            </span>
+          )}
+          {currentCommercialContext?.safetyNotes && (
+            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
+              Seguranca:{" "}
+              {truncateContextText(currentCommercialContext.safetyNotes)}
+            </span>
+          )}
+          {(currentCommercialContext?.startsAt ||
+            currentCommercialContext?.endsAt) && (
+            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
+              Periodo:{" "}
+              {formatContextDate(currentCommercialContext.startsAt) ||
+                "sem inicio"}{" "}
+              ate{" "}
+              {formatContextDate(currentCommercialContext.endsAt) || "sem fim"}
+            </span>
+          )}
+        </div>
+        {!currentCommercialContext && (
+          <p className="mt-2 text-xs text-[var(--text3)]">
+            Se esta campanha tiver preco ou abordagem propria, selecione um
+            contexto no detalhe do lead.
           </p>
         )}
       </div>
-
-      {currentCommercialContext ? (
-        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
-                Contexto ativo neste lead
-              </p>
-              <h3 className="mt-1 text-sm font-semibold text-[var(--text)]">
-                {currentCommercialContext.name}
-              </h3>
-            </div>
-
-            <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
-              Contexto comercial
-            </span>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text2)]">
-            {currentCommercialContext.audienceLabel && (
-              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
-                Publico: {currentCommercialContext.audienceLabel}
-              </span>
-            )}
-            {currentCommercialContext.campaignLabel && (
-              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
-                Campanha: {currentCommercialContext.campaignLabel}
-              </span>
-            )}
-            {(currentCommercialContext.startsAt ||
-              currentCommercialContext.endsAt) && (
-              <span className="rounded-full bg-[var(--bg4)] px-2 py-1">
-                Periodo:{" "}
-                {formatContextDate(currentCommercialContext.startsAt) ||
-                  "sem inicio"}{" "}
-                ate{" "}
-                {formatContextDate(currentCommercialContext.endsAt) ||
-                  "sem fim"}
-              </span>
-            )}
-          </div>
-
-          {(currentCommercialContext.priceNotes ||
-            currentCommercialContext.safetyNotes) && (
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {currentCommercialContext.priceNotes && (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
-                    Observacoes de preco
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text2)]">
-                    {truncateContextText(currentCommercialContext.priceNotes)}
-                  </p>
-                </div>
-              )}
-
-              {currentCommercialContext.safetyNotes && (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
-                    Regras de seguranca
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text2)]">
-                    {truncateContextText(currentCommercialContext.safetyNotes)}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <p className="mt-3 text-xs text-[var(--text3)]">
-            As proximas etapas vao priorizar respostas deste contexto. Por
-            enquanto, ele e apenas informativo.
-          </p>
-        </div>
-      ) : (
-        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-          <p className="font-semibold">
-            Este lead esta sem contexto comercial especifico.
-          </p>
-          <p className="mt-1 leading-relaxed">
-            O Atendimento Assistido esta usando apenas a base global de
-            respostas. Para campanhas com preco ou abordagem diferente,
-            selecione um contexto no detalhe do lead.
-          </p>
-        </div>
-      )}
 
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
@@ -1368,15 +1312,9 @@ export function LeadAssistedServicePanel({
         )}
       </section>
 
-      <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)]">
-        Em breve, este painel usará as respostas aprovadas para sugerir a melhor
-        resposta e registrar tudo no histórico do lead.
-      </p>
-
-      <p className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
-        Fluxo sugerido: copie a mensagem do WhatsApp, cole aqui, prepare a
-        resposta, copie e envie no WhatsApp. Na próxima etapa, vamos salvar
-        recebidas/enviadas no histórico.
+      <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+        Fluxo sugerido: copie a mensagem do WhatsApp, cole aqui, revise a
+        resposta, copie para enviar e registre recebida/enviada no histórico.
       </p>
 
       {statusMessage && (
