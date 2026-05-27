@@ -927,7 +927,7 @@ export function LeadAssistedServicePanel({
             onChange={(event) => setReplyText(event.target.value)}
             rows={5}
             className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
-            placeholder="A resposta sugerida aparecerá aqui. Por enquanto, você pode escrever ou colar uma resposta manualmente."
+            placeholder="A resposta sugerida aparecerá aqui. Você pode editar antes de copiar."
           />
           <p className="mt-2 text-xs text-[var(--text3)]">
             Esta sugestão usa apenas respostas aprovadas cadastradas. Revise
@@ -949,6 +949,16 @@ export function LeadAssistedServicePanel({
               className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRegisteringReply ? "Registrando..." : "Registrar como enviada"}
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleApprovedResponseForm}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+            >
+              {showApprovedResponseForm
+                ? "Fechar criação de resposta"
+                : "Salvar esta resposta na base"}
             </button>
           </div>
         </div>
@@ -1220,57 +1230,7 @@ export function LeadAssistedServicePanel({
         </div>
       )}
 
-      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
-              Blocos rápidos
-            </p>
-            <p className="mt-1 text-xs text-[var(--text2)]">
-              Os blocos rápidos priorizam respostas do contexto comercial do
-              lead. Se não houver resposta específica, usam uma resposta global.
-            </p>
-            <p className="mt-1 text-xs text-[var(--text3)]">
-              {currentCommercialContext
-                ? `Contexto atual: ${currentCommercialContext.name}. Respostas de outros contextos são ignoradas.`
-                : "Este lead está sem contexto. Os blocos rápidos usam apenas respostas globais."}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowQuickReplies((current) => !current)}
-            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
-          >
-            {showQuickReplies
-              ? "Ocultar blocos rápidos"
-              : "Mostrar blocos rápidos"}
-          </button>
-        </div>
-
-        {showQuickReplies && (
-          <div className="mt-3">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {QUICK_REPLY_BLOCKS.map((block) => (
-                <button
-                  key={block.label}
-                  type="button"
-                  onClick={() => handleApplyQuickReply(block)}
-                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-left text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
-                >
-                  {block.label}
-                </button>
-              ))}
-            </div>
-
-            <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
-              Blocos com preço, promoção, pagamento, gestante, menor de idade
-              ou certificações devem ser revisados antes do envio.
-            </p>
-          </div>
-        )}
-      </section>
-
+      {showApprovedResponseForm && (
       <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -1295,7 +1255,6 @@ export function LeadAssistedServicePanel({
           </button>
         </div>
 
-        {showApprovedResponseForm && (
           <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
@@ -1464,8 +1423,8 @@ export function LeadAssistedServicePanel({
               )}
             </div>
           </div>
-        )}
       </section>
+      )}
 
       <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1502,10 +1461,59 @@ export function LeadAssistedServicePanel({
         )}
       </section>
 
-      <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
-        Fluxo sugerido: copie a mensagem do WhatsApp, cole aqui, revise a
-        resposta, copie para enviar e registre recebida/enviada no histórico.
-      </p>
+      <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Ferramentas extras
+            </p>
+            <p className="mt-1 text-xs text-[var(--text3)]">
+              Atalhos de apoio para casos pontuais. O fluxo principal fica na
+              mensagem recebida e na resposta sugerida.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowQuickReplies((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+          >
+            {showQuickReplies ? "Ocultar extras" : "Mostrar extras"}
+          </button>
+        </div>
+
+        {showQuickReplies && (
+          <div className="mt-3">
+            <p className="text-xs text-[var(--text2)]">
+              Blocos rápidos priorizam respostas do contexto comercial do lead.
+              Se não houver resposta específica, usam uma resposta global.
+            </p>
+            <p className="mt-1 text-xs text-[var(--text3)]">
+              {currentCommercialContext
+                ? `Contexto atual: ${currentCommercialContext.name}. Respostas de outros contextos são ignoradas.`
+                : "Este lead está sem contexto. Os blocos rápidos usam apenas respostas globais."}
+            </p>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {QUICK_REPLY_BLOCKS.map((block) => (
+                <button
+                  key={block.label}
+                  type="button"
+                  onClick={() => handleApplyQuickReply(block)}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-left text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                >
+                  {block.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text3)]">
+              Blocos com preço, promoção, pagamento, gestante, menor de idade
+              ou certificações devem ser revisados antes do envio.
+            </p>
+          </div>
+        )}
+      </section>
 
       {statusMessage && (
         <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs text-[var(--text2)]">

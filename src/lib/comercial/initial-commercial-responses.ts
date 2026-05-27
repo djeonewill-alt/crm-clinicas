@@ -710,4 +710,42 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     priority: 69,
     internalNotes: "Encaminhar para humano. Pode exigir orientação interna.",
   },
+  {
+    categorySlug: "pagamento-pix-cartao",
+    title: "Pix seguro para reserva de horário",
+    answerText:
+      "Para reservar o horário, eu te envio a chave Pix certinha por aqui. Assim que fizer, me manda o comprovante que eu confirmo sua vaga.\n\nEu só confirmo a reserva depois de conferir o pagamento, combinado?",
+    exampleQuestions: [
+      "Qual é o Pix?",
+      "Me manda a chave Pix",
+      "Como faço o pagamento?",
+      "Pode pagar no Pix?",
+      "Para quem eu mando o comprovante?",
+    ],
+    tags: ["pix", "pagamento", "comprovante", "reserva", "sinal"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 68,
+    internalNotes:
+      "Não colocar chave Pix fixa sem confirmação da clínica. Não confirmar pagamento automaticamente.",
+  },
+  {
+    categorySlug: "agendamento-disponibilidade",
+    title: "Confirmar unidade e preferência de horário",
+    answerText:
+      "Eu confirmo a agenda certinha para você. Qual unidade fica melhor e você prefere manhã, tarde ou sábado?\n\nCom isso eu verifico as opções disponíveis e te passo o melhor horário antes de reservar.",
+    exampleQuestions: [
+      "Quero agendar",
+      "Tem horário?",
+      "Quais horários vocês têm?",
+      "Tem vaga sábado?",
+      "Pode marcar para mim?",
+    ],
+    tags: ["agenda", "horário", "unidade", "disponibilidade", "sábado"],
+    canAutoReply: true,
+    requiresHuman: true,
+    priority: 67,
+    internalNotes:
+      "Agenda continua manual. Não confirmar horário sem checar disponibilidade real.",
+  },
 ];
