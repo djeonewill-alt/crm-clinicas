@@ -1,6 +1,10 @@
 import { ComercialContextosClient } from "@/components/comercial/ComercialContextosClient";
 import { listCommercialContexts } from "@/lib/services/commercial-contexts";
 import { getDashboardContext } from "@/lib/services/dashboard-context";
+import {
+  listCommercialResponseCategories,
+  listCommercialResponses,
+} from "@/lib/services/commercial-responses";
 
 export default async function ComercialContextosPage() {
   const context = await getDashboardContext();
@@ -15,13 +19,20 @@ export default async function ComercialContextosPage() {
     );
   }
 
-  const contexts = await listCommercialContexts(context.empresaAtual.id);
+  const [contexts, commercialResponseCategories, commercialResponses] =
+    await Promise.all([
+      listCommercialContexts(context.empresaAtual.id),
+      listCommercialResponseCategories(context.empresaAtual.id),
+      listCommercialResponses(context.empresaAtual.id),
+    ]);
 
   return (
     <ComercialContextosClient
       empresaId={context.empresaAtual.id}
       empresaNome={context.empresaAtual.nome}
       contexts={contexts}
+      commercialResponseCategories={commercialResponseCategories}
+      commercialResponses={commercialResponses}
     />
   );
 }
