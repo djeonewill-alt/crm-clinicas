@@ -6,12 +6,15 @@ import { suggestCommercialJourneyNextStep } from "@/lib/comercial/commercial-jou
 import { getAttemptProgress } from "@/lib/services/queue";
 import type { CommercialContext } from "@/types/commercial-contexts";
 import type { Lead, Tentativa } from "@/types/lead";
+import type { LeadHistoryItem } from "@/types/lead-history";
 
 type LeadJourneyCardProps = {
   lead: Lead;
   tentativas?: Tentativa[];
+  recentHistory?: LeadHistoryItem[];
   currentCommercialContext?: CommercialContext | null;
   onSendToRecovery?: () => void | Promise<void>;
+  onMoveToQualification?: () => void | Promise<void>;
 };
 
 function getFunnelLabel(funnelId: string) {
@@ -53,10 +56,13 @@ function getRiskClass(riskLevel: "low" | "medium" | "high") {
 export function LeadJourneyCard({
   lead,
   tentativas,
+  recentHistory,
   currentCommercialContext,
   onSendToRecovery,
+  onMoveToQualification,
 }: LeadJourneyCardProps) {
   const [isSendingToRecovery, setIsSendingToRecovery] = useState(false);
+  const [isMovingToQualification, setIsMovingToQualification] = useState(false);
   const progress = getAttemptProgress({ ...lead, tentativas });
   const funnelLabel = getFunnelLabel(lead.funnel);
   const dayLabel = getDayLabel(lead.diaProsp);
@@ -64,9 +70,16 @@ export function LeadJourneyCard({
     progress.total > 0
       ? `${progress.completed}/${progress.total} tentativas concluidas`
       : "Nenhuma tentativa configurada para esta etapa.";
-  const suggestion = suggestCommercialJourneyNextStep({ lead, tentativas });
+  const suggestion = suggestCommercialJourneyNextStep({
+    lead,
+    tentativas,
+    recentHistory,
+  });
   const canSendToRecovery =
     suggestion.type === "move_to_recovery" && Boolean(onSendToRecovery);
+  const canMoveToQualification =
+    suggestion.type === "move_to_qualificacao" &&
+    Boolean(onMoveToQualification);
 
   async function handleSendToRecovery() {
     if (!onSendToRecovery) return;
@@ -83,6 +96,22 @@ export function LeadJourneyCard({
       await onSendToRecovery();
     } finally {
       setIsSendingToRecovery(false);
+    }
+  }
+
+  async function handleMoveToQualification() {
+    if (!onMoveToQualification) return;
+
+    const confirmed = window.confirm("Mover este lead para Qualificação?");
+
+    if (!confirmed) return;
+
+    setIsMovingToQualification(true);
+
+    try {
+      await onMoveToQualification();
+    } finally {
+      setIsMovingToQualification(false);
     }
   }
 
@@ -186,6 +215,25 @@ export function LeadJourneyCard({
               {isSendingToRecovery
                 ? "Enviando..."
                 : "Enviar para recuperacao futura"}
+            </button>
+          </div>
+        )}
+
+        {canMoveToQualification && (
+          <div className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+            <p className="text-xs leading-relaxed text-blue-200">
+              Esta acao apenas move o lead manualmente para Qualificacao. O CRM
+              nao altera o funil automaticamente.
+            </p>
+            <button
+              type="button"
+              onClick={handleMoveToQualification}
+              disabled={isMovingToQualification}
+              className="mt-2 rounded-lg border border-blue-500/40 bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isMovingToQualification
+                ? "Movendo..."
+                : "Mover para Qualificação"}
             </button>
           </div>
         )}

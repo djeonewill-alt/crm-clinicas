@@ -1,4 +1,5 @@
 import type { Lead, Tentativa } from "@/types/lead";
+import type { LeadHistoryItem } from "@/types/lead-history";
 
 export type CommercialJourneySuggestionType =
   | "send_message"
@@ -68,9 +69,44 @@ function createSuggestion(
   return suggestion;
 }
 
+function getHistoryEvent(item: LeadHistoryItem) {
+  const event = item.metadata?.event;
+  return typeof event === "string" ? event : "";
+}
+
+function getHistoryTimestamp(item: LeadHistoryItem) {
+  const timestamp = new Date(item.created_at).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function hasCustomerReplyAfterCommercialReply(
+  recentHistory: LeadHistoryItem[] = []
+) {
+  const chronologicalHistory = [...recentHistory].sort(
+    (first, second) => getHistoryTimestamp(first) - getHistoryTimestamp(second)
+  );
+  let hasCommercialReplySent = false;
+
+  for (const item of chronologicalHistory) {
+    const event = getHistoryEvent(item);
+
+    if (event === "commercial_reply_sent") {
+      hasCommercialReplySent = true;
+      continue;
+    }
+
+    if (hasCommercialReplySent && event === "customer_message_received") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function suggestCommercialJourneyNextStep(input: {
   lead: Lead;
   tentativas?: Tentativa[];
+  recentHistory?: LeadHistoryItem[];
 }): CommercialJourneySuggestion {
   const { lead } = input;
   const tentativas = input.tentativas ?? lead.tentativas ?? [];
@@ -78,6 +114,23 @@ export function suggestCommercialJourneyNextStep(input: {
   const diaProsp = lead.diaProsp?.toLowerCase() ?? "";
 
   if (lead.funnel === "prospeccao") {
+    if (hasCustomerReplyAfterCommercialReply(input.recentHistory)) {
+      return createSuggestion({
+        type: "move_to_qualificacao",
+        title: "Cliente respondeu",
+        description:
+          "O cliente ja respondeu a abordagem. A proxima etapa recomendada e mover para Qualificacao e continuar o atendimento.",
+        recommendedFunnel: "qualificacao",
+        actionLabel: "Mover para Qualificacao",
+        riskLevel: "low",
+        reasons: [
+          "Cliente respondeu apos a mensagem enviada",
+          "Lead deixou de estar frio",
+          "Atendimento deve seguir em Qualificacao",
+        ],
+      });
+    }
+
     if (stats.isComplete && ["d3", "d4", "d5"].includes(diaProsp)) {
       return createSuggestion({
         type: "move_to_recovery",

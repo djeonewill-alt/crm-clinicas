@@ -443,20 +443,27 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
   },
   {
     categorySlug: "avaliacao-por-foto",
-    title: "Cliente quer enviar foto",
+    title: "Pode mandar áudio ou foto",
     answerText:
-      "Pode mandar sim. Vou analisar aqui e, se necessário, mostro para a especialista avaliar melhor a região. Assim conseguimos te orientar com mais segurança sobre o tratamento e a melhor forma de seguir.",
+      "Pode mandar sim. Eu escuto o áudio e te respondo por aqui.\n\nSe conseguir, também pode mandar uma foto da região das estrias, porque ajuda a entender melhor o caso e orientar com mais segurança.",
     exampleQuestions: [
+      "Posso mandar áudio?",
+      "Posso mandar audio?",
+      "Posso enviar áudio?",
       "Posso mandar foto?",
+      "Posso enviar foto?",
+      "Posso mandar imagem?",
+      "Posso te explicar por áudio?",
       "Quer que eu mande uma foto?",
       "Dá para avaliar por foto?",
       "Consigo mostrar a região?",
     ],
-    tags: ["foto", "avaliação", "região", "especialista"],
+    tags: ["audio", "foto", "avaliacao", "orientacao", "whatsapp"],
     canAutoReply: true,
     requiresHuman: true,
     priority: 83,
-    internalNotes: "Se a foto for íntima/sensível, tratar com cuidado e revisão humana.",
+    internalNotes:
+      "Se a foto for íntima/sensível ou o áudio trouxer dúvida clínica específica, tratar com cuidado e revisão humana.",
   },
   {
     categorySlug: "tipos-de-estrias",

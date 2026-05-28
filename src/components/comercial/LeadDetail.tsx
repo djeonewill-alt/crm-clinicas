@@ -218,8 +218,10 @@ export function LeadDetail({
       <LeadJourneyCard
         lead={lead}
         tentativas={tentativas}
+        recentHistory={leadHistory.slice(0, 10)}
         currentCommercialContext={currentCommercialContext}
         onSendToRecovery={onSendToRecovery}
+        onMoveToQualification={() => onMoveToQualificacao(lead)}
       />
 
       <LeadCommercialContextSelector

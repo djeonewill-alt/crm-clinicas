@@ -801,7 +801,9 @@ export function LeadAssistedServicePanel({
       });
 
       await onHistoryChanged?.();
-      setStatusMessage("Mensagem recebida registrada no histórico.");
+      setStatusMessage(
+        "Mensagem recebida registrada. Você ainda pode analisar e sugerir resposta."
+      );
     } catch (error) {
       setStatusMessage(
         error instanceof Error
