@@ -857,6 +857,9 @@ export function useComercialTrabalho({
   }
 
   async function handleMoveToQualificacao(lead: Lead) {
+    const previousWorkFunnel = workFunnel;
+    const previousSelectedLeadId = selectedLeadId;
+
     const updatedLead: Lead = {
       ...lead,
       funnel: "qualificacao",
@@ -868,10 +871,19 @@ export function useComercialTrabalho({
       colAt: Date.now(),
     };
 
+    setWorkFunnel("qualificacao");
+    setSelectedLeadId(updatedLead.id);
+
     const saved = await saveUpdatedLead(
       updatedLead,
       "Lead movido para Qualificação."
     );
+
+    if (!saved) {
+      setWorkFunnel(previousWorkFunnel);
+      setSelectedLeadId(previousSelectedLeadId);
+      return;
+    }
 
     if (saved) {
       await recordLeadHistoryEvent({
@@ -886,9 +898,9 @@ export function useComercialTrabalho({
           diaProsp: "q1",
         },
       });
-    }
 
-    selectNextLeadAfter(lead.id);
+      await loadLeadHistory(String(updatedLead.id));
+    }
   }
 
   async function handleMoveToRetorno(lead: Lead, input?: ScheduleReturnInput) {
