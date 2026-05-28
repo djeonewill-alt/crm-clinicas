@@ -39,6 +39,7 @@ type LeadDetailProps = {
   onCloseClient: (lead: Lead) => void | Promise<void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
   onArchiveLead: () => void | Promise<void>;
+  onDeleteLead: (lead: Lead) => void | Promise<void>;
   onSendToRecovery: () => void | Promise<void>;
   onMoveToRetorno: (
     lead: Lead,
@@ -113,6 +114,7 @@ export function LeadDetail({
   onCloseClient,
   onDisqualify,
   onArchiveLead,
+  onDeleteLead,
   onSendToRecovery,
   onMoveToRetorno,
   onUpdateLeadDetails,
@@ -340,6 +342,24 @@ export function LeadDetail({
       </section>
 
       {showLegacyScripts && <LeadMessageScripts lead={lead} />}
+
+      <section className="mt-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-red-300">
+          Zona de perigo
+        </p>
+        <p className="mt-1 text-sm text-[var(--text2)]">
+          Use apenas para leads duplicados ou criados para teste. A exclusão é
+          definitiva e remove também o histórico deste lead.
+        </p>
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={() => onDeleteLead(lead)}
+          className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Excluir cliente
+        </button>
+      </section>
     </div>
   );
 }

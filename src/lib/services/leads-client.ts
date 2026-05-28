@@ -149,6 +149,33 @@ export async function restoreLeadById(input: {
   return rowToLead(data);
 }
 
+export async function deleteLeadAndHistory(input: {
+  empresaId: string | number;
+  leadId: string | number;
+}): Promise<void> {
+  const supabase = createClient();
+
+  const { error: historyError } = await supabase
+    .from("lead_history")
+    .delete()
+    .eq("lead_id", input.leadId)
+    .eq("empresa_id", input.empresaId);
+
+  if (historyError) {
+    throw new Error(historyError.message);
+  }
+
+  const { error: leadError } = await supabase
+    .from("leads")
+    .delete()
+    .eq("id", input.leadId)
+    .eq("empresa_id", input.empresaId);
+
+  if (leadError) {
+    throw new Error(leadError.message);
+  }
+}
+
 export async function moveLeadToFunnel(input: {
   empresaId: string | number;
   leadId: string | number;

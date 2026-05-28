@@ -40,6 +40,21 @@ function formatDate(value: string) {
   });
 }
 
+function getMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+) {
+  const value = metadata?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function getAttachmentTypeLabel(value: string) {
+  if (value === "pix_receipt") return "Comprovante Pix";
+  if (value === "customer_photo") return "Foto enviada pelo cliente";
+  if (value === "document") return "Documento";
+  return "Outro";
+}
+
 export function LeadHistory({
   items,
   isLoading,
@@ -128,6 +143,36 @@ export function LeadHistory({
                 <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--text2)]">
                   {item.description}
                 </p>
+              )}
+
+              {item.metadata?.event === "lead_attachment_received" && (
+                <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+                  <div>
+                    Tipo:{" "}
+                    {getAttachmentTypeLabel(
+                      getMetadataString(item.metadata, "attachmentType")
+                    )}
+                  </div>
+                  {getMetadataString(item.metadata, "fileName") && (
+                    <div className="mt-1">
+                      Arquivo: {getMetadataString(item.metadata, "fileName")}
+                    </div>
+                  )}
+                  {getMetadataString(item.metadata, "publicUrl") ? (
+                    <a
+                      href={getMetadataString(item.metadata, "publicUrl")}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex rounded-lg border border-[var(--accent)] px-3 py-1.5 font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.10)]"
+                    >
+                      Abrir anexo
+                    </a>
+                  ) : (
+                    <div className="mt-1 text-[var(--text3)]">
+                      Arquivo registrado sem upload.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ))}

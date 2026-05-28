@@ -120,6 +120,7 @@ export function ComercialTrabalhoClient({
               void comercial.handleArchiveLead(comercial.selectedLead);
             }
           }}
+          onDeleteLead={comercial.handleDeleteLead}
           onSendToRecovery={() => {
             if (comercial.selectedLead) {
               void comercial.handleArchiveLead(comercial.selectedLead, {

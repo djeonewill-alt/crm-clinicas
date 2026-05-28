@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LeadCallLogForm } from "@/components/comercial/LeadCallLogForm";
 import {
   findBestCommercialResponses,
@@ -51,6 +51,12 @@ type RecentAiHistoryItem = {
   createdAt?: string | null;
   metadata?: Record<string, unknown> | null;
 };
+
+type LeadAttachmentType =
+  | "pix_receipt"
+  | "customer_photo"
+  | "document"
+  | "other";
 
 type LeadAssistedServicePanelProps = {
   leadId: string | number;
@@ -167,6 +173,16 @@ const RISK_LABELS: Record<CommercialNextActionSuggestion["riskLevel"], string> =
     high: "alto",
   };
 
+const ATTACHMENT_TYPE_OPTIONS: Array<{
+  value: LeadAttachmentType;
+  label: string;
+}> = [
+  { value: "pix_receipt", label: "Comprovante Pix" },
+  { value: "customer_photo", label: "Foto enviada pelo cliente" },
+  { value: "document", label: "Documento" },
+  { value: "other", label: "Outro" },
+];
+
 const RELEVANT_HISTORY_EVENTS = new Set([
   "customer_message_received",
   "commercial_reply_sent",
@@ -194,6 +210,42 @@ function truncateContextText(value: string | null, maxLength = 150) {
 function getHistoryEvent(item: LeadHistoryItem) {
   const event = item.metadata?.event;
   return typeof event === "string" ? event : "";
+}
+
+function normalizeHistoryText(value?: string | null) {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function getHistoryMetadataText(item: LeadHistoryItem, key: string) {
+  const value = item.metadata?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function hasDuplicateHistoryEvent(input: {
+  history: LeadHistoryItem[];
+  event: "customer_message_received" | "commercial_reply_sent";
+  text: string;
+}) {
+  const normalizedText = normalizeHistoryText(input.text);
+
+  if (!normalizedText) return false;
+
+  return input.history.some((item) => {
+    if (getHistoryEvent(item) !== input.event) return false;
+
+    const rawText =
+      input.event === "customer_message_received"
+        ? getHistoryMetadataText(item, "messageText") || item.description
+        : getHistoryMetadataText(item, "replyText") || item.description;
+
+    return normalizeHistoryText(rawText) === normalizedText;
+  });
+}
+
+function getAttachmentTitle(attachmentType: LeadAttachmentType) {
+  if (attachmentType === "pix_receipt") return "Comprovante Pix recebido";
+  if (attachmentType === "customer_photo") return "Foto recebida do cliente";
+  return "Anexo recebido do cliente";
 }
 
 function getRecentAiHistory(history: LeadHistoryItem[] = []) {
@@ -431,6 +483,13 @@ export function LeadAssistedServicePanel({
   const [isCreatingApprovedResponse, setIsCreatingApprovedResponse] =
     useState(false);
   const [approvedResponseMessage, setApprovedResponseMessage] = useState("");
+  const [showAttachmentForm, setShowAttachmentForm] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentType, setAttachmentType] =
+    useState<LeadAttachmentType>("pix_receipt");
+  const [attachmentNote, setAttachmentNote] = useState("");
+  const [isRegisteringAttachment, setIsRegisteringAttachment] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -463,6 +522,14 @@ export function LeadAssistedServicePanel({
     setIsSchedulingReturn(false);
     setShowCallLogForm(false);
     setShowQuickReplies(false);
+    setShowAttachmentForm(false);
+    setAttachmentFile(null);
+    setAttachmentType("pix_receipt");
+    setAttachmentNote("");
+    setIsRegisteringAttachment(false);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
     setShowApprovedResponseForm(false);
     resetApprovedResponseForm();
   }, [leadId]);
@@ -782,6 +849,17 @@ export function LeadAssistedServicePanel({
       return;
     }
 
+    if (
+      hasDuplicateHistoryEvent({
+        history: leadHistory,
+        event: "customer_message_received",
+        text: trimmedMessage,
+      })
+    ) {
+      setStatusMessage("Essa mensagem já foi registrada neste atendimento.");
+      return;
+    }
+
     setIsRegisteringReceived(true);
     setStatusMessage("");
 
@@ -801,9 +879,8 @@ export function LeadAssistedServicePanel({
       });
 
       await onHistoryChanged?.();
-      setStatusMessage(
-        "Mensagem recebida registrada. Você ainda pode analisar e sugerir resposta."
-      );
+      setReceivedMessage("");
+      setStatusMessage("Mensagem recebida registrada.");
     } catch (error) {
       setStatusMessage(
         error instanceof Error
@@ -820,6 +897,17 @@ export function LeadAssistedServicePanel({
 
     if (!trimmedReply) {
       setStatusMessage("Escreva ou cole a resposta antes de registrar.");
+      return;
+    }
+
+    if (
+      hasDuplicateHistoryEvent({
+        history: leadHistory,
+        event: "commercial_reply_sent",
+        text: trimmedReply,
+      })
+    ) {
+      setStatusMessage("Essa mensagem já foi registrada neste atendimento.");
       return;
     }
 
@@ -860,9 +948,11 @@ export function LeadAssistedServicePanel({
         }
       }
 
-      setStatusMessage(
-        `Resposta enviada registrada no histórico.${attemptMessage}`
-      );
+      setReplyText("");
+      setSuggestionMatch(null);
+      setNextActionSuggestion(null);
+      resetAiAdaptationState();
+      setStatusMessage(`Resposta enviada registrada.${attemptMessage}`);
     } catch (error) {
       setStatusMessage(
         error instanceof Error
@@ -871,6 +961,59 @@ export function LeadAssistedServicePanel({
       );
     } finally {
       setIsRegisteringReply(false);
+    }
+  }
+
+  async function handleRegisterAttachment() {
+    if (!attachmentFile) {
+      setStatusMessage("Escolha um arquivo para registrar.");
+      return;
+    }
+
+    setIsRegisteringAttachment(true);
+    setStatusMessage("");
+
+    try {
+      const trimmedNote = attachmentNote.trim();
+      const description = trimmedNote
+        ? `${attachmentFile.name}\n\n${trimmedNote}`
+        : attachmentFile.name;
+
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: getAttachmentTitle(attachmentType),
+        description,
+        metadata: {
+          event: "lead_attachment_received",
+          source: "assisted_panel",
+          attachmentType,
+          fileName: attachmentFile.name,
+          fileSize: attachmentFile.size,
+          mimeType: attachmentFile.type || "application/octet-stream",
+          assistedPanel: true,
+        },
+      });
+
+      await onHistoryChanged?.();
+      setAttachmentFile(null);
+      setAttachmentNote("");
+      setShowAttachmentForm(false);
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = "";
+      }
+      setStatusMessage(
+        "Upload de arquivos ainda não configurado. Registrei o anexo no histórico sem salvar o arquivo."
+      );
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar anexo: ${error.message}`
+          : "Erro ao registrar anexo."
+      );
+    } finally {
+      setIsRegisteringAttachment(false);
     }
   }
 
@@ -1174,6 +1317,73 @@ export function LeadAssistedServicePanel({
               ? "Adaptando com IA..."
               : "Analisar e sugerir resposta"}
           </button>
+          <button
+            type="button"
+            onClick={() => setShowAttachmentForm((current) => !current)}
+            className="ml-2 mt-2 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+          >
+            + Anexo
+          </button>
+
+          {showAttachmentForm && (
+            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Tipo
+                  <select
+                    value={attachmentType}
+                    onChange={(event) =>
+                      setAttachmentType(event.target.value as LeadAttachmentType)
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                  >
+                    {ATTACHMENT_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Arquivo
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(event) =>
+                      setAttachmentFile(event.target.files?.[0] ?? null)
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none file:mr-3 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-2 file:py-1 file:text-xs file:font-semibold file:text-black"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Observação opcional
+                <input
+                  value={attachmentNote}
+                  onChange={(event) => setAttachmentNote(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                  placeholder="Ex: comprovante do sinal, foto da região, documento enviado..."
+                />
+              </label>
+
+              <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Upload de arquivos ainda não está configurado neste projeto. O
+                CRM vai registrar o nome do arquivo no histórico.
+              </p>
+
+              <button
+                type="button"
+                disabled={isRegisteringAttachment || !attachmentFile}
+                onClick={() => void handleRegisterAttachment()}
+                className="mt-3 rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isRegisteringAttachment ? "Registrando..." : "Registrar anexo"}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">

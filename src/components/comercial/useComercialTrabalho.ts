@@ -11,6 +11,7 @@ import {
 import {
   archiveLeadById,
   createLeadForEmpresa,
+  deleteLeadAndHistory,
   updateLeadCommercialContext,
   updateLeadCommercialFields,
 } from "@/lib/services/leads-client";
@@ -1091,6 +1092,48 @@ export function useComercialTrabalho({
     }
   }
 
+  async function handleDeleteLead(lead: Lead) {
+    const confirmed = window.confirm(
+      "Excluir este cliente definitivamente? O histórico dele também será removido. Essa ação não pode ser desfeita."
+    );
+
+    if (!confirmed) return;
+
+    const typedConfirmation = window.prompt(
+      'Digite "EXCLUIR" para confirmar a exclusão definitiva.'
+    );
+
+    if (typedConfirmation !== "EXCLUIR") {
+      setMessage("Exclusão cancelada.");
+      return;
+    }
+
+    setSavingLeadId(lead.id);
+    setMessage("");
+
+    try {
+      await deleteLeadAndHistory({
+        empresaId,
+        leadId: lead.id,
+      });
+
+      setLeads((current) =>
+        current.filter((item) => String(item.id) !== String(lead.id))
+      );
+      setLeadHistory([]);
+      setSelectedLeadId(null);
+      setMessage("Cliente excluído com sucesso.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `Não foi possível excluir. Verifique permissões do banco. Detalhe: ${error.message}`
+          : "Não foi possível excluir. Verifique permissões do banco."
+      );
+    } finally {
+      setSavingLeadId(null);
+    }
+  }
+
   async function handlePreviousDay(lead: Lead) {
     const previousLead = moveLeadToPreviousDay(lead);
 
@@ -1190,6 +1233,7 @@ export function useComercialTrabalho({
     handleCloseClient,
     handleDisqualify,
     handleArchiveLead,
+    handleDeleteLead,
     handlePreviousDay,
   };
 }
