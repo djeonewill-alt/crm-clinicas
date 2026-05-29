@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LeadCallLogForm } from "@/components/comercial/LeadCallLogForm";
 import {
   findBestCommercialResponses,
@@ -12,6 +12,7 @@ import {
   type CommercialNextActionSuggestion,
   type CommercialSuggestedFunnel,
 } from "@/lib/comercial/commercial-next-action-suggester";
+import { getQualificationJourneyState } from "@/lib/comercial/qualification-journey";
 import { createCommercialResponse } from "@/lib/services/commercial-responses-client";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import type {
@@ -19,6 +20,7 @@ import type {
   CommercialResponseCategory,
 } from "@/types/commercial-responses";
 import type { CommercialContext } from "@/types/commercial-contexts";
+import type { Lead } from "@/types/lead";
 import type { LeadHistoryItem } from "@/types/lead-history";
 
 type AttemptMarkResult = {
@@ -84,6 +86,7 @@ type LeadMaterialSentType =
   | "other";
 
 type LeadAssistedServicePanelProps = {
+  lead: Lead;
   leadId: string | number;
   empresaId: string | number;
   leadName?: string;
@@ -472,6 +475,7 @@ function getConversationStageLabel(stage: ConversationStage) {
 }
 
 export function LeadAssistedServicePanel({
+  lead,
   leadId,
   empresaId,
   leadName,
@@ -552,6 +556,14 @@ export function LeadAssistedServicePanel({
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const journeyState = useMemo(
+    () =>
+      getQualificationJourneyState({
+        lead,
+        recentHistory: leadHistory,
+      }),
+    [lead, leadHistory]
+  );
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -779,6 +791,11 @@ export function LeadAssistedServicePanel({
       message: input.customerMessage,
       recentHistory,
     });
+    const aiJourneyState = getQualificationJourneyState({
+      lead,
+      recentHistory: leadHistory,
+      currentMessage: input.customerMessage,
+    });
 
     const result = await fetch("/api/comercial/ai/adapt-approved-response", {
       method: "POST",
@@ -821,6 +838,15 @@ export function LeadAssistedServicePanel({
         shouldAvoidGreeting: hasPriorConversation,
         shouldAvoidEmoji: hasPriorConversation,
         shouldOfferEvaluationNow: canOfferEvaluation,
+        journeyContext: {
+          currentCheckpoint: aiJourneyState.currentCheckpoint,
+          currentLabel: aiJourneyState.currentLabel,
+          nextCheckpoint: aiJourneyState.nextCheckpoint,
+          nextLabel: aiJourneyState.nextLabel,
+          pendingQuestion: aiJourneyState.pendingQuestion,
+          knownFields: aiJourneyState.knownFields,
+          guidance: aiJourneyState.guidance,
+        },
       }),
     });
 
@@ -1246,8 +1272,6 @@ export function LeadAssistedServicePanel({
   }
 
   async function handleMoveToQualification() {
-    if (!nextActionSuggestion) return;
-
     if (!onMoveToQualification) {
       setStatusMessage("Ação ainda não conectada.");
       return;
@@ -1480,6 +1504,28 @@ export function LeadAssistedServicePanel({
               ? `Base usada: ${currentCommercialContext?.name ?? "contexto selecionado"}`
               : "Base usada: Global"}
           </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)]">
+          <span>
+            Jornada:{" "}
+            <strong className="font-semibold text-[var(--text)]">
+              {journeyState.currentLabel}
+            </strong>
+          </span>
+          {journeyState.nextLabel && (
+            <span>Proximo passo: {journeyState.nextLabel}</span>
+          )}
+          {journeyState.shouldSuggestQualification &&
+            currentFunnel === "prospeccao" && (
+              <button
+                type="button"
+                disabled={isApplyingAction}
+                onClick={() => void handleMoveToQualification()}
+                className="rounded-md border border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[11px] font-semibold text-blue-200 hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isApplyingAction ? "Movendo..." : "Qualificar"}
+              </button>
+            )}
         </div>
       </div>
 

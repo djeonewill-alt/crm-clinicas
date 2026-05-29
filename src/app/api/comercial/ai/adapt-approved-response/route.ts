@@ -25,6 +25,7 @@ type AdaptApprovedResponseInput = {
   shouldAvoidGreeting?: boolean;
   shouldAvoidEmoji?: boolean;
   shouldOfferEvaluationNow?: boolean;
+  journeyContext?: JourneyContextInput | null;
 };
 
 type KnowledgeCandidateInput = {
@@ -56,6 +57,16 @@ type RecentHistoryInput = {
   type?: string | null;
   createdAt?: string | null;
   metadata?: Record<string, unknown> | null;
+};
+
+type JourneyContextInput = {
+  currentCheckpoint?: string | null;
+  currentLabel?: string | null;
+  nextCheckpoint?: string | null;
+  nextLabel?: string | null;
+  pendingQuestion?: string | null;
+  knownFields?: Record<string, unknown> | null;
+  guidance?: string | null;
 };
 
 type AdaptApprovedResponseOutput = {
@@ -130,6 +141,42 @@ function sanitizeRecentHistory(value: unknown): RecentHistoryInput[] {
       metadata: sanitizeMetadata(record.metadata),
     };
   });
+}
+
+function sanitizeJourneyKnownFields(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const record = value as Record<string, unknown>;
+  const safeFields: Record<string, string | boolean | number> = {};
+
+  for (const [key, item] of Object.entries(record).slice(0, 12)) {
+    if (
+      typeof item === "string" ||
+      typeof item === "boolean" ||
+      typeof item === "number"
+    ) {
+      safeFields[key.slice(0, 50)] =
+        typeof item === "string" ? item.slice(0, 300) : item;
+    }
+  }
+
+  return safeFields;
+}
+
+function sanitizeJourneyContext(value: unknown): JourneyContextInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+
+  return {
+    currentCheckpoint: sanitizeOptionalText(record.currentCheckpoint),
+    currentLabel: sanitizeOptionalText(record.currentLabel),
+    nextCheckpoint: sanitizeOptionalText(record.nextCheckpoint),
+    nextLabel: sanitizeOptionalText(record.nextLabel),
+    pendingQuestion: sanitizeOptionalText(record.pendingQuestion),
+    knownFields: sanitizeJourneyKnownFields(record.knownFields),
+    guidance: sanitizeOptionalText(record.guidance),
+  };
 }
 
 function sanitizeKnowledgeCandidates(value: unknown): KnowledgeCandidateInput[] {
@@ -277,6 +324,7 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       shouldAvoidEmoji: input.shouldAvoidEmoji === true,
       shouldOfferEvaluationNow: input.shouldOfferEvaluationNow === true,
     },
+    journeyContext: sanitizeJourneyContext(input.journeyContext),
     flags: {
       requiresHuman: input.requiresHuman === true,
       canAutoReply: input.canAutoReply === true,
@@ -323,12 +371,23 @@ export async function POST(request: Request) {
       : process.env.OPENAI_RESPONSE_MODEL || "gpt-5.4-mini";
   const systemPrompt = [
     "BASE 15O.2: responda usando a resposta aprovada principal e knowledgeCandidates como base de conhecimento aprovada.",
+    "BASE 15U: tambem use journeyContext para entender o momento da jornada comercial antes de escolher o foco da resposta.",
     "Quando uma regra mencionar resposta aprovada, entenda como primaryApprovedResponse e knowledgeCandidates.",
     "Responda a pergunta completa do cliente como um atendente humano experiente, sem depender de uma unica resposta quando houver mais candidatos relevantes.",
     "Use somente informacoes presentes na resposta aprovada principal, nos knowledgeCandidates, no contexto comercial e no historico recente.",
     "Se a resposta aprovada principal encaixar muito bem, preserve 80% a 90% da estrutura e do conteudo; ajuste apenas tom, abertura de continuacao, ordem, repeticao e um gancho curto se couber.",
     "Nao transforme uma resposta boa e completa em resumo pobre.",
     "Se a pergunta misturar assuntos, combine knowledgeCandidates relevantes e responda na ordem da pergunta.",
+    "A IA nao deve responder so por intencao solta: considere currentCheckpoint, nextCheckpoint, pendingQuestion e guidance.",
+    "Primeiro responda a pergunta exata do cliente; depois, se couber, faca uma ponte curta para o proximo checkpoint pendente.",
+    "Nao pule etapas da qualificacao. Nao avance para agenda, Pix, sinal ou fechamento se a jornada ainda pede regiao/sub-regiao/unidade/disponibilidade.",
+    "Se o cliente fizer uma pergunta fora da ordem, responda somente com a informacao aprovada necessaria e volte em uma frase curta ao checkpoint pendente.",
+    "Se currentCheckpoint for cliente_respondeu_abordagem e a mensagem for 'Ok, pode passar', 'pode explicar' ou equivalente, responda com pacote inicial curto: tratamento regenerativo/microagulhamento; nao e laser, tinta nem camuflagem; valor R$ 180 por regiao quando essa informacao estiver na base; unidades; e pergunte qual regiao do corpo deseja tratar.",
+    "Nesse caso, nao use antes/depois como assunto principal, exceto se a cliente pedir fotos, resultado ou evolucao.",
+    "Se o cliente disser 'Barriga' enquanto a jornada pede regiao/sub-regiao, explique que barriga/abdomen pode ser superior, inferior ou as duas partes e pergunte onde ficam as estrias.",
+    "Se o cliente perguntar 'E laser?' em qualquer checkpoint, responda que nao e laser; e microagulhamento/tratamento regenerativo quando essa informacao estiver na base; depois volte ao proximo checkpoint pendente.",
+    "Nao pedir foto proativamente. Nao diga 'manda foto para eu avaliar'. Nao prometa avaliacao por foto ou WhatsApp.",
+    "Se a cliente perguntar se pode mandar foto, diga que pode mandar e que ficara anexada ao atendimento; reforce que a avaliacao mais segura e presencial porque foto pode enganar e nao permite avaliar pele, profundidade, textura e extensao com precisao.",
     "Nao misture assuntos desnecessarios nem traga fechamento/agendamento se o cliente so perguntou informacao inicial.",
     "Resposta simples deve ter 1 a 2 frases; resposta explicativa pode ter 2 a 4 paragrafos curtos; resposta com multiplos assuntos deve usar blocos curtos.",
     "Nao corte informacao essencial.",

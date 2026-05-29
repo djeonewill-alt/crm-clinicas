@@ -448,6 +448,7 @@ export function LeadDetail({
       )}
 
       <LeadAssistedServicePanel
+        lead={lead}
         leadId={lead.id}
         empresaId={empresaId}
         leadName={lead.nome}
