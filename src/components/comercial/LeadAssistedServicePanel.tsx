@@ -100,6 +100,7 @@ type LeadAssistedServicePanelProps = {
     returnDate: string;
     note?: string;
   }) => Promise<void> | void;
+  onCreateNote?: (description: string) => boolean | void | Promise<boolean | void>;
   currentFunnel?: string | null;
   currentJourneyStep?: string | null;
   currentCommercialContext?: CommercialContext | null;
@@ -479,6 +480,7 @@ export function LeadAssistedServicePanel({
   onCommercialReplySentAttempt,
   onCallLoggedAttempt,
   onScheduleReturn,
+  onCreateNote,
   currentFunnel,
   currentJourneyStep,
   currentCommercialContext,
@@ -547,6 +549,9 @@ export function LeadAssistedServicePanel({
   const [isRegisteringMaterialSent, setIsRegisteringMaterialSent] =
     useState(false);
   const materialSentInputRef = useRef<HTMLInputElement | null>(null);
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -596,6 +601,9 @@ export function LeadAssistedServicePanel({
     if (materialSentInputRef.current) {
       materialSentInputRef.current.value = "";
     }
+    setShowNoteForm(false);
+    setNoteText("");
+    setIsSavingNote(false);
     setShowApprovedResponseForm(false);
     resetApprovedResponseForm();
   }, [leadId]);
@@ -1203,6 +1211,40 @@ export function LeadAssistedServicePanel({
     }
   }
 
+  async function handleCreateNote() {
+    const trimmedNote = noteText.trim();
+
+    if (!trimmedNote) {
+      setStatusMessage("Digite uma observação antes de salvar.");
+      return;
+    }
+
+    if (!onCreateNote) {
+      setStatusMessage("Registro de observação ainda não conectado.");
+      return;
+    }
+
+    setIsSavingNote(true);
+    setStatusMessage("");
+
+    try {
+      const saved = await onCreateNote(trimmedNote);
+      if (saved !== false) {
+        setNoteText("");
+        setShowNoteForm(false);
+        setStatusMessage("Observação registrada no histórico.");
+      }
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar observação: ${error.message}`
+          : "Erro ao registrar observação."
+      );
+    } finally {
+      setIsSavingNote(false);
+    }
+  }
+
   async function handleMoveToQualification() {
     if (!nextActionSuggestion) return;
 
@@ -1435,7 +1477,7 @@ export function LeadAssistedServicePanel({
           {leadName && <span>Lead: {leadName}</span>}
           <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 font-semibold text-[var(--text2)]">
             {currentCommercialContext
-              ? `Base usada: ${currentCommercialContext.name}`
+              ? `Base usada: ${currentCommercialContext?.name ?? "contexto selecionado"}`
               : "Base usada: Global"}
           </span>
         </div>
@@ -1595,6 +1637,14 @@ export function LeadAssistedServicePanel({
             >
               + Material enviado
             </button>
+
+            <button
+              type="button"
+              onClick={() => setShowNoteForm((current) => !current)}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+            >
+              + Observação
+            </button>
           </div>
           {copyFeedbackMessage && (
             <p className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300">
@@ -1682,6 +1732,39 @@ export function LeadAssistedServicePanel({
                   onClick={() => {
                     resetMaterialSentForm();
                     setShowMaterialSentForm(false);
+                  }}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showNoteForm && (
+            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+              <textarea
+                value={noteText}
+                onChange={(event) => setNoteText(event.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="Ex: pediu preço, ficou de responder amanhã, quer agendar..."
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingNote || !noteText.trim()}
+                  onClick={() => void handleCreateNote()}
+                  className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingNote ? "Salvando..." : "Salvar observação"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingNote}
+                  onClick={() => {
+                    setShowNoteForm(false);
+                    setNoteText("");
                   }}
                   className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -2196,6 +2279,7 @@ export function LeadAssistedServicePanel({
         )}
       </section>
 
+      {false && (
       <section className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -2225,7 +2309,7 @@ export function LeadAssistedServicePanel({
             </p>
             <p className="mt-1 text-xs text-[var(--text3)]">
               {currentCommercialContext
-                ? `Contexto atual: ${currentCommercialContext.name}. Respostas de outros contextos são ignoradas.`
+                ? `Contexto atual: ${currentCommercialContext?.name ?? "contexto selecionado"}. Respostas de outros contextos são ignoradas.`
                 : "Este lead está sem contexto. Os blocos rápidos usam apenas respostas globais."}
             </p>
 
@@ -2249,6 +2333,7 @@ export function LeadAssistedServicePanel({
           </div>
         )}
       </section>
+      )}
 
       {statusMessage && (
         <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs text-[var(--text2)]">

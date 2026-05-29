@@ -7,7 +7,6 @@ import { LeadCommercialContextSelector } from "@/components/comercial/LeadCommer
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
 import { LeadJourneyCard } from "@/components/comercial/LeadJourneyCard";
-import { LeadMessageScripts } from "@/components/comercial/LeadMessageScripts";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import { FUNNELS } from "@/lib/constants/crm";
 import {
@@ -91,20 +90,6 @@ function getFunnelLabel(funnelId: string) {
   return FUNNELS.find((funnel) => funnel.id === funnelId)?.label ?? funnelId;
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "sem data";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "data inválida";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-  }).format(date);
-}
-
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -153,7 +138,7 @@ export function LeadDetail({
   onUpdateCommercialContext,
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [showLegacyScripts, setShowLegacyScripts] = useState(false);
+  const [showJourney, setShowJourney] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [closeForm, setCloseForm] = useState<CloseClientInput>(
     createInitialCloseForm
@@ -429,33 +414,38 @@ export function LeadDetail({
       )}
 
       {isEditing && (
-        <LeadEditForm
-          lead={lead}
-          onCancel={() => setIsEditing(false)}
-          onSave={async (data) => {
-            const saved = await onUpdateLeadDetails(data);
-            if (saved !== false) {
-              setIsEditing(false);
-            }
-            return saved;
-          }}
-        />
+        <>
+          <LeadEditForm
+            lead={lead}
+            onCancel={() => setIsEditing(false)}
+            onSave={async (data) => {
+              const saved = await onUpdateLeadDetails(data);
+              if (saved !== false) {
+                setIsEditing(false);
+              }
+              return saved;
+            }}
+          />
+
+          <section className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-red-300">
+              Zona de perigo
+            </p>
+            <p className="mt-1 text-sm text-[var(--text2)]">
+              Use apenas para leads duplicados ou criados para teste. A exclusão
+              é definitiva e remove também o histórico deste lead.
+            </p>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => onDeleteLead(lead)}
+              className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Excluir cliente
+            </button>
+          </section>
+        </>
       )}
-
-      <LeadJourneyCard
-        lead={lead}
-        tentativas={tentativas}
-        recentHistory={leadHistory.slice(0, 10)}
-        currentCommercialContext={currentCommercialContext}
-        onSendToRecovery={onSendToRecovery}
-        onMoveToQualification={() => onMoveToQualificacao(lead)}
-      />
-
-      <LeadCommercialContextSelector
-        currentContextId={lead.commercialContextId ?? null}
-        contexts={commercialContexts}
-        onChangeContext={onUpdateCommercialContext}
-      />
 
       <LeadAssistedServicePanel
         leadId={lead.id}
@@ -490,7 +480,58 @@ export function LeadDetail({
         leadHistory={leadHistory}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}
+        onCreateNote={onCreateLeadNote}
       />
+
+      <LeadCommercialContextSelector
+        currentContextId={lead.commercialContextId ?? null}
+        contexts={commercialContexts}
+        onChangeContext={onUpdateCommercialContext}
+      />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={() => onAdvanceQueue(lead)}
+          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {progress.isComplete ? "Avançar dia e próximo lead" : "Próximo lead"}
+        </button>
+      </div>
+
+      <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+              Jornada Comercial
+            </p>
+            <p className="mt-1 text-xs text-[var(--text2)]">
+              Jornada: {getFunnelLabel(lead.funnel)} · {lead.diaProsp || "d1"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowJourney((current) => !current)}
+            className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+          >
+            {showJourney ? "Ocultar jornada" : "Ver jornada"}
+          </button>
+        </div>
+
+        {showJourney && (
+          <div className="mt-3">
+            <LeadJourneyCard
+              lead={lead}
+              tentativas={tentativas}
+              recentHistory={leadHistory.slice(0, 10)}
+              currentCommercialContext={currentCommercialContext}
+              onSendToRecovery={onSendToRecovery}
+              onMoveToQualification={() => onMoveToQualificacao(lead)}
+            />
+          </div>
+        )}
+      </section>
 
       <TentativasList
         lead={lead}
@@ -506,85 +547,6 @@ export function LeadDetail({
         error={leadHistoryError}
         onCreateNote={onCreateLeadNote}
       />
-
-      <div className="mb-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl bg-[var(--bg3)] p-4">
-          <p className="text-xs uppercase tracking-wider text-[var(--text3)]">
-            Interesse
-          </p>
-          <p className="mt-1 text-sm text-[var(--text)]">
-            {lead.esp || "sem especialidade"}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-[var(--bg3)] p-4">
-          <p className="text-xs uppercase tracking-wider text-[var(--text3)]">
-            Entrada
-          </p>
-          <p className="mt-1 text-sm text-[var(--text)]">
-            {formatDate(lead.dataEntrada)}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={() => onAdvanceQueue(lead)}
-          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-black hover:bg-[var(--accent2)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {progress.isComplete ? "Avançar dia e próximo lead" : "Próximo lead"}
-        </button>
-
-        <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-300">
-          {isSaving ? "Salvando..." : "Alterações salvam direto no Supabase"}
-        </span>
-      </div>
-
-      <section className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
-              Mensagens prontas antigas
-            </p>
-            <p className="mt-1 text-sm text-[var(--text2)]">
-              Esses scripts continuam disponíveis como apoio, mas o fluxo
-              principal agora é pelo Atendimento Assistido.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowLegacyScripts((current) => !current)}
-            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
-          >
-            {showLegacyScripts
-              ? "Ocultar scripts antigos"
-              : "Mostrar scripts antigos"}
-          </button>
-        </div>
-      </section>
-
-      {showLegacyScripts && <LeadMessageScripts lead={lead} />}
-
-      <section className="mt-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-red-300">
-          Zona de perigo
-        </p>
-        <p className="mt-1 text-sm text-[var(--text2)]">
-          Use apenas para leads duplicados ou criados para teste. A exclusão é
-          definitiva e remove também o histórico deste lead.
-        </p>
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={() => onDeleteLead(lead)}
-          className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Excluir cliente
-        </button>
-      </section>
     </div>
   );
 }

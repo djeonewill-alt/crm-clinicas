@@ -1198,9 +1198,13 @@ export function useComercialTrabalho({
       setSelectedLeadId(null);
       setMessage("Cliente excluído com sucesso.");
     } catch (error) {
+      console.error(
+        "Erro ao excluir lead:",
+        error instanceof Error ? error.message : "erro desconhecido"
+      );
       setMessage(
         error instanceof Error
-          ? `Não foi possível excluir. Verifique permissões do banco. Detalhe: ${error.message}`
+          ? `Não foi possível excluir. Verifique permissões do banco. O cliente não foi removido. Detalhe: ${error.message}`
           : "Não foi possível excluir. Verifique permissões do banco."
       );
     } finally {

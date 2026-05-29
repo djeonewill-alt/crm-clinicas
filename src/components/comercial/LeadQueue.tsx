@@ -46,6 +46,48 @@ function formatPhone(phone: string) {
   return phone;
 }
 
+function parseLocalDate(value?: string | null) {
+  if (!value) return null;
+  const [datePart] = value.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function isOverdue(value?: string | null) {
+  const date = parseLocalDate(value);
+  if (!date) return false;
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return date.getTime() < todayOnly.getTime();
+}
+
+function getPriorityIndicator(lead: Lead) {
+  const progress = getAttemptProgress(lead);
+
+  if (isOverdue(lead.retornoData)) {
+    return { label: "Atrasado", className: "bg-red-400" };
+  }
+
+  if (lead.funnel === "retorno" && lead.retornoData) {
+    return { label: "Retorno", className: "bg-purple-400" };
+  }
+
+  if (lead.funnel === "qualificacao") {
+    return { label: "Qualif.", className: "bg-blue-400" };
+  }
+
+  if (progress.total > 0 && progress.completed >= progress.total) {
+    return { label: "Em dia", className: "bg-green-400" };
+  }
+
+  if (progress.total > 0) {
+    return { label: "Ação", className: "bg-orange-400" };
+  }
+
+  return { label: "Novo", className: "bg-orange-400" };
+}
+
 export function LeadQueue({
   workFunnel,
   activeFunnelLabel,
@@ -248,6 +290,7 @@ export function LeadQueue({
           queueLeads.map((lead) => {
             const active = String(selectedLeadId) === String(lead.id);
             const progress = getAttemptProgress(lead);
+            const priority = getPriorityIndicator(lead);
 
             return (
               <button
@@ -273,6 +316,14 @@ export function LeadQueue({
                   <span className="shrink-0 rounded-full bg-[rgba(232,197,71,.15)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
                     {lead.diaProsp || "d1"}
                   </span>
+                </div>
+
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--text3)]">
+                  <span
+                    className={cn("h-2 w-2 rounded-full", priority.className)}
+                    aria-hidden="true"
+                  />
+                  <span>{priority.label}</span>
                 </div>
 
                 <div className="mt-1 text-[11px] text-[var(--text2)]">

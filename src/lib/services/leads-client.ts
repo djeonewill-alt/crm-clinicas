@@ -165,14 +165,19 @@ export async function deleteLeadAndHistory(input: {
     throw new Error(historyError.message);
   }
 
-  const { error: leadError } = await supabase
+  const { data: leadData, error: leadError } = await supabase
     .from("leads")
     .delete()
     .eq("id", input.leadId)
-    .eq("empresa_id", input.empresaId);
+    .eq("empresa_id", input.empresaId)
+    .select("id");
 
   if (leadError) {
     throw new Error(leadError.message);
+  }
+
+  if (!leadData || leadData.length === 0) {
+    throw new Error("Nenhum lead foi excluído no banco.");
   }
 }
 

@@ -94,7 +94,9 @@ export function LeadHistory({
   error,
   onCreateNote,
 }: LeadHistoryProps) {
+  const [showFullHistory, setShowFullHistory] = useState(false);
   const [description, setDescription] = useState("");
+  const visibleItems = showFullHistory ? items : items.slice(0, 2);
   const trimmedDescription = description.trim();
 
   async function handleCreateNote() {
@@ -109,7 +111,7 @@ export function LeadHistory({
 
   return (
     <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
           Histórico
         </p>
@@ -118,6 +120,17 @@ export function LeadHistory({
         </p>
       </div>
 
+      {items.length > 2 && (
+        <button
+          type="button"
+          onClick={() => setShowFullHistory((current) => !current)}
+          className="mb-4 rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+        >
+          {showFullHistory ? "Ocultar histórico" : "Ver histórico completo"}
+        </button>
+      )}
+
+      {false && (
       <div className="mb-4">
         <textarea
           value={description}
@@ -140,6 +153,7 @@ export function LeadHistory({
           {error && <span className="text-xs text-red-300">{error}</span>}
         </div>
       </div>
+      )}
 
       {isLoading ? (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-sm text-[var(--text2)]">
@@ -151,7 +165,7 @@ export function LeadHistory({
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <div
               key={item.id}
               className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3"
