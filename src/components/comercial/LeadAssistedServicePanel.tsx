@@ -34,6 +34,19 @@ type AiAdaptationResult = {
   usedApprovedAnswerOnly: boolean;
 };
 
+type AiKnowledgeCandidate = {
+  id: string;
+  title: string;
+  categoryName?: string | null;
+  answerText: string;
+  exampleQuestions?: string[];
+  tags?: string[];
+  score?: number;
+  contextScope?: "current_context" | "global";
+  requiresHuman?: boolean;
+  canAutoReply?: boolean;
+};
+
 type ConversationStage =
   | "opening"
   | "direct_follow_up"
@@ -219,6 +232,8 @@ const RELEVANT_HISTORY_EVENTS = new Set([
   "commercial_context_updated",
 ]);
 const RECENT_DUPLICATE_HISTORY_LIMIT = 50;
+const MAX_AI_KNOWLEDGE_CANDIDATES = 5;
+const MAX_AI_KNOWLEDGE_ANSWER_LENGTH = 1800;
 const deferToNextFrame = () =>
   new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -501,6 +516,8 @@ export function LeadAssistedServicePanel({
   const [aiSafetyNotes, setAiSafetyNotes] = useState<string[]>([]);
   const [aiRequiresHumanReview, setAiRequiresHumanReview] = useState(false);
   const [aiAdapted, setAiAdapted] = useState(false);
+  const [aiKnowledgeCandidateCount, setAiKnowledgeCandidateCount] =
+    useState(0);
   const [isRegisteringReceived, setIsRegisteringReceived] = useState(false);
   const [isRegisteringReply, setIsRegisteringReply] = useState(false);
   const [isApplyingAction, setIsApplyingAction] = useState(false);
@@ -623,6 +640,7 @@ export function LeadAssistedServicePanel({
     setAiSafetyNotes([]);
     setAiRequiresHumanReview(false);
     setAiAdapted(false);
+    setAiKnowledgeCandidateCount(0);
   }
 
   function toggleApprovedResponseForm() {
@@ -754,6 +772,7 @@ export function LeadAssistedServicePanel({
   async function adaptApprovedResponseWithAi(input: {
     customerMessage: string;
     match: CommercialResponseMatch;
+    knowledgeCandidates: AiKnowledgeCandidate[];
   }): Promise<AiAdaptationResult> {
     const response = input.match.response;
     const recentHistory = getRecentAiHistory(leadHistory);
@@ -779,6 +798,20 @@ export function LeadAssistedServicePanel({
         approvedAnswerText: response.answerText,
         approvedResponseTitle: response.title,
         approvedResponseCategory: input.match.categoryName,
+        primaryApprovedResponse: {
+          id: response.id,
+          title: response.title,
+          answerText: response.answerText.slice(0, MAX_AI_KNOWLEDGE_ANSWER_LENGTH),
+          categoryName: input.match.categoryName,
+          contextScope:
+            input.match.contextScope === "current_context"
+              ? "current_context"
+              : "global",
+          requiresHuman: response.requiresHuman,
+          canAutoReply: response.canAutoReply,
+        },
+        knowledgeCandidates: input.knowledgeCandidates,
+        useStrongModel: true,
         contextName: currentCommercialContext?.name ?? null,
         contextPriceNotes: currentCommercialContext?.priceNotes ?? null,
         contextPaymentNotes: currentCommercialContext?.paymentNotes ?? null,
@@ -818,6 +851,34 @@ export function LeadAssistedServicePanel({
     return data;
   }
 
+  function createAiKnowledgeCandidates(matches: CommercialResponseMatch[]) {
+    return matches
+      .filter(
+        (match) =>
+          match.contextScope === "current_context" ||
+          match.contextScope === "global"
+      )
+      .slice(0, MAX_AI_KNOWLEDGE_CANDIDATES)
+      .map<AiKnowledgeCandidate>((match) => ({
+        id: match.response.id,
+        title: match.response.title,
+        categoryName: match.categoryName,
+        answerText: match.response.answerText.slice(
+          0,
+          MAX_AI_KNOWLEDGE_ANSWER_LENGTH
+        ),
+        exampleQuestions: match.response.exampleQuestions.slice(0, 8),
+        tags: match.response.tags.slice(0, 10),
+        score: match.score,
+        contextScope:
+          match.contextScope === "current_context"
+            ? "current_context"
+            : "global",
+        requiresHuman: match.response.requiresHuman,
+        canAutoReply: match.response.canAutoReply,
+      }));
+  }
+
   async function handleAnalyzeMessage() {
     const trimmedMessage = receivedMessage.trim();
 
@@ -855,6 +916,7 @@ export function LeadAssistedServicePanel({
       message: trimmedMessage,
       bestMatch: result.bestMatch,
     });
+    const knowledgeCandidates = createAiKnowledgeCandidates(result.matches);
 
     setSuggestionMatch(result.bestMatch);
     setNextActionSuggestion(nextAction);
@@ -873,10 +935,12 @@ export function LeadAssistedServicePanel({
       const adapted = await adaptApprovedResponseWithAi({
         customerMessage: trimmedMessage,
         match: result.bestMatch,
+        knowledgeCandidates,
       });
 
       setReplyText(adapted.adaptedReply);
       setAiAdapted(true);
+      setAiKnowledgeCandidateCount(knowledgeCandidates.length);
       setAiRequiresHumanReview(
         adapted.requiresHumanReview || result.bestMatch.response.requiresHuman
       );
@@ -890,6 +954,7 @@ export function LeadAssistedServicePanel({
     } catch (error) {
       setReplyText(result.bestMatch.response.answerText);
       setAiAdapted(false);
+      setAiKnowledgeCandidateCount(0);
       setAiRequiresHumanReview(result.bestMatch.response.requiresHuman);
       setAiSafetyNotes([]);
       setAiAdaptationError(
@@ -994,6 +1059,8 @@ export function LeadAssistedServicePanel({
           replyText: trimmedReply,
           assistedPanel: true,
           aiAdapted,
+          aiKnowledgeCandidateCount,
+          aiUsedKnowledgeBase: aiAdapted && aiKnowledgeCandidateCount > 0,
           approvedResponseId: suggestionMatch?.response.id ?? null,
           approvedResponseTitle: suggestionMatch?.response.title ?? null,
           requiresHumanReview:
@@ -1758,6 +1825,12 @@ export function LeadAssistedServicePanel({
               {aiAdaptationInfo && (
                 <p className="font-semibold text-[var(--text)]">
                   {aiAdaptationInfo}
+                </p>
+              )}
+              {aiAdapted && aiKnowledgeCandidateCount > 1 && (
+                <p className="mt-1 text-[var(--text3)]">
+                  IA usou {aiKnowledgeCandidateCount} respostas aprovadas como
+                  base.
                 </p>
               )}
               {aiAdaptationError && (

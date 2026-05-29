@@ -5,6 +5,9 @@ type AdaptApprovedResponseInput = {
   approvedAnswerText?: string;
   approvedResponseTitle?: string | null;
   approvedResponseCategory?: string | null;
+  primaryApprovedResponse?: PrimaryApprovedResponseInput | null;
+  knowledgeCandidates?: KnowledgeCandidateInput[];
+  useStrongModel?: boolean;
   contextName?: string | null;
   contextPriceNotes?: string | null;
   contextPaymentNotes?: string | null;
@@ -22,6 +25,29 @@ type AdaptApprovedResponseInput = {
   shouldAvoidGreeting?: boolean;
   shouldAvoidEmoji?: boolean;
   shouldOfferEvaluationNow?: boolean;
+};
+
+type KnowledgeCandidateInput = {
+  id?: string | null;
+  title?: string | null;
+  categoryName?: string | null;
+  answerText?: string | null;
+  exampleQuestions?: string[];
+  tags?: string[];
+  score?: number | null;
+  contextScope?: "current_context" | "global" | string | null;
+  requiresHuman?: boolean;
+  canAutoReply?: boolean;
+};
+
+type PrimaryApprovedResponseInput = {
+  id?: string | null;
+  title?: string | null;
+  answerText?: string | null;
+  categoryName?: string | null;
+  contextScope?: "current_context" | "global" | string | null;
+  requiresHuman?: boolean;
+  canAutoReply?: boolean;
 };
 
 type RecentHistoryInput = {
@@ -55,6 +81,24 @@ function sanitizeOptionalText(value: unknown) {
   return text || null;
 }
 
+function sanitizeStringArray(value: unknown, limit = 8) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .slice(0, limit)
+    .map(sanitizeText)
+    .filter(Boolean);
+}
+
+function sanitizeContextScope(value: unknown) {
+  return value === "current_context" || value === "global" ? value : null;
+}
+
+function sanitizeScore(value: unknown) {
+  const score = Number(value);
+  return Number.isFinite(score) ? score : null;
+}
+
 function sanitizeMetadata(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
@@ -86,6 +130,58 @@ function sanitizeRecentHistory(value: unknown): RecentHistoryInput[] {
       metadata: sanitizeMetadata(record.metadata),
     };
   });
+}
+
+function sanitizeKnowledgeCandidates(value: unknown): KnowledgeCandidateInput[] {
+  if (!Array.isArray(value)) return [];
+
+  const candidates: KnowledgeCandidateInput[] = [];
+
+  for (const item of value.slice(0, 5)) {
+    const record =
+      item && typeof item === "object"
+        ? (item as Record<string, unknown>)
+        : {};
+    const answerText = sanitizeText(record.answerText).slice(0, 1800);
+
+    if (!answerText) continue;
+
+    candidates.push({
+      id: sanitizeOptionalText(record.id),
+      title: sanitizeOptionalText(record.title),
+      categoryName: sanitizeOptionalText(record.categoryName),
+      answerText,
+      exampleQuestions: sanitizeStringArray(record.exampleQuestions),
+      tags: sanitizeStringArray(record.tags, 10),
+      score: sanitizeScore(record.score),
+      contextScope: sanitizeContextScope(record.contextScope),
+      requiresHuman: record.requiresHuman === true,
+      canAutoReply: record.canAutoReply === true,
+    });
+  }
+
+  return candidates;
+}
+
+function sanitizePrimaryApprovedResponse(
+  value: unknown
+): PrimaryApprovedResponseInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const answerText = sanitizeText(record.answerText).slice(0, 1800);
+
+  if (!answerText) return null;
+
+  return {
+    id: sanitizeOptionalText(record.id),
+    title: sanitizeOptionalText(record.title),
+    answerText,
+    categoryName: sanitizeOptionalText(record.categoryName),
+    contextScope: sanitizeContextScope(record.contextScope),
+    requiresHuman: record.requiresHuman === true,
+    canAutoReply: record.canAutoReply === true,
+  };
 }
 
 function clampConfidence(value: unknown) {
@@ -138,11 +234,28 @@ function extractResponseText(data: Record<string, unknown>) {
 }
 
 function buildUserPayload(input: AdaptApprovedResponseInput) {
+  const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const primaryApprovedResponse =
+    sanitizePrimaryApprovedResponse(input.primaryApprovedResponse) ??
+    (approvedAnswerText
+      ? {
+          id: null,
+          title: sanitizeOptionalText(input.approvedResponseTitle),
+          answerText: approvedAnswerText.slice(0, 1800),
+          categoryName: sanitizeOptionalText(input.approvedResponseCategory),
+          contextScope: null,
+          requiresHuman: input.requiresHuman === true,
+          canAutoReply: input.canAutoReply === true,
+        }
+      : null);
+
   return {
     customerMessage: sanitizeText(input.customerMessage),
-    approvedAnswerText: sanitizeText(input.approvedAnswerText),
+    approvedAnswerText,
     approvedResponseTitle: sanitizeOptionalText(input.approvedResponseTitle),
     approvedResponseCategory: sanitizeOptionalText(input.approvedResponseCategory),
+    primaryApprovedResponse,
+    knowledgeCandidates: sanitizeKnowledgeCandidates(input.knowledgeCandidates),
     commercialContext: {
       name: sanitizeOptionalText(input.contextName),
       priceNotes: sanitizeOptionalText(input.contextPriceNotes),
@@ -188,17 +301,39 @@ export async function POST(request: Request) {
 
   const customerMessage = sanitizeText(input.customerMessage);
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const hasKnowledgeCandidates =
+    sanitizeKnowledgeCandidates(input.knowledgeCandidates).length > 0;
+  const hasPrimaryApprovedResponse = Boolean(
+    sanitizePrimaryApprovedResponse(input.primaryApprovedResponse)
+  );
 
   if (!customerMessage) {
     return errorResponse("Mensagem do cliente não enviada.", 400);
   }
 
-  if (!approvedAnswerText) {
+  if (!approvedAnswerText && !hasKnowledgeCandidates && !hasPrimaryApprovedResponse) {
     return errorResponse("Resposta aprovada não enviada.", 400);
   }
 
-  const model = process.env.OPENAI_RESPONSE_MODEL || "gpt-5.4-mini";
+  const model =
+    input.useStrongModel === true
+      ? process.env.OPENAI_RESPONSE_STRONG_MODEL ||
+        process.env.OPENAI_RESPONSE_MODEL ||
+        "gpt-5.4-mini"
+      : process.env.OPENAI_RESPONSE_MODEL || "gpt-5.4-mini";
   const systemPrompt = [
+    "BASE 15O.2: responda usando a resposta aprovada principal e knowledgeCandidates como base de conhecimento aprovada.",
+    "Quando uma regra mencionar resposta aprovada, entenda como primaryApprovedResponse e knowledgeCandidates.",
+    "Responda a pergunta completa do cliente como um atendente humano experiente, sem depender de uma unica resposta quando houver mais candidatos relevantes.",
+    "Use somente informacoes presentes na resposta aprovada principal, nos knowledgeCandidates, no contexto comercial e no historico recente.",
+    "Se a resposta aprovada principal encaixar muito bem, preserve 80% a 90% da estrutura e do conteudo; ajuste apenas tom, abertura de continuacao, ordem, repeticao e um gancho curto se couber.",
+    "Nao transforme uma resposta boa e completa em resumo pobre.",
+    "Se a pergunta misturar assuntos, combine knowledgeCandidates relevantes e responda na ordem da pergunta.",
+    "Nao misture assuntos desnecessarios nem traga fechamento/agendamento se o cliente so perguntou informacao inicial.",
+    "Resposta simples deve ter 1 a 2 frases; resposta explicativa pode ter 2 a 4 paragrafos curtos; resposta com multiplos assuntos deve usar blocos curtos.",
+    "Nao corte informacao essencial.",
+    "Se a informacao nao estiver na base aprovada, contexto ou historico, marque requiresHumanReview true.",
+    "Marque requiresHumanReview true para Pix/pagamento, confirmacao de horario, diagnostico, promessa clinica, informacao ausente ou caso sensivel.",
     "Você é um assistente comercial para uma clínica estética.",
     "Sua tarefa é adaptar uma resposta aprovada ao jeito que o cliente perguntou e ao estágio real da conversa.",
     "Você não pode inventar informações.",
