@@ -8,6 +8,9 @@ import type { CommercialContext } from "@/types/commercial-contexts";
 import type { Lead, Tentativa } from "@/types/lead";
 import type { LeadHistoryItem } from "@/types/lead-history";
 
+const deferToNextFrame = () =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+
 type LeadJourneyCardProps = {
   lead: Lead;
   tentativas?: Tentativa[];
@@ -93,6 +96,7 @@ export function LeadJourneyCard({
     setIsSendingToRecovery(true);
 
     try {
+      await deferToNextFrame();
       await onSendToRecovery();
     } finally {
       setIsSendingToRecovery(false);
@@ -109,6 +113,7 @@ export function LeadJourneyCard({
     setIsMovingToQualification(true);
 
     try {
+      await deferToNextFrame();
       await onMoveToQualification();
     } finally {
       setIsMovingToQualification(false);

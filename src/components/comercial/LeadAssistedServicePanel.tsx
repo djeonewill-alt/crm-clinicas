@@ -190,6 +190,9 @@ const RELEVANT_HISTORY_EVENTS = new Set([
   "return_scheduled",
   "commercial_context_updated",
 ]);
+const RECENT_DUPLICATE_HISTORY_LIMIT = 50;
+const deferToNextFrame = () =>
+  new Promise((resolve) => setTimeout(resolve, 0));
 
 function formatContextDate(value: string | null) {
   if (!value) return "";
@@ -230,14 +233,15 @@ function hasDuplicateHistoryEvent(input: {
 
   if (!normalizedText) return false;
 
-  return input.history.some((item) => {
-    if (getHistoryEvent(item) !== input.event) return false;
+  const textMetadataKey =
+    input.event === "customer_message_received" ? "messageText" : "replyText";
+  const recentMatchingEvents = input.history
+    .filter((item) => getHistoryEvent(item) === input.event)
+    .slice(0, RECENT_DUPLICATE_HISTORY_LIMIT);
 
+  return recentMatchingEvents.some((item) => {
     const rawText =
-      input.event === "customer_message_received"
-        ? getHistoryMetadataText(item, "messageText") || item.description
-        : getHistoryMetadataText(item, "replyText") || item.description;
-
+      getHistoryMetadataText(item, textMetadataKey) || item.description;
     return normalizeHistoryText(rawText) === normalizedText;
   });
 }
@@ -864,6 +868,7 @@ export function LeadAssistedServicePanel({
     setStatusMessage("");
 
     try {
+      await deferToNextFrame();
       await createLeadHistoryEvent({
         leadId: String(leadId),
         empresaId: String(empresaId),
@@ -915,6 +920,7 @@ export function LeadAssistedServicePanel({
     setStatusMessage("");
 
     try {
+      await deferToNextFrame();
       await createLeadHistoryEvent({
         leadId: String(leadId),
         empresaId: String(empresaId),
@@ -974,6 +980,7 @@ export function LeadAssistedServicePanel({
     setStatusMessage("");
 
     try {
+      await deferToNextFrame();
       const trimmedNote = attachmentNote.trim();
       const description = trimmedNote
         ? `${attachmentFile.name}\n\n${trimmedNote}`
