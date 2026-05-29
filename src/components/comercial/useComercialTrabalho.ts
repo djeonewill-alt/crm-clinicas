@@ -381,6 +381,21 @@ export function useComercialTrabalho({
     setSelectedLeadId(firstLead?.id ?? null);
   }
 
+  function handleSelectLeadFromPriority(lead: Lead) {
+    const targetFunnel = FUNNELS.find((funnel) => funnel.id === lead.funnel);
+
+    setListMode("all");
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
+
+    if (targetFunnel) {
+      setWorkFunnel(targetFunnel.id);
+    }
+
+    setSelectedLeadId(lead.id);
+  }
+
   function clearSearch() {
     setSearch("");
   }
@@ -1165,6 +1180,7 @@ export function useComercialTrabalho({
   }
 
   return {
+    leads,
     workFunnel,
     activeFunnel,
     queuesByFunnel,
@@ -1220,6 +1236,7 @@ export function useComercialTrabalho({
     getLastAction,
 
     handleChangeFunnel,
+    handleSelectLeadFromPriority,
     handleCreateLead,
     handleUpdateLeadDetails,
     handleUpdateCommercialContext,

@@ -5,6 +5,7 @@ import { FunnelStatCards } from "@/components/comercial/FunnelStatCards";
 import { LeadQueue } from "@/components/comercial/LeadQueue";
 import { LeadDetail } from "@/components/comercial/LeadDetail";
 import { ComercialWorkHeader } from "@/components/comercial/ComercialWorkHeader";
+import { TodayPrioritiesCard } from "@/components/comercial/TodayPrioritiesCard";
 import { useComercialTrabalho } from "@/components/comercial/useComercialTrabalho";
 import type {
   CommercialResponse,
@@ -74,6 +75,13 @@ export function ComercialTrabalhoClient({
           onToggleNewLeadForm={() =>
             comercial.setShowNewLeadForm((current) => !current)
           }
+        />
+
+        <TodayPrioritiesCard
+          leads={comercial.leads}
+          selectedLeadId={comercial.selectedLead?.id ?? null}
+          onSelectLead={comercial.handleSelectLeadFromPriority}
+          getLeadName={comercial.getLeadName}
         />
 
         {comercial.showNewLeadForm && (
