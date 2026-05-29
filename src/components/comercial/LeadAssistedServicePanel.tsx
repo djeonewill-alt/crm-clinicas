@@ -49,6 +49,21 @@ type AiKnowledgeCandidate = {
   canAutoReply?: boolean;
 };
 
+type CallScriptResult = {
+  callScript: {
+    objective: string;
+    opening: string;
+    keyQuestions: string[];
+    whatToRegister: string[];
+    nextStepIfPositive: string;
+    ifClientCannotTalk: string;
+    safetyNotes: string[];
+  };
+  checkpointUsed: string;
+  confidence: number;
+  requiresHumanReview: boolean;
+};
+
 type ConversationStage =
   | "opening"
   | "direct_follow_up"
@@ -556,6 +571,10 @@ export function LeadAssistedServicePanel({
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [callScriptResult, setCallScriptResult] =
+    useState<CallScriptResult | null>(null);
+  const [isGeneratingCallScript, setIsGeneratingCallScript] = useState(false);
+  const [callScriptError, setCallScriptError] = useState("");
   const journeyState = useMemo(
     () =>
       getQualificationJourneyState({
@@ -616,6 +635,9 @@ export function LeadAssistedServicePanel({
     setShowNoteForm(false);
     setNoteText("");
     setIsSavingNote(false);
+    setCallScriptResult(null);
+    setIsGeneratingCallScript(false);
+    setCallScriptError("");
     setShowApprovedResponseForm(false);
     resetApprovedResponseForm();
   }, [leadId]);
@@ -1487,6 +1509,117 @@ export function LeadAssistedServicePanel({
     }
   }
 
+  function formatCallScriptForCopy(script: CallScriptResult) {
+    return [
+      `Objetivo: ${script.callScript.objective}`,
+      "",
+      `Abertura: ${script.callScript.opening}`,
+      "",
+      "Perguntas essenciais:",
+      ...script.callScript.keyQuestions.map((item) => `- ${item}`),
+      "",
+      "O que registrar:",
+      ...script.callScript.whatToRegister.map((item) => `- ${item}`),
+      "",
+      `Proximo passo: ${script.callScript.nextStepIfPositive}`,
+      "",
+      `Se nao puder falar: ${script.callScript.ifClientCannotTalk}`,
+    ].join("\n");
+  }
+
+  async function handleGenerateCallScript() {
+    setIsGeneratingCallScript(true);
+    setCallScriptError("");
+    setStatusMessage("Gerando roteiro de ligação...");
+
+    try {
+      const result = await fetch("/api/comercial/ai/generate-call-script", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lead: {
+            id: lead.id,
+            nome: lead.nome,
+            telefone: lead.tel,
+            funnel: lead.funnel,
+            diaProsp: lead.diaProsp,
+            campanha: lead.campanha ?? null,
+          },
+          journeyContext: {
+            currentCheckpoint: journeyState.currentCheckpoint,
+            currentLabel: journeyState.currentLabel,
+            nextCheckpoint: journeyState.nextCheckpoint,
+            nextLabel: journeyState.nextLabel,
+            pendingQuestion: journeyState.pendingQuestion,
+            knownFields: journeyState.knownFields,
+            guidance: journeyState.guidance,
+          },
+          recentHistory: getRecentAiHistory(leadHistory).slice(0, 15),
+          commercialContext: currentCommercialContext
+            ? {
+                name: currentCommercialContext.name,
+                audienceLabel: currentCommercialContext.audienceLabel,
+                campaignLabel: currentCommercialContext.campaignLabel,
+              }
+            : null,
+        }),
+      });
+
+      const data = (await result.json().catch(() => ({}))) as
+        | CallScriptResult
+        | { error?: string };
+
+      if (!result.ok) {
+        throw new Error(
+          "error" in data && data.error
+            ? data.error
+            : "Erro ao gerar roteiro de ligação."
+        );
+      }
+
+      if (!("callScript" in data)) {
+        throw new Error("Resposta inválida da IA.");
+      }
+
+      setCallScriptResult(data);
+      setStatusMessage("Roteiro de ligação gerado.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao gerar roteiro de ligação.";
+      setCallScriptError(message);
+      setStatusMessage(message);
+    } finally {
+      setIsGeneratingCallScript(false);
+    }
+  }
+
+  async function handleCopyCallScript() {
+    if (!callScriptResult) return;
+
+    const text = formatCallScriptForCopy(callScriptResult);
+
+    if (!navigator.clipboard) {
+      setCallScriptError(
+        "Não foi possível copiar automaticamente. Selecione o roteiro manualmente."
+      );
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatusMessage("Roteiro copiado.");
+      setCallScriptError("");
+    } catch {
+      setCallScriptError(
+        "Não foi possível copiar automaticamente. Selecione o roteiro manualmente."
+      );
+    }
+  }
+
   return (
     <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
       <div className="mb-4">
@@ -2302,16 +2435,128 @@ export function LeadAssistedServicePanel({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowCallLogForm((current) => !current)}
-            className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
-          >
-            {showCallLogForm
-              ? "Ocultar registro de ligação"
-              : "Mostrar registro de ligação"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isGeneratingCallScript}
+              onClick={() => void handleGenerateCallScript()}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isGeneratingCallScript
+                ? "Gerando roteiro..."
+                : "Gerar roteiro de ligacao"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCallLogForm((current) => !current)}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg4)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+            >
+              {showCallLogForm
+                ? "Ocultar registro de ligacao"
+                : "Mostrar registro de ligacao"}
+            </button>
+          </div>
         </div>
+
+        {callScriptError && (
+          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+            {callScriptError}
+          </p>
+        )}
+
+        {callScriptResult && (
+          <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3 text-sm text-[var(--text2)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+                  Roteiro de ligacao
+                </p>
+                <p className="mt-1 text-xs text-[var(--text3)]">
+                  Depois da ligacao, registre o resultado em Registrar ligacao.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleCopyCallScript()}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+                >
+                  Copiar roteiro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCallScriptResult(null);
+                    setCallScriptError("");
+                  }}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+                >
+                  Ocultar roteiro
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-[var(--text)]">
+                  Objetivo
+                </p>
+                <p className="mt-1">{callScriptResult.callScript.objective}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-[var(--text)]">
+                  Abertura
+                </p>
+                <p className="mt-1">{callScriptResult.callScript.opening}</p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text)]">
+                    Perguntas essenciais
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {callScriptResult.callScript.keyQuestions.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text)]">
+                    O que registrar
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {callScriptResult.callScript.whatToRegister.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text)]">
+                    Proximo passo
+                  </p>
+                  <p className="mt-1">
+                    {callScriptResult.callScript.nextStepIfPositive}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text)]">
+                    Se nao puder falar
+                  </p>
+                  <p className="mt-1">
+                    {callScriptResult.callScript.ifClientCannotTalk}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showCallLogForm && (
           <div className="mt-3">
