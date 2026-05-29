@@ -58,6 +58,18 @@ type LeadAttachmentType =
   | "document"
   | "other";
 
+type LeadMaterialSentType =
+  | "before_after"
+  | "evolution_1_session"
+  | "evolution_2_sessions"
+  | "evolution_4_sessions"
+  | "address"
+  | "payment_pix"
+  | "schedule"
+  | "certification"
+  | "document"
+  | "other";
+
 type LeadAssistedServicePanelProps = {
   leadId: string | number;
   empresaId: string | number;
@@ -183,6 +195,22 @@ const ATTACHMENT_TYPE_OPTIONS: Array<{
   { value: "other", label: "Outro" },
 ];
 
+const MATERIAL_SENT_TYPE_OPTIONS: Array<{
+  value: LeadMaterialSentType;
+  label: string;
+}> = [
+  { value: "before_after", label: "Antes e depois" },
+  { value: "evolution_1_session", label: "Evolução 1 sessão" },
+  { value: "evolution_2_sessions", label: "Evolução 2 sessões" },
+  { value: "evolution_4_sessions", label: "Evolução 4 sessões" },
+  { value: "address", label: "Endereço" },
+  { value: "payment_pix", label: "Pix / pagamento" },
+  { value: "schedule", label: "Agenda / horário" },
+  { value: "certification", label: "Certificação / profissional" },
+  { value: "document", label: "Documento" },
+  { value: "other", label: "Outro" },
+];
+
 const RELEVANT_HISTORY_EVENTS = new Set([
   "customer_message_received",
   "commercial_reply_sent",
@@ -250,6 +278,21 @@ function getAttachmentTitle(attachmentType: LeadAttachmentType) {
   if (attachmentType === "pix_receipt") return "Comprovante Pix recebido";
   if (attachmentType === "customer_photo") return "Foto recebida do cliente";
   return "Anexo recebido do cliente";
+}
+
+function getMaterialSentTitle(materialType: LeadMaterialSentType) {
+  if (materialType === "before_after") return "Antes e depois enviado";
+  if (
+    materialType === "evolution_1_session" ||
+    materialType === "evolution_2_sessions" ||
+    materialType === "evolution_4_sessions"
+  ) {
+    return "Material de evolução enviado";
+  }
+  if (materialType === "address") return "Endereço enviado";
+  if (materialType === "payment_pix") return "Pix/pagamento enviado";
+  if (materialType === "schedule") return "Informação de agenda enviada";
+  return "Material enviado ao cliente";
 }
 
 function getRecentAiHistory(history: LeadHistoryItem[] = []) {
@@ -494,6 +537,15 @@ export function LeadAssistedServicePanel({
   const [attachmentNote, setAttachmentNote] = useState("");
   const [isRegisteringAttachment, setIsRegisteringAttachment] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [showMaterialSentForm, setShowMaterialSentForm] = useState(false);
+  const [materialSentType, setMaterialSentType] =
+    useState<LeadMaterialSentType>("before_after");
+  const [materialSentName, setMaterialSentName] = useState("");
+  const [materialSentFile, setMaterialSentFile] = useState<File | null>(null);
+  const [materialSentNote, setMaterialSentNote] = useState("");
+  const [isRegisteringMaterialSent, setIsRegisteringMaterialSent] =
+    useState(false);
+  const materialSentInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -533,6 +585,15 @@ export function LeadAssistedServicePanel({
     setIsRegisteringAttachment(false);
     if (attachmentInputRef.current) {
       attachmentInputRef.current.value = "";
+    }
+    setShowMaterialSentForm(false);
+    setMaterialSentType("before_after");
+    setMaterialSentName("");
+    setMaterialSentFile(null);
+    setMaterialSentNote("");
+    setIsRegisteringMaterialSent(false);
+    if (materialSentInputRef.current) {
+      materialSentInputRef.current.value = "";
     }
     setShowApprovedResponseForm(false);
     resetApprovedResponseForm();
@@ -1024,6 +1085,73 @@ export function LeadAssistedServicePanel({
     }
   }
 
+  function resetMaterialSentForm() {
+    setMaterialSentType("before_after");
+    setMaterialSentName("");
+    setMaterialSentFile(null);
+    setMaterialSentNote("");
+    if (materialSentInputRef.current) {
+      materialSentInputRef.current.value = "";
+    }
+  }
+
+  async function handleRegisterMaterialSent() {
+    const materialLabel =
+      MATERIAL_SENT_TYPE_OPTIONS.find(
+        (option) => option.value === materialSentType
+      )?.label ?? "Outro";
+    const trimmedName = materialSentName.trim();
+    const trimmedNote = materialSentNote.trim();
+    const description = [
+      trimmedName || materialSentFile?.name || materialLabel,
+      trimmedNote,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    setIsRegisteringMaterialSent(true);
+    setStatusMessage("");
+
+    try {
+      await deferToNextFrame();
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: getMaterialSentTitle(materialSentType),
+        description,
+        metadata: {
+          event: "lead_material_sent",
+          source: "assisted_panel",
+          materialType: materialSentType,
+          materialLabel,
+          ...(materialSentFile
+            ? {
+                fileName: materialSentFile.name,
+                fileSize: materialSentFile.size,
+                mimeType:
+                  materialSentFile.type || "application/octet-stream",
+              }
+            : {}),
+          assistedPanel: true,
+        },
+      });
+
+      await onHistoryChanged?.();
+      resetMaterialSentForm();
+      setShowMaterialSentForm(false);
+      setStatusMessage("Material enviado registrado no histórico.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar material enviado: ${error.message}`
+          : "Erro ao registrar material enviado."
+      );
+    } finally {
+      setIsRegisteringMaterialSent(false);
+    }
+  }
+
   async function handleMoveToQualification() {
     if (!nextActionSuggestion) return;
 
@@ -1435,11 +1563,108 @@ export function LeadAssistedServicePanel({
                 ? "Fechar criação de resposta"
                 : "Salvar esta resposta na base"}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setShowMaterialSentForm((current) => !current)}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+            >
+              + Material enviado
+            </button>
           </div>
           {copyFeedbackMessage && (
             <p className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300">
               {copyFeedbackMessage}
             </p>
+          )}
+
+          {showMaterialSentForm && (
+            <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Tipo do material
+                  <select
+                    value={materialSentType}
+                    onChange={(event) =>
+                      setMaterialSentType(
+                        event.target.value as LeadMaterialSentType
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                  >
+                    {MATERIAL_SENT_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Nome do arquivo ou material
+                  <input
+                    value={materialSentName}
+                    onChange={(event) => setMaterialSentName(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                    placeholder="Ex: Antes e depois - 1 sessão"
+                  />
+                </label>
+
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Arquivo opcional
+                  <input
+                    ref={materialSentInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(event) =>
+                      setMaterialSentFile(event.target.files?.[0] ?? null)
+                    }
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none file:mr-3 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-2 file:py-1 file:text-xs file:font-semibold file:text-black"
+                  />
+                </label>
+
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+                  Observação opcional
+                  <input
+                    value={materialSentNote}
+                    onChange={(event) => setMaterialSentNote(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                    placeholder="Ex: enviei 1, 2 e 4 sessões."
+                  />
+                </label>
+              </div>
+
+              <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Upload de arquivos ainda não está configurado neste projeto. O
+                CRM vai registrar apenas as informações do material no
+                histórico.
+              </p>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={isRegisteringMaterialSent}
+                  onClick={() => void handleRegisterMaterialSent()}
+                  className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRegisteringMaterialSent
+                    ? "Registrando..."
+                    : "Registrar material enviado"}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isRegisteringMaterialSent}
+                  onClick={() => {
+                    resetMaterialSentForm();
+                    setShowMaterialSentForm(false);
+                  }}
+                  className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

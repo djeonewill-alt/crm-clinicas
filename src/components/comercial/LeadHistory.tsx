@@ -55,6 +55,19 @@ function getAttachmentTypeLabel(value: string) {
   return "Outro";
 }
 
+function getMaterialTypeLabel(value: string) {
+  if (value === "before_after") return "Antes e depois";
+  if (value === "evolution_1_session") return "Evolução 1 sessão";
+  if (value === "evolution_2_sessions") return "Evolução 2 sessões";
+  if (value === "evolution_4_sessions") return "Evolução 4 sessões";
+  if (value === "address") return "Endereço";
+  if (value === "payment_pix") return "Pix / pagamento";
+  if (value === "schedule") return "Agenda / horário";
+  if (value === "certification") return "Certificação / profissional";
+  if (value === "document") return "Documento";
+  return "Outro";
+}
+
 export function LeadHistory({
   items,
   isLoading,
@@ -170,6 +183,37 @@ export function LeadHistory({
                   ) : (
                     <div className="mt-1 text-[var(--text3)]">
                       Arquivo registrado sem upload.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {item.metadata?.event === "lead_material_sent" && (
+                <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+                  <div>
+                    Material:{" "}
+                    {getMetadataString(item.metadata, "materialLabel") ||
+                      getMaterialTypeLabel(
+                        getMetadataString(item.metadata, "materialType")
+                      )}
+                  </div>
+                  {getMetadataString(item.metadata, "fileName") && (
+                    <div className="mt-1">
+                      Arquivo: {getMetadataString(item.metadata, "fileName")}
+                    </div>
+                  )}
+                  {getMetadataString(item.metadata, "publicUrl") ? (
+                    <a
+                      href={getMetadataString(item.metadata, "publicUrl")}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex rounded-lg border border-[var(--accent)] px-3 py-1.5 font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.10)]"
+                    >
+                      Abrir material
+                    </a>
+                  ) : (
+                    <div className="mt-1 text-[var(--text3)]">
+                      Material registrado sem upload.
                     </div>
                   )}
                 </div>
