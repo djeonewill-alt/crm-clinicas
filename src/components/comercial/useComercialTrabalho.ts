@@ -53,6 +53,17 @@ type ScheduleReturnInput = {
   note?: string;
 };
 
+export type CloseClientInput = {
+  appointmentDate: string;
+  appointmentTime?: string;
+  unit: string;
+  signalStatus: "paid" | "pending" | "not_applicable";
+  signalAmount?: string;
+  receiptReceived: boolean;
+  signalFollowUpDate?: string;
+  notes?: string;
+};
+
 type ArchiveLeadOptions = {
   recovery?: boolean;
   source?: string;
@@ -618,8 +629,9 @@ export function useComercialTrabalho({
       );
       setMessage("Contexto comercial atualizado.");
 
-      await recordLeadHistoryEvent({
-        leadId: updatedLead.id,
+      await createLeadHistoryEvent({
+        leadId: String(updatedLead.id),
+        empresaId: String(empresaId),
         type: "note",
         title: "Contexto comercial atualizado",
         description: newContext
@@ -967,13 +979,7 @@ export function useComercialTrabalho({
     selectNextLeadAfter(lead.id);
   }
 
-  async function handleCloseClient(lead: Lead) {
-    const confirmClose = window.confirm(
-      `Fechar ${getLeadName(lead)} como cliente?`
-    );
-
-    if (!confirmClose) return;
-
+  async function handleCloseClient(lead: Lead, input: CloseClientInput) {
     const updatedLead: Lead = {
       ...lead,
       funnel: "clientes",
@@ -981,27 +987,80 @@ export function useComercialTrabalho({
       fechadoEm: Date.now(),
       colAt: Date.now(),
     };
+    const signalLabelMap: Record<CloseClientInput["signalStatus"], string> = {
+      paid: "Pago",
+      pending: "Pendente",
+      not_applicable: "Não aplicável / sem sinal",
+    };
+    const signalAmount = input.signalAmount?.trim() || "100";
+    const description = [
+      `Agendamento: ${formatDate(input.appointmentDate)}${
+        input.appointmentTime?.trim() ? ` ${input.appointmentTime.trim()}` : ""
+      } — ${input.unit}.`,
+      `Sinal: ${signalLabelMap[input.signalStatus]}. Valor: R$ ${signalAmount}.`,
+      `Comprovante: ${input.receiptReceived ? "sim" : "não"}.`,
+      input.signalStatus === "pending" && input.signalFollowUpDate
+        ? `Cobrar sinal em: ${formatDate(input.signalFollowUpDate)}.`
+        : null,
+      input.notes?.trim() ? `Observações: ${input.notes.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const previousLeads = leads;
 
-    const saved = await saveUpdatedLead(
-      updatedLead,
-      "Lead fechado como Cliente."
-    );
+    setSavingLeadId(lead.id);
+    setMessage("");
 
-    if (saved) {
-      await recordLeadHistoryEvent({
-        leadId: updatedLead.id,
-        type: "closed",
-        title: "Lead fechado como Cliente",
-        description: "Lead fechado como Cliente.",
+    try {
+      await createLeadHistoryEvent({
+        leadId: String(updatedLead.id),
+        empresaId: String(empresaId),
+        type: "note",
+        title: "Cliente fechado / avaliação agendada",
+        description,
         metadata: {
-          event: "lead_closed",
-          fromFunnel: lead.funnel,
-          toFunnel: "clientes",
+          event: "lead_closed_with_schedule",
+          source: "close_flow",
+          appointmentDate: input.appointmentDate,
+          appointmentTime: input.appointmentTime?.trim() || null,
+          unit: input.unit,
+          signalStatus: input.signalStatus,
+          signalAmount,
+          receiptReceived: input.receiptReceived,
+          signalFollowUpDate: input.signalFollowUpDate || null,
+          notes: input.notes?.trim() || null,
+          previousFunnel: lead.funnel,
+          newFunnel: "clientes",
         },
       });
-    }
 
-    selectNextLeadAfter(lead.id);
+      setLeads((current) =>
+        current.map((item) =>
+          String(item.id) === String(updatedLead.id) ? updatedLead : item
+        )
+      );
+
+      await updateLeadCommercialFields({
+        empresaId,
+        lead: updatedLead,
+      });
+
+      setWorkFunnel("clientes");
+      setSelectedLeadId(updatedLead.id);
+      setMessage("Cliente fechado com agendamento registrado.");
+      await loadLeadHistory(String(updatedLead.id));
+      return true;
+    } catch (error) {
+      setLeads(previousLeads);
+      setMessage(
+        error instanceof Error
+          ? `Erro ao fechar cliente: ${error.message}`
+          : "Erro ao fechar cliente."
+      );
+      return false;
+    } finally {
+      setSavingLeadId(null);
+    }
   }
 
   async function handleDisqualify(lead: Lead) {

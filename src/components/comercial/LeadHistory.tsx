@@ -48,6 +48,25 @@ function getMetadataString(
   return typeof value === "string" ? value : "";
 }
 
+function getMetadataDisplayString(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+) {
+  const value = metadata?.[key];
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function getSignalStatusLabel(value: string) {
+  if (value === "paid") return "Pago";
+  if (value === "pending") return "Pendente";
+  if (value === "not_applicable") return "Não aplicável / sem sinal";
+  return value || "Não informado";
+}
+
 function getAttachmentTypeLabel(value: string) {
   if (value === "pix_receipt") return "Comprovante Pix";
   if (value === "customer_photo") return "Foto enviada pelo cliente";
@@ -214,6 +233,70 @@ export function LeadHistory({
                   ) : (
                     <div className="mt-1 text-[var(--text3)]">
                       Material registrado sem upload.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {item.metadata?.event === "lead_closed_with_schedule" && (
+                <div className="mt-3 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2 text-xs text-[var(--text2)]">
+                  <div>
+                    Agendamento:{" "}
+                    {getMetadataDisplayString(
+                      item.metadata,
+                      "appointmentDate"
+                    ) || "sem data"}
+                    {getMetadataDisplayString(
+                      item.metadata,
+                      "appointmentTime"
+                    )
+                      ? ` ${getMetadataDisplayString(
+                          item.metadata,
+                          "appointmentTime"
+                        )}`
+                      : ""}
+                  </div>
+                  <div className="mt-1">
+                    Unidade:{" "}
+                    {getMetadataDisplayString(item.metadata, "unit") ||
+                      "Não informada"}
+                  </div>
+                  <div className="mt-1">
+                    Sinal:{" "}
+                    {getSignalStatusLabel(
+                      getMetadataDisplayString(item.metadata, "signalStatus")
+                    )}
+                  </div>
+                  <div className="mt-1">
+                    Valor: R${" "}
+                    {getMetadataDisplayString(item.metadata, "signalAmount") ||
+                      "100"}
+                  </div>
+                  <div className="mt-1">
+                    Comprovante:{" "}
+                    {getMetadataDisplayString(
+                      item.metadata,
+                      "receiptReceived"
+                    ) === "true"
+                      ? "sim"
+                      : "não"}
+                  </div>
+                  {getMetadataDisplayString(
+                    item.metadata,
+                    "signalFollowUpDate"
+                  ) && (
+                    <div className="mt-1">
+                      Cobrar sinal em:{" "}
+                      {getMetadataDisplayString(
+                        item.metadata,
+                        "signalFollowUpDate"
+                      )}
+                    </div>
+                  )}
+                  {getMetadataDisplayString(item.metadata, "notes") && (
+                    <div className="mt-1">
+                      Observações:{" "}
+                      {getMetadataDisplayString(item.metadata, "notes")}
                     </div>
                   )}
                 </div>

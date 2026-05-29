@@ -15,7 +15,10 @@ import {
   ensureTentativasForLead,
   getAttemptProgress,
 } from "@/lib/services/queue";
-import type { MarkLeadAttemptResult } from "@/components/comercial/useComercialTrabalho";
+import type {
+  CloseClientInput,
+  MarkLeadAttemptResult,
+} from "@/components/comercial/useComercialTrabalho";
 import type {
   CommercialResponse,
   CommercialResponseCategory,
@@ -36,7 +39,10 @@ type LeadDetailProps = {
   onRetornoDateChange: (value: string) => void;
   onPreviousDay: (lead: Lead) => void | Promise<void>;
   onMoveToQualificacao: (lead: Lead) => void | Promise<void>;
-  onCloseClient: (lead: Lead) => void | Promise<void>;
+  onCloseClient: (
+    lead: Lead,
+    input: CloseClientInput
+  ) => boolean | void | Promise<boolean | void>;
   onDisqualify: (lead: Lead) => void | Promise<void>;
   onArchiveLead: () => void | Promise<void>;
   onDeleteLead: (lead: Lead) => void | Promise<void>;
@@ -99,6 +105,23 @@ function formatDate(value?: string | null) {
   }).format(date);
 }
 
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function createInitialCloseForm(): CloseClientInput {
+  return {
+    appointmentDate: todayInputValue(),
+    appointmentTime: "",
+    unit: "A confirmar",
+    signalStatus: "paid",
+    signalAmount: "100",
+    receiptReceived: false,
+    signalFollowUpDate: "",
+    notes: "",
+  };
+}
+
 export function LeadDetail({
   lead,
   empresaId,
@@ -131,6 +154,11 @@ export function LeadDetail({
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showLegacyScripts, setShowLegacyScripts] = useState(false);
+  const [showCloseForm, setShowCloseForm] = useState(false);
+  const [closeForm, setCloseForm] = useState<CloseClientInput>(
+    createInitialCloseForm
+  );
+  const [closeFormError, setCloseFormError] = useState("");
 
   if (!lead) {
     return (
@@ -195,13 +223,210 @@ export function LeadDetail({
             onRetornoDateChange={onRetornoDateChange}
             onPreviousDay={onPreviousDay}
             onMoveToQualificacao={onMoveToQualificacao}
-            onCloseClient={onCloseClient}
+            onCloseClient={() => {
+              setCloseForm(createInitialCloseForm());
+              setCloseFormError("");
+              setShowCloseForm(true);
+            }}
             onDisqualify={onDisqualify}
             onArchiveLead={onArchiveLead}
             onMoveToRetorno={onMoveToRetorno}
           />
         </div>
       </div>
+
+      {showCloseForm && (
+        <section className="mb-4 rounded-xl border border-green-500/30 bg-green-500/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-green-300">
+                Fechamento / agendamento
+              </p>
+              <p className="mt-1 text-sm text-[var(--text2)]">
+                Registre os dados antes de mover o lead para Clientes.
+              </p>
+            </div>
+            {closeForm.signalStatus === "pending" &&
+              !closeForm.signalFollowUpDate && (
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300">
+                  Sem data de cobrança do sinal
+                </span>
+              )}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Data da avaliação/agendamento
+              <input
+                type="date"
+                value={closeForm.appointmentDate}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    appointmentDate: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Horário
+              <input
+                type="time"
+                value={closeForm.appointmentTime}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    appointmentTime: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Unidade
+              <select
+                value={closeForm.unit}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    unit: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              >
+                <option>Paulista</option>
+                <option>Tatuapé</option>
+                <option>Mairiporã</option>
+                <option>A confirmar</option>
+                <option>Outra</option>
+              </select>
+            </label>
+
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Sinal Pix
+              <select
+                value={closeForm.signalStatus}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    signalStatus: event.target
+                      .value as CloseClientInput["signalStatus"],
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              >
+                <option value="paid">Pago</option>
+                <option value="pending">Pendente</option>
+                <option value="not_applicable">Não aplicável / sem sinal</option>
+              </select>
+            </label>
+
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Valor do sinal
+              <input
+                value={closeForm.signalAmount}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    signalAmount: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+                placeholder="100"
+              />
+            </label>
+
+            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+              Data para cobrar sinal
+              <input
+                type="date"
+                value={closeForm.signalFollowUpDate}
+                onChange={(event) =>
+                  setCloseForm((current) => ({
+                    ...current,
+                    signalFollowUpDate: event.target.value,
+                  }))
+                }
+                className="mt-2 w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none focus:border-[var(--accent)]"
+              />
+            </label>
+          </div>
+
+          <label className="mt-3 flex items-center gap-2 text-sm text-[var(--text2)]">
+            <input
+              type="checkbox"
+              checked={closeForm.receiptReceived}
+              onChange={(event) =>
+                setCloseForm((current) => ({
+                  ...current,
+                  receiptReceived: event.target.checked,
+                }))
+              }
+              className="h-4 w-4"
+            />
+            Comprovante recebido
+          </label>
+
+          <label className="mt-3 block text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
+            Observações
+            <textarea
+              value={closeForm.notes}
+              onChange={(event) =>
+                setCloseForm((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))
+              }
+              rows={3}
+              className="mt-2 w-full resize-none rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--text)] outline-none placeholder:text-[var(--text3)] focus:border-[var(--accent)]"
+              placeholder="Ex: Cliente pediu confirmação no período da tarde."
+            />
+          </label>
+
+          {closeFormError && (
+            <p className="mt-3 text-xs font-semibold text-red-300">
+              {closeFormError}
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={async () => {
+                if (!closeForm.appointmentDate) {
+                  setCloseFormError("Informe a data da avaliação/agendamento.");
+                  return;
+                }
+
+                setCloseFormError("");
+                const saved = await onCloseClient(lead, closeForm);
+                if (saved !== false) {
+                  setShowCloseForm(false);
+                }
+              }}
+              className="rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSaving ? "Fechando..." : "Confirmar fechamento"}
+            </button>
+
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => {
+                setShowCloseForm(false);
+                setCloseFormError("");
+              }}
+              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </section>
+      )}
 
       {isEditing && (
         <LeadEditForm
