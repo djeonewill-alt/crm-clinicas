@@ -35,6 +35,7 @@ export function LeadCommercialContextSelector({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     setSelectedContextId(currentContextId ?? "");
@@ -78,30 +79,30 @@ export function LeadCommercialContextSelector({
     }
   }
 
+  if (contexts.length === 0) return null;
+
   return (
-    <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
             Contexto comercial
           </p>
-          <p className="mt-1 text-sm text-[var(--text2)]">
-            Use para separar publico, campanha, preco e abordagem deste lead.
+          <p className="mt-1 text-xs text-[var(--text2)]">
+            Base usada: {selectedContext?.name ?? "Global"}
           </p>
         </div>
 
-        {selectedContext && (
-          <span className="rounded-full border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
-            {selectedContext.name}
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={() => setIsOpen((current) => !current)}
+          className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+        >
+          {isOpen ? "Ocultar contexto" : "Alterar contexto"}
+        </button>
       </div>
 
-      {contexts.length === 0 ? (
-        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          Nenhum contexto ativo cadastrado. Crie em Comercial &gt; Contextos.
-        </div>
-      ) : (
+      {isOpen && (
         <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end">
           <label className="block flex-1">
             <span className="mb-1 block text-xs font-semibold text-[var(--text2)]">
@@ -132,7 +133,7 @@ export function LeadCommercialContextSelector({
         </div>
       )}
 
-      {selectedContext && (
+      {isOpen && selectedContext && (
         <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-3 text-xs text-[var(--text2)]">
           <div className="flex flex-wrap gap-2">
             {selectedContext.audienceLabel && (

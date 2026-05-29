@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import type { Lead } from "@/types/lead";
 
 type TodayPrioritiesCardProps = {
   leads: Lead[];
-  selectedLeadId: string | number | null;
-  onSelectLead: (lead: Lead) => void;
-  getLeadName: (lead: Lead) => string;
+  selectedLeadId?: string | number | null;
+  onSelectLead?: (lead: Lead) => void;
+  leadHref?: string;
 };
 
 type PriorityGroup = {
@@ -143,11 +144,15 @@ function formatLeadMeta(lead: Lead) {
   return [lead.funnel, lead.diaProsp].filter(Boolean).join(" / ");
 }
 
+function getLeadName(lead: Lead) {
+  return lead.nome?.trim() || lead.tel || "Lead sem nome";
+}
+
 export function TodayPrioritiesCard({
   leads,
-  selectedLeadId,
+  selectedLeadId = null,
   onSelectLead,
-  getLeadName,
+  leadHref,
 }: TodayPrioritiesCardProps) {
   const groups = getGroups(leads);
   const totalPriorities = groups
@@ -207,17 +212,8 @@ export function TodayPrioritiesCard({
                   {visibleLeads.map((lead) => {
                     const active = String(selectedLeadId) === String(lead.id);
 
-                    return (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        onClick={() => onSelectLead(lead)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-                          active
-                            ? "border-[var(--accent)] bg-[rgba(232,197,71,.10)]"
-                            : "border-[var(--border2)] bg-[var(--bg3)] hover:border-[var(--accent)]"
-                        }`}
-                      >
+                    const content = (
+                      <>
                         <span className="block truncate text-xs font-semibold text-[var(--text)]">
                           {getLeadName(lead)}
                         </span>
@@ -230,9 +226,29 @@ export function TodayPrioritiesCard({
                           {formatLeadMeta(lead)}
                         </span>
                         <span className="mt-1 block text-[11px] font-semibold text-[var(--accent)]">
-                          {group.actionLabel}
+                          {leadHref ? "Abrir em Trabalho" : group.actionLabel}
                         </span>
+                      </>
+                    );
+                    const itemClass = `w-full rounded-lg border px-3 py-2 text-left transition ${
+                      active
+                        ? "border-[var(--accent)] bg-[rgba(232,197,71,.10)]"
+                        : "border-[var(--border2)] bg-[var(--bg3)] hover:border-[var(--accent)]"
+                    }`;
+
+                    return onSelectLead ? (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => onSelectLead(lead)}
+                        className={itemClass}
+                      >
+                        {content}
                       </button>
+                    ) : (
+                      <Link key={lead.id} href={leadHref ?? "/comercial/trabalho"} className={itemClass}>
+                        {content}
+                      </Link>
                     );
                   })}
 

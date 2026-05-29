@@ -237,22 +237,6 @@ const MAX_AI_KNOWLEDGE_ANSWER_LENGTH = 1800;
 const deferToNextFrame = () =>
   new Promise((resolve) => setTimeout(resolve, 0));
 
-function formatContextDate(value: string | null) {
-  if (!value) return "";
-  const [date] = value.split("T");
-  if (!date) return "";
-  const [year, month, day] = date.split("-");
-  if (!year || !month || !day) return date;
-  return `${day}/${month}/${year}`;
-}
-
-function truncateContextText(value: string | null, maxLength = 150) {
-  const text = value?.trim() ?? "";
-  if (!text) return "";
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength).trim()}...`;
-}
-
 function getHistoryEvent(item: LeadHistoryItem) {
   const event = item.metadata?.event;
   return typeof event === "string" ? event : "";
@@ -1451,37 +1435,10 @@ export function LeadAssistedServicePanel({
           {leadName && <span>Lead: {leadName}</span>}
           <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 font-semibold text-[var(--text2)]">
             {currentCommercialContext
-              ? `Contexto: ${currentCommercialContext.name}`
-              : "Base global"}
+              ? `Base usada: ${currentCommercialContext.name}`
+              : "Base usada: Global"}
           </span>
-          {currentCommercialContext?.priceNotes && (
-            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
-              Preco: {truncateContextText(currentCommercialContext.priceNotes)}
-            </span>
-          )}
-          {currentCommercialContext?.safetyNotes && (
-            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
-              Seguranca:{" "}
-              {truncateContextText(currentCommercialContext.safetyNotes)}
-            </span>
-          )}
-          {(currentCommercialContext?.startsAt ||
-            currentCommercialContext?.endsAt) && (
-            <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 text-[var(--text3)]">
-              Periodo:{" "}
-              {formatContextDate(currentCommercialContext.startsAt) ||
-                "sem inicio"}{" "}
-              ate{" "}
-              {formatContextDate(currentCommercialContext.endsAt) || "sem fim"}
-            </span>
-          )}
         </div>
-        {!currentCommercialContext && (
-          <p className="mt-2 text-xs text-[var(--text3)]">
-            Se esta campanha tiver preco ou abordagem propria, selecione um
-            contexto no detalhe do lead.
-          </p>
-        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
