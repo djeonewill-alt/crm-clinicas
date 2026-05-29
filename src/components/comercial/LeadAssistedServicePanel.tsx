@@ -13,6 +13,7 @@ import {
   type CommercialSuggestedFunnel,
 } from "@/lib/comercial/commercial-next-action-suggester";
 import { getQualificationJourneyState } from "@/lib/comercial/qualification-journey";
+import { getEstimatedWhatsAppWindowState } from "@/lib/comercial/whatsapp-window";
 import { createCommercialResponse } from "@/lib/services/commercial-responses-client";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import type {
@@ -583,6 +584,14 @@ export function LeadAssistedServicePanel({
       }),
     [lead, leadHistory]
   );
+  const whatsappWindowState = useMemo(
+    () =>
+      getEstimatedWhatsAppWindowState({
+        lead,
+        recentHistory: leadHistory,
+      }),
+    [lead, leadHistory]
+  );
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -1096,6 +1105,12 @@ export function LeadAssistedServicePanel({
         metadata: {
           event: "commercial_reply_sent",
           source: "whatsapp_manual",
+          sendMode: "manual_whatsapp_desktop",
+          channel: "whatsapp",
+          sentByApi: false,
+          apiMessageSent: false,
+          manualSendConfirmed: true,
+          registeredAfterManualSend: true,
           replyText: trimmedReply,
           assistedPanel: true,
           aiAdapted,
@@ -1103,6 +1118,18 @@ export function LeadAssistedServicePanel({
           aiUsedKnowledgeBase: aiAdapted && aiKnowledgeCandidateCount > 0,
           approvedResponseId: suggestionMatch?.response.id ?? null,
           approvedResponseTitle: suggestionMatch?.response.title ?? null,
+          journeyCheckpoint: journeyState.currentCheckpoint,
+          journeyLabel: journeyState.currentLabel,
+          whatsappWindowSnapshot: {
+            lastCustomerMessageAt: whatsappWindowState.lastCustomerMessageAt,
+            inside24hServiceWindow:
+              whatsappWindowState.inside24hServiceWindow,
+            hoursSinceLastCustomerMessage:
+              whatsappWindowState.hoursSinceLastCustomerMessage,
+            likelyInside72hAdWindow:
+              whatsappWindowState.likelyInside72hAdWindow,
+            estimatedCostRisk: whatsappWindowState.estimatedCostRisk,
+          },
           requiresHumanReview:
             aiRequiresHumanReview ||
             suggestionMatch?.response.requiresHuman === true,
@@ -1630,6 +1657,9 @@ export function LeadAssistedServicePanel({
           Cole a mensagem do cliente, gere uma resposta sugerida, revise, copie
           para o WhatsApp e registre o envio.
         </p>
+        <p className="mt-1 text-xs text-[var(--text3)]">
+          Envio manual: copie e envie pelo WhatsApp; depois registre aqui.
+        </p>
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text2)]">
           {leadName && <span>Lead: {leadName}</span>}
           <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-2 py-0.5 font-semibold text-[var(--text2)]">
@@ -1660,6 +1690,12 @@ export function LeadAssistedServicePanel({
               </button>
             )}
         </div>
+        <p className="mt-2 text-xs text-[var(--text3)]">
+          {whatsappWindowState.label}
+          {whatsappWindowState.estimatedCostRisk === "outside_window"
+            ? " - envio manual registrado; se fosse API, poderia exigir template/custo."
+            : ""}
+        </p>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">

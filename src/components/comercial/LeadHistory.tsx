@@ -60,6 +60,23 @@ function getMetadataDisplayString(
   return "";
 }
 
+function getMetadataRecord(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+) {
+  const value = metadata?.[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getWhatsAppWindowLabel(value: string) {
+  if (value === "inside_service_window") return "dentro 24h";
+  if (value === "inside_ad_window") return "possivel janela de anuncio";
+  if (value === "outside_window") return "fora da janela";
+  return "desconhecida";
+}
+
 function getSignalStatusLabel(value: string) {
   if (value === "paid") return "Pago";
   if (value === "pending") return "Pendente";
@@ -189,6 +206,24 @@ export function LeadHistory({
                 <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--text2)]">
                   {item.description}
                 </p>
+              )}
+
+              {item.metadata?.event === "commercial_reply_sent" && (
+                <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
+                  <div>Envio manual pelo WhatsApp</div>
+                  <div className="mt-1 text-[var(--text3)]">
+                    Janela estimada:{" "}
+                    {getWhatsAppWindowLabel(
+                      getMetadataDisplayString(
+                        getMetadataRecord(
+                          item.metadata,
+                          "whatsappWindowSnapshot"
+                        ) ?? undefined,
+                        "estimatedCostRisk"
+                      )
+                    )}
+                  </div>
+                </div>
               )}
 
               {item.metadata?.event === "lead_attachment_received" && (
