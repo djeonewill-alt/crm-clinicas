@@ -359,12 +359,23 @@ function detectConversationStage(input: {
     includesAny(normalized, [
       "agendar",
       "agenda",
+      "qual dia",
+      "que dia",
+      "quando posso",
+      "quando consigo",
+      "quando tem",
       "horario",
+      "horarios",
       "disponibilidade",
       "marcar",
       "sabado",
+      "semana",
+      "manha",
+      "tarde",
       "vaga",
       "avaliacao",
+      "fazer avaliacao",
+      "posso fazer avaliacao",
     ])
   ) {
     return "schedule_intent";

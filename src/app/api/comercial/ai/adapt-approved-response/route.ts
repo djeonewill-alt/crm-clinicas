@@ -259,6 +259,39 @@ function normalizeOutput(value: unknown): AdaptApprovedResponseOutput | null {
   };
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function looksLikeScheduleIntent(value: string | null | undefined) {
+  const text = normalizeSearchText(value ?? "");
+  return [
+    "qual dia",
+    "que dia",
+    "quando posso",
+    "tem horario",
+    "agenda",
+    "marcar",
+    "avaliacao",
+    "disponibilidade",
+    "horario",
+    "sabado",
+    "semana",
+    "manha",
+    "tarde",
+  ].some((term) => text.includes(term));
+}
+
+function scheduleReplyLooksOnTarget(value: string) {
+  const text = normalizeSearchText(value);
+  return ["agenda", "quarta", "sexta", "sabado", "horario", "unidade", "manha", "tarde", "disponibilidade"].some((term) =>
+    text.includes(term)
+  );
+}
+
 function extractResponseText(data: Record<string, unknown>) {
   if (typeof data.output_text === "string") return data.output_text;
 
@@ -372,15 +405,23 @@ export async function POST(request: Request) {
   const systemPrompt = [
     "BASE 15O.2: responda usando a resposta aprovada principal e knowledgeCandidates como base de conhecimento aprovada.",
     "BASE 15U: tambem use journeyContext para entender o momento da jornada comercial antes de escolher o foco da resposta.",
+    "BASE 15U.2: seja context-first. Ordem de decisao obrigatoria: 1 mensagem atual do cliente; 2 historico recente; 3 jornada/checkpoint; 4 base de conhecimento aprovada; 5 resposta aprovada principal.",
     "Quando uma regra mencionar resposta aprovada, entenda como primaryApprovedResponse e knowledgeCandidates.",
     "Responda a pergunta completa do cliente como um atendente humano experiente, sem depender de uma unica resposta quando houver mais candidatos relevantes.",
     "Use somente informacoes presentes na resposta aprovada principal, nos knowledgeCandidates, no contexto comercial e no historico recente.",
-    "Se a resposta aprovada principal encaixar muito bem, preserve 80% a 90% da estrutura e do conteudo; ajuste apenas tom, abertura de continuacao, ordem, repeticao e um gancho curto se couber.",
+    "A base aprovada e fonte de fatos, nao molde rigido. Use-a para fatos como preco, unidades, agenda, Pix, seguranca e procedimento.",
+    "Preserve 80% a 90% da resposta aprovada somente quando ela encaixar perfeitamente na pergunta atual e no momento da conversa.",
+    "Se a resposta aprovada estiver parcialmente correta, use apenas os fatos necessarios e escreva uma resposta nova, natural e contextual.",
     "Nao transforme uma resposta boa e completa em resumo pobre.",
     "Se a pergunta misturar assuntos, combine knowledgeCandidates relevantes e responda na ordem da pergunta.",
     "A IA nao deve responder so por intencao solta: considere currentCheckpoint, nextCheckpoint, pendingQuestion e guidance.",
     "Primeiro responda a pergunta exata do cliente; depois, se couber, faca uma ponte curta para o proximo checkpoint pendente.",
-    "Nao pule etapas da qualificacao. Nao avance para agenda, Pix, sinal ou fechamento se a jornada ainda pede regiao/sub-regiao/unidade/disponibilidade.",
+    "Nao pule etapas da qualificacao. Nao avance para Pix, sinal ou fechamento se a jornada ainda pede regiao/sub-regiao/unidade/disponibilidade.",
+    "Excecao importante: se conversation.stage for schedule_intent ou a mensagem atual falar de dia, agenda, avaliacao, horario ou disponibilidade, trate a intencao de agenda antes do checkpoint pendente.",
+    "Para schedule_intent: responda sobre dias/agenda/disponibilidade; pergunte unidade e/ou periodo; nao comece com texto generico como 'o primeiro passo e a avaliacao'; nao force regiao como pergunta principal.",
+    "Se o checkpoint for pacote_inicial_pendente ou aguardando_regiao, mas a mensagem atual for schedule_intent, responda agenda. Se precisar coletar regiao, faca como complemento leve depois.",
+    "Resposta esperada para 'Qual dia posso fazer a avaliacao?': 'Consigo verificar uma opcao para avaliacao sim.\\n\\nAtendemos normalmente quarta, sexta e sabado, das 9h as 17h. Terca e quinta dependem da disponibilidade da agenda.\\n\\nQual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora? E voce prefere manha ou tarde?' Nao prometa horario especifico.",
+    "Evite frases como 'Pode sim, o primeiro passo e a avaliacao', 'A avaliacao ajuda a confirmar' quando a pergunta for sobre dia/agenda, e 'Antes de te passar certinho' se soar enrolacao.",
     "Se o cliente fizer uma pergunta fora da ordem, responda somente com a informacao aprovada necessaria e volte em uma frase curta ao checkpoint pendente.",
     "Se currentCheckpoint for cliente_respondeu_abordagem e a mensagem for 'Ok, pode passar', 'pode explicar' ou equivalente, responda com pacote inicial curto: tratamento regenerativo/microagulhamento; nao e laser, tinta nem camuflagem; valor R$ 180 por regiao quando essa informacao estiver na base; unidades; e pergunte qual regiao do corpo deseja tratar.",
     "Nesse caso, nao use antes/depois como assunto principal, exceto se a cliente pedir fotos, resultado ou evolucao.",
@@ -509,6 +550,18 @@ export async function POST(request: Request) {
 
     if (!parsed) {
       return errorResponse("Resposta inválida da IA.", 500);
+    }
+
+    const isScheduleIntent =
+      sanitizeOptionalText(input.conversationStage) === "schedule_intent" ||
+      looksLikeScheduleIntent(input.customerMessage);
+
+    if (isScheduleIntent && !scheduleReplyLooksOnTarget(parsed.adaptedReply)) {
+      parsed.requiresHumanReview = true;
+      parsed.safetyNotes = [
+        ...parsed.safetyNotes,
+        "Resposta pode não ter respondido a intenção de agenda.",
+      ];
     }
 
     return NextResponse.json(parsed);
