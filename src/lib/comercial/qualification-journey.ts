@@ -29,10 +29,53 @@ export type QualificationJourneyState = {
   guidance: string;
 };
 
+export type QualificationTimelineCheckpointKey =
+  | "entrada"
+  | "funcionamento"
+  | "valor"
+  | "regiao"
+  | "subregiao"
+  | "unidade"
+  | "agenda"
+  | "sinal"
+  | "confirmacao";
+
+export type QualificationTimelineCheckpointStatus =
+  | "done"
+  | "current"
+  | "pending"
+  | "touched";
+
+export type QualificationTimelineCheckpoint = {
+  key: QualificationTimelineCheckpointKey;
+  label: string;
+  status: QualificationTimelineCheckpointStatus;
+  evidence?: string;
+};
+
+export type QualificationTimelineStateForAI = {
+  checkpoints: QualificationTimelineCheckpoint[];
+  doneKeys: QualificationTimelineCheckpointKey[];
+  pendingKeys: QualificationTimelineCheckpointKey[];
+  touchedKeys: QualificationTimelineCheckpointKey[];
+  currentKey?: QualificationTimelineCheckpointKey;
+  nextBestKey?: QualificationTimelineCheckpointKey;
+  nextBestLabel?: string;
+  nextBestQuestion?: string;
+  summaryForAI: string;
+};
+
 type GetQualificationJourneyStateInput = {
   lead: Pick<Lead, "funnel" | "diaProsp">;
   recentHistory?: LeadHistoryItem[];
   currentMessage?: string;
+};
+
+type GetQualificationTimelineStateForAIInput = {
+  lead: Pick<Lead, "funnel" | "diaProsp">;
+  recentHistory?: LeadHistoryItem[];
+  currentMessage?: string;
+  journeyState?: QualificationJourneyState;
 };
 
 const CHECKPOINT_LABELS: Record<QualificationCheckpoint, string> = {
@@ -90,6 +133,108 @@ const REGION_WORDS = [
 const UNIT_WORDS = ["paulista", "tatuape", "tatuapé", "mairipora", "mairiporã"];
 const PIX_WORDS = ["pix", "sinal", "reserva", "pagamento", "comprovante"];
 
+const TIMELINE_CHECKPOINTS: Array<{
+  key: QualificationTimelineCheckpointKey;
+  label: string;
+}> = [
+  { key: "entrada", label: "Entrada" },
+  { key: "funcionamento", label: "Funcionamento" },
+  { key: "valor", label: "Valor" },
+  { key: "regiao", label: "Regiao" },
+  { key: "subregiao", label: "Sub-regiao" },
+  { key: "unidade", label: "Unidade" },
+  { key: "agenda", label: "Agenda" },
+  { key: "sinal", label: "Sinal" },
+  { key: "confirmacao", label: "Confirmacao" },
+];
+const TIMELINE_ORDER = TIMELINE_CHECKPOINTS.map((checkpoint) => checkpoint.key);
+const TIMELINE_CURRENT_MAP: Partial<
+  Record<QualificationCheckpoint, QualificationTimelineCheckpointKey>
+> = {
+  lead_entrada: "entrada",
+  primeira_abordagem_enviada: "entrada",
+  cliente_respondeu_abordagem: "funcionamento",
+  qualificacao_iniciada: "funcionamento",
+  pacote_inicial_pendente: "funcionamento",
+  aguardando_regiao: "regiao",
+  aguardando_subregiao: "subregiao",
+  regioes_estimadas: "unidade",
+  aguardando_intencao_tratamento: "unidade",
+  aguardando_unidade: "unidade",
+  aguardando_disponibilidade: "agenda",
+  aguardando_confirmacao_horario: "agenda",
+  aguardando_sinal: "sinal",
+  aguardando_comprovante: "sinal",
+  agendamento_confirmado: "confirmacao",
+};
+const FUNCTION_WORDS = [
+  "funciona",
+  "tratamento",
+  "microagulhamento",
+  "regenerativo",
+  "laser",
+  "camuflagem",
+  "pintura",
+  "tinta",
+];
+const VALUE_WORDS = [
+  "valor",
+  "preco",
+  "preco",
+  "r$180",
+  "r$ 180",
+  "promocao",
+  "promocao",
+  "campanha",
+  "sessao",
+  "sessao",
+];
+const SUBREGION_WORDS = [
+  "acima do umbigo",
+  "abaixo do umbigo",
+  "duas partes",
+  "superior",
+  "inferior",
+  "interna",
+  "externa",
+  "lateral",
+  "um lado",
+  "dois lados",
+];
+const SCHEDULE_WORDS = [
+  "agenda",
+  "agendar",
+  "avaliacao",
+  "avaliacao",
+  "disponibilidade",
+  "horario",
+  "horario",
+  "manha",
+  "manha",
+  "tarde",
+  "sabado",
+  "sabado",
+  "quarta",
+  "sexta",
+  "dia",
+];
+const TIMELINE_QUESTIONS: Partial<
+  Record<QualificationTimelineCheckpointKey, string>
+> = {
+  regiao:
+    "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?",
+  subregiao:
+    "Na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?",
+  unidade:
+    "Qual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora?",
+  agenda:
+    "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?",
+  sinal:
+    "Esse horario funciona para voce? Se quiser garantir, posso te passar as informacoes da reserva.",
+  confirmacao:
+    "Me envia o comprovante por aqui para confirmarmos sua reserva no sistema.",
+};
+
 function normalizeText(value: string) {
   return value
     .toLowerCase()
@@ -127,6 +272,188 @@ export function getNextCheckpointLabel(
   checkpoint: QualificationCheckpoint | null
 ) {
   return checkpoint ? CHECKPOINT_LABELS[checkpoint] : null;
+}
+
+function getTimelineCurrentKey(journeyState: QualificationJourneyState) {
+  return (
+    TIMELINE_CURRENT_MAP[journeyState.currentCheckpoint] ??
+    (journeyState.nextCheckpoint
+      ? TIMELINE_CURRENT_MAP[journeyState.nextCheckpoint]
+      : null)
+  );
+}
+
+function getTimelineQuestion(
+  key: QualificationTimelineCheckpointKey,
+  combinedText: string
+) {
+  if (key === "subregiao") {
+    if (hasTextMatch(combinedText, ["gluteo", "gluteos", "bumbum"])) {
+      return "As estrias ficam em um lado, nos dois gluteos ou mais na lateral/proximo ao quadril?";
+    }
+
+    return TIMELINE_QUESTIONS.subregiao;
+  }
+
+  return TIMELINE_QUESTIONS[key];
+}
+
+function getNextBestTimelineKey(
+  doneEvidence: Partial<Record<QualificationTimelineCheckpointKey, string>>,
+  currentKey: QualificationTimelineCheckpointKey | null
+) {
+  const priority: QualificationTimelineCheckpointKey[] = [
+    "regiao",
+    "subregiao",
+    "unidade",
+    "agenda",
+    "sinal",
+    "confirmacao",
+  ];
+  const next = priority.find((key) => !doneEvidence[key]);
+
+  if (next) return next;
+  if (currentKey && !doneEvidence[currentKey]) return currentKey;
+
+  return undefined;
+}
+
+export function getQualificationTimelineStateForAI({
+  lead,
+  recentHistory = [],
+  currentMessage = "",
+  journeyState,
+}: GetQualificationTimelineStateForAIInput): QualificationTimelineStateForAI {
+  const resolvedJourneyState =
+    journeyState ??
+    getQualificationJourneyState({
+      lead,
+      recentHistory,
+      currentMessage,
+    });
+  const history = sortOldestFirst(recentHistory).slice(-30);
+  const historyText = history.map(getHistoryText).join(" ");
+  const combinedText = `${historyText} ${currentMessage}`;
+  const hasClosedSchedule =
+    lead.funnel === "clientes" ||
+    history.some((item) => getEvent(item) === "lead_closed_with_schedule");
+  const doneEvidence: Partial<
+    Record<QualificationTimelineCheckpointKey, string>
+  > = {
+    entrada: "lead existe no CRM",
+  };
+
+  if (hasTextMatch(combinedText, FUNCTION_WORDS)) {
+    doneEvidence.funcionamento =
+      "conversa menciona funcionamento, tratamento ou metodo";
+  }
+
+  if (hasTextMatch(combinedText, VALUE_WORDS)) {
+    doneEvidence.valor = "conversa menciona valor, promocao ou sessao";
+  }
+
+  if (hasTextMatch(combinedText, REGION_WORDS)) {
+    doneEvidence.regiao = "conversa menciona regiao do corpo";
+  }
+
+  if (hasTextMatch(combinedText, SUBREGION_WORDS)) {
+    doneEvidence.subregiao = "conversa menciona detalhe/sub-regiao";
+  }
+
+  if (hasTextMatch(combinedText, UNIT_WORDS)) {
+    doneEvidence.unidade = "conversa menciona unidade";
+  }
+
+  if (hasTextMatch(combinedText, SCHEDULE_WORDS)) {
+    doneEvidence.agenda = "conversa menciona agenda ou disponibilidade";
+  }
+
+  if (hasTextMatch(combinedText, PIX_WORDS)) {
+    doneEvidence.sinal = "conversa menciona Pix, sinal, reserva ou comprovante";
+  }
+
+  if (hasClosedSchedule) {
+    doneEvidence.confirmacao = "agendamento/fechamento registrado";
+  }
+
+  const currentKey = getTimelineCurrentKey(resolvedJourneyState);
+  const currentIndex = currentKey ? TIMELINE_ORDER.indexOf(currentKey) : -1;
+  const nextBestKey = getNextBestTimelineKey(doneEvidence, currentKey ?? null);
+  const checkpoints = TIMELINE_CHECKPOINTS.map<QualificationTimelineCheckpoint>(
+    (checkpoint, index) => {
+      const evidence = doneEvidence[checkpoint.key];
+
+      if (evidence) {
+        return {
+          ...checkpoint,
+          status: checkpoint.key === currentKey ? "current" : "done",
+          evidence,
+        };
+      }
+
+      if (checkpoint.key === nextBestKey || checkpoint.key === currentKey) {
+        return {
+          ...checkpoint,
+          status: "current",
+          evidence: resolvedJourneyState.currentLabel,
+        };
+      }
+
+      if (currentIndex > 0 && index < currentIndex) {
+        return {
+          ...checkpoint,
+          status: "touched",
+          evidence:
+            "etapa anterior ao ponto atual sem evidencia clara no historico",
+        };
+      }
+
+      return {
+        ...checkpoint,
+        status: "pending",
+        evidence: "pendente",
+      };
+    }
+  );
+  const doneKeys = checkpoints
+    .filter((checkpoint) => checkpoint.status === "done")
+    .map((checkpoint) => checkpoint.key);
+  const pendingKeys = checkpoints
+    .filter((checkpoint) => checkpoint.status === "pending")
+    .map((checkpoint) => checkpoint.key);
+  const touchedKeys = checkpoints
+    .filter((checkpoint) => checkpoint.status === "touched")
+    .map((checkpoint) => checkpoint.key);
+  const nextBestLabel = nextBestKey
+    ? TIMELINE_CHECKPOINTS.find((checkpoint) => checkpoint.key === nextBestKey)
+        ?.label
+    : undefined;
+  const nextBestQuestion =
+    (nextBestKey && getTimelineQuestion(nextBestKey, combinedText)) ||
+    resolvedJourneyState.pendingQuestion ||
+    undefined;
+  const summaryForAI = [
+    `Concluidos: ${doneKeys.join(", ") || "nenhum"}.`,
+    `Tocados fora de ordem/parciais: ${touchedKeys.join(", ") || "nenhum"}.`,
+    `Pendentes: ${pendingKeys.join(", ") || "nenhum"}.`,
+    currentKey ? `Atual: ${currentKey}.` : "",
+    nextBestKey ? `Proximo melhor: ${nextBestKey}.` : "",
+    nextBestQuestion ? `Pergunta guia: ${nextBestQuestion}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    checkpoints,
+    doneKeys,
+    pendingKeys,
+    touchedKeys,
+    currentKey: currentKey ?? undefined,
+    nextBestKey,
+    nextBestLabel,
+    nextBestQuestion,
+    summaryForAI,
+  };
 }
 
 export function getQualificationJourneyState({

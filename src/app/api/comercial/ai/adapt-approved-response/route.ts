@@ -67,6 +67,24 @@ type JourneyContextInput = {
   pendingQuestion?: string | null;
   knownFields?: Record<string, unknown> | null;
   guidance?: string | null;
+  timeline?: TimelineContextInput | null;
+};
+
+type TimelineContextInput = {
+  checkpoints?: Array<{
+    key?: string | null;
+    label?: string | null;
+    status?: string | null;
+    evidence?: string | null;
+  }>;
+  doneKeys?: string[];
+  pendingKeys?: string[];
+  touchedKeys?: string[];
+  currentKey?: string | null;
+  nextBestKey?: string | null;
+  nextBestLabel?: string | null;
+  nextBestQuestion?: string | null;
+  summaryForAI?: string | null;
 };
 
 type AdaptApprovedResponseOutput = {
@@ -168,6 +186,39 @@ function sanitizeJourneyKnownFields(value: unknown) {
   return safeFields;
 }
 
+function sanitizeTimelineContext(value: unknown): TimelineContextInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const checkpoints = Array.isArray(record.checkpoints)
+    ? record.checkpoints.slice(0, 12).map((item) => {
+        const checkpoint =
+          item && typeof item === "object"
+            ? (item as Record<string, unknown>)
+            : {};
+
+        return {
+          key: sanitizeOptionalText(checkpoint.key),
+          label: sanitizeOptionalText(checkpoint.label),
+          status: sanitizeOptionalText(checkpoint.status),
+          evidence: sanitizeOptionalText(checkpoint.evidence),
+        };
+      })
+    : [];
+
+  return {
+    checkpoints,
+    doneKeys: sanitizeStringArray(record.doneKeys, 12),
+    pendingKeys: sanitizeStringArray(record.pendingKeys, 12),
+    touchedKeys: sanitizeStringArray(record.touchedKeys, 12),
+    currentKey: sanitizeOptionalText(record.currentKey),
+    nextBestKey: sanitizeOptionalText(record.nextBestKey),
+    nextBestLabel: sanitizeOptionalText(record.nextBestLabel),
+    nextBestQuestion: sanitizeOptionalText(record.nextBestQuestion),
+    summaryForAI: sanitizeOptionalText(record.summaryForAI),
+  };
+}
+
 function sanitizeJourneyContext(value: unknown): JourneyContextInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
@@ -181,6 +232,7 @@ function sanitizeJourneyContext(value: unknown): JourneyContextInput | null {
     pendingQuestion: sanitizeOptionalText(record.pendingQuestion),
     knownFields: sanitizeJourneyKnownFields(record.knownFields),
     guidance: sanitizeOptionalText(record.guidance),
+    timeline: sanitizeTimelineContext(record.timeline),
   };
 }
 
@@ -482,6 +534,16 @@ export async function POST(request: Request) {
     "BASE 15U: tambem use journeyContext para entender o momento da jornada comercial antes de escolher o foco da resposta.",
     "BASE 15U.2: seja context-first. Ordem de decisao obrigatoria: 1 mensagem atual do cliente; 2 historico recente; 3 jornada/checkpoint; 4 base de conhecimento aprovada; 5 resposta aprovada principal.",
     "BASE 15U.3: casos reais de atendimento. A mensagem atual manda mais que a resposta aprovada. A resposta aprovada NAO e molde obrigatorio; e apenas uma fonte aprovada de fatos quando encaixar no momento.",
+    "BASE 15U.6: use journeyContext.timeline para entender checkpoints concluidos, pendentes, atuais e tocados fora de ordem. Nao pergunte de novo o que esta em doneKeys.",
+    "Timeline 15U.6: se a cliente trouxer assunto de checkpoint futuro, responda esse assunto primeiro e depois volte com leveza ao nextBestQuestion quando fizer sentido.",
+    "Timeline 15U.6: use nextBestQuestion como referencia para a pergunta final, mas adapte ao contexto da mensagem atual. A pergunta final continua sendo uma so.",
+    "Timeline 15U.6: nao volte para checkpoint ja concluido e nao pule para Pix/sinal se unidade, agenda ou horario ainda nao foram alinhados.",
+    "Timeline 15U.6: se doneKeys incluir subregiao, nao pergunte novamente acima/abaixo/duas partes. Se doneKeys incluir unidade, nao pergunte unidade de novo.",
+    "Timeline 15U.6: se pendingKeys incluir regiao, ela costuma ser o proximo dado comercial mais importante, exceto quando a mensagem atual exige resposta objetiva sobre outro assunto.",
+    "Caso 15U.6 unidade: se cliente diz 'Avenida Paulista' ou 'Paulista' e regiao esta pendente, envie endereco completo da Paulista e conduza com uma pergunta de regiao.",
+    "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
+    "Caso 15U.6 agenda fora de ordem: se cliente pergunta 'Qual dia posso fazer avaliacao?' antes de regiao, responda agenda/disponibilidade de forma objetiva; depois conduza para unidade/periodo ou regiao sem atropelar.",
+    "Caso 15U.6 regiao + promocao: se cliente diz 'Barriga e braco. O periodo promocional vai ate quando?', responda em blocos de regiao e promocao, sem Pix/sinal pesado, e finalize com uma unica pergunta sobre subregiao da barriga.",
     "Ordem de decisao 15U.3, sem excecao: 1 entender exatamente a mensagem atual; 2 considerar o historico recente para nao repetir pergunta; 3 respeitar checkpoint/jornada; 4 usar knowledgeCandidates/contexto como fonte de fatos; 5 usar primaryApprovedResponse somente se encaixar perfeitamente.",
     "Preserve 80% a 90% da resposta aprovada apenas quando ela encaixar perfeitamente na pergunta atual, no historico e no checkpoint. Se nao encaixar, use os fatos e escreva uma resposta nova, humana e contextual.",
     "Responda somente o que o cliente perguntou. Nao puxe preco, sinal, Pix, reserva, unidade ou agenda se isso nao foi pedido e nao for o checkpoint certo.",

@@ -17,7 +17,10 @@ import {
   buildHistoryEventFingerprint,
   isDuplicateHistoryEvent,
 } from "@/lib/comercial/history-duplicates";
-import { getQualificationJourneyState } from "@/lib/comercial/qualification-journey";
+import {
+  getQualificationJourneyState,
+  getQualificationTimelineStateForAI,
+} from "@/lib/comercial/qualification-journey";
 import { getEstimatedWhatsAppWindowState } from "@/lib/comercial/whatsapp-window";
 import {
   listCommercialMaterials,
@@ -1013,6 +1016,12 @@ export function LeadAssistedServicePanel({
       recentHistory: leadHistory,
       currentMessage: input.customerMessage,
     });
+    const timelineContext = getQualificationTimelineStateForAI({
+      lead,
+      recentHistory: leadHistory,
+      currentMessage: input.customerMessage,
+      journeyState: aiJourneyState,
+    });
 
     const result = await fetch("/api/comercial/ai/adapt-approved-response", {
       method: "POST",
@@ -1063,6 +1072,17 @@ export function LeadAssistedServicePanel({
           pendingQuestion: aiJourneyState.pendingQuestion,
           knownFields: aiJourneyState.knownFields,
           guidance: aiJourneyState.guidance,
+          timeline: {
+            checkpoints: timelineContext.checkpoints,
+            doneKeys: timelineContext.doneKeys,
+            pendingKeys: timelineContext.pendingKeys,
+            touchedKeys: timelineContext.touchedKeys,
+            currentKey: timelineContext.currentKey ?? null,
+            nextBestKey: timelineContext.nextBestKey ?? null,
+            nextBestLabel: timelineContext.nextBestLabel ?? null,
+            nextBestQuestion: timelineContext.nextBestQuestion ?? null,
+            summaryForAI: timelineContext.summaryForAI,
+          },
         },
       }),
     });
