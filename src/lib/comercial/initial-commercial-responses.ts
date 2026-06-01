@@ -1271,4 +1271,31 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     internalNotes:
       "BASE 15U.7: pacote de 5 sessões apenas como possibilidade sob avaliação presencial.",
   },
+  {
+    categorySlug: "primeira-abordagem",
+    title: "Abertura padrão WhatsApp — v15",
+    answerText:
+      "Boa tarde, tudo bem? Meu nome é Djeone, faço parte do atendimento do consultório Sr. e Sra. Estrias.\n\nVou te passar as informações sim 😊\n\nNosso tratamento é para melhora do aspecto das estrias, feito com protocolo de microagulhamento. Não é laser, pintura ou camuflagem; é um tratamento regenerativo.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?\nExemplo: barriga, flancos, glúteos, coxas, seios, braços ou outra região.",
+    exampleQuestions: [
+      "Olá! Tenho interesse e queria mais informações, por favor.",
+      "Tenho interesse e queria mais informações",
+      "Olá, tenho interesse",
+      "Quero mais informações",
+      "Tenho interesse no tratamento",
+    ],
+    tags: [
+      "abertura",
+      "whatsapp",
+      "primeira mensagem",
+      "interesse inicial",
+      "região",
+      "microagulhamento",
+      "v15",
+    ],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 180,
+    internalNotes:
+      "BASE 15U.8: texto base usa Boa tarde por ser estatico; a rota da IA adapta a saudacao pelo horario de Sao Paulo.",
+  },
 ];

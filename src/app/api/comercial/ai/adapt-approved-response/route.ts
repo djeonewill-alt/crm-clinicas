@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSaoPauloGreeting } from "@/lib/comercial/time-greeting";
 
 type AdaptApprovedResponseInput = {
   customerMessage?: string;
@@ -101,6 +102,8 @@ type AdaptApprovedResponseOutput = {
 };
 
 const MAX_TEXT_LENGTH = 8000;
+const DEFAULT_WHATSAPP_INTEREST_OPENING =
+  "Olá! Tenho interesse e queria mais informações, por favor.";
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -330,6 +333,46 @@ function normalizeSearchText(value: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function normalizeInterestMessage(value: string) {
+  return normalizeSearchText(value)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const DEFAULT_INTEREST_MESSAGE_PATTERNS = [
+  "ola tenho interesse e queria mais informacoes por favor",
+  "ola tenho interesse e queria mais informacoes",
+  "tenho interesse e queria mais informacoes por favor",
+  "tenho interesse e queria mais informacoes",
+];
+
+function isDefaultWhatsAppInterestMessage(message: string): boolean {
+  const normalized = normalizeInterestMessage(message);
+  return DEFAULT_INTEREST_MESSAGE_PATTERNS.some(
+    (pattern) => normalized === pattern || normalized.startsWith(`${pattern} `)
+  );
+}
+
+function isPureDefaultWhatsAppInterestMessage(message: string): boolean {
+  const normalized = normalizeInterestMessage(message);
+  return DEFAULT_INTEREST_MESSAGE_PATTERNS.includes(normalized);
+}
+
+function buildDefaultWhatsAppOpening(timeGreeting: string) {
+  return `${timeGreeting}, tudo bem? Meu nome é Djeone, faço parte do atendimento do consultório Sr. e Sra. Estrias.\n\nVou te passar as informações sim 😊\n\nNosso tratamento é para melhora do aspecto das estrias, feito com protocolo de microagulhamento. Não é laser, pintura ou camuflagem; é um tratamento regenerativo.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?\nExemplo: barriga, flancos, glúteos, coxas, seios, braços ou outra região.`;
+}
+
+function defaultOpeningLooksLoose(value: string) {
+  const text = normalizeInterestMessage(value);
+  return (
+    text.includes("o que voce quer saber primeiro") ||
+    text.includes("como funciona o tratamento valores locais") ||
+    text.includes("como funciona valores locais") ||
+    text.includes("valores unidades e como agendar")
+  );
+}
+
 function countQuestionMarks(value: string) {
   return (value.match(/\?/g) || []).length;
 }
@@ -433,6 +476,11 @@ function extractResponseText(data: Record<string, unknown>) {
 function buildUserPayload(input: AdaptApprovedResponseInput) {
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
   const customerMessage = sanitizeText(input.customerMessage);
+  const timeGreeting = getSaoPauloGreeting();
+  const defaultWhatsAppInterestMessage =
+    isDefaultWhatsAppInterestMessage(customerMessage);
+  const pureDefaultWhatsAppInterestMessage =
+    isPureDefaultWhatsAppInterestMessage(customerMessage);
   const recentHistory = sanitizeRecentHistory(input.recentHistory);
   const copiedPreviousReplyHint = getCopiedPreviousReplyHint({
     customerMessage,
@@ -484,6 +532,11 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
     analysisHints: {
       copiedPreviousReplyDetected: copiedPreviousReplyHint.detected,
       likelyNewCustomerTextAfterCopiedReply: copiedPreviousReplyHint.likelyNewText,
+      defaultWhatsAppInterestMessage,
+      pureDefaultWhatsAppInterestMessage,
+      defaultWhatsAppInterestSource: DEFAULT_WHATSAPP_INTEREST_OPENING,
+      timeGreeting,
+      defaultWhatsAppOpening: buildDefaultWhatsAppOpening(timeGreeting),
     },
     flags: {
       requiresHuman: input.requiresHuman === true,
@@ -509,6 +562,9 @@ export async function POST(request: Request) {
 
   const customerMessage = sanitizeText(input.customerMessage);
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const pureDefaultWhatsAppInterestMessage =
+    isPureDefaultWhatsAppInterestMessage(customerMessage);
+  const defaultWhatsAppOpening = buildDefaultWhatsAppOpening(getSaoPauloGreeting());
   const hasKnowledgeCandidates =
     sanitizeKnowledgeCandidates(input.knowledgeCandidates).length > 0;
   const hasPrimaryApprovedResponse = Boolean(
@@ -544,6 +600,10 @@ export async function POST(request: Request) {
     "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
     "Caso 15U.6 agenda fora de ordem: se cliente pergunta 'Qual dia posso fazer avaliacao?' antes de regiao, responda agenda/disponibilidade de forma objetiva; depois conduza para unidade/periodo ou regiao sem atropelar.",
     "Caso 15U.6 regiao + promocao: se cliente diz 'Barriga e braco. O periodo promocional vai ate quando?', responda em blocos de regiao e promocao, sem Pix/sinal pesado, e finalize com uma unica pergunta sobre subregiao da barriga.",
+    "BASE 15U.8 abertura padrao: se analysisHints.defaultWhatsAppInterestMessage=true, a mensagem atual e a mensagem padrao de interesse vinda do WhatsApp/anuncio. Use analysisHints.timeGreeting como saudacao calculada pelo CRM.",
+    "BASE 15U.8 abertura padrao: se analysisHints.pureDefaultWhatsAppInterestMessage=true, responda exatamente a abertura de analysisHints.defaultWhatsAppOpening, sem puxar preco, sem perguntar 'o que voce quer saber primeiro' e sem listar opcoes soltas como 'como funciona, valores, locais'.",
+    "BASE 15U.8 abertura padrao: a abertura deve explicar rapidamente microagulhamento/tratamento regenerativo, dizer que nao e laser, pintura ou camuflagem, e conduzir para uma unica pergunta final sobre qual regiao do corpo deseja tratar.",
+    "BASE 15U.8 abertura padrao: se a cliente alem da mensagem padrao acrescentou outra pergunta relevante, responda tambem essa pergunta acrescentada, mas mantenha a saudacao calculada e a conducao para regiao quando couber.",
     "Ordem de decisao 15U.7, sem excecao: 1 ler primeiro a mensagem atual da cliente; 2 considerar historico recente para nao repetir pergunta; 3 considerar jornada/checkpoints/timeline; 4 consultar a base para fatos; 5 escrever resposta natural, contextual e adequada ao momento.",
     "Nao use a resposta aprovada como molde rigido. Use-a como referencia factual.",
     "Copie uma resposta da base quase literalmente apenas quando ela encaixar perfeitamente na pergunta atual, no historico e no checkpoint. Se nao encaixar, use os fatos e escreva uma resposta nova, humana e contextual.",
@@ -612,6 +672,7 @@ export async function POST(request: Request) {
     "Evite repetir informações que já foram enviadas no histórico recente.",
     "Não repita a mesma estrutura em respostas seguidas.",
     "Se hasPriorConversation for true, não cumprimente e não reinicie a conversa.",
+    "Excecao 15U.8: para analysisHints.pureDefaultWhatsAppInterestMessage=true, use a saudacao calculada mesmo se shouldAvoidGreeting ou hasPriorConversation vier true.",
     "Não use 'Oi', 'Olá' ou 'Claro' em respostas de continuação.",
     "Não use emoji em toda resposta. Use no máximo 1 emoji e apenas em abertura ou quando soar natural.",
     "Não use emoji em perguntas objetivas.",
@@ -727,6 +788,24 @@ export async function POST(request: Request) {
 
     if (!parsed) {
       return errorResponse("Resposta inválida da IA.", 500);
+    }
+
+    if (
+      pureDefaultWhatsAppInterestMessage &&
+      defaultOpeningLooksLoose(parsed.adaptedReply)
+    ) {
+      parsed.adaptedReply = defaultWhatsAppOpening;
+      parsed.confidence = Math.max(parsed.confidence, 0.9);
+      parsed.requiresHumanReview = true;
+      parsed.usedApprovedAnswerOnly = false;
+      parsed.finalJourneyQuestion =
+        "Qual região do corpo você gostaria de tratar?";
+      parsed.questionCount = 1;
+      parsed.usedKnowledgeAsFacts = true;
+      parsed.safetyNotes = [
+        ...parsed.safetyNotes,
+        "BASE 15U.8: fallback aplicado para evitar abertura antiga na mensagem padrão do WhatsApp.",
+      ];
     }
 
     const isScheduleIntent =
