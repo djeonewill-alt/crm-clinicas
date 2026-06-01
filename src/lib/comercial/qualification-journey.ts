@@ -202,10 +202,14 @@ const FUNCTIONING_PATTERNS = [
 ];
 
 const VALUE_DONE_PATTERNS = [
-  "r$ 180",
-  "r$180",
-  "180 por regiao",
-  "180 por sessao",
+  "r$ 377",
+  "r$377",
+  "377 por regiao",
+  "377 por sessao",
+  "r$ 550",
+  "r$550",
+  "550 abdomen total",
+  "abdomen total",
   "sessao esta saindo",
   "valor promocional",
   "valor de r$",
@@ -390,7 +394,7 @@ function buildNextQuestion(key: QualificationTimelineCheckpointKey, customerText
     case "funcionamento":
       return "Posso te explicar rapidinho como funciona o tratamento com microagulhamento para estrias.";
     case "valor":
-      return "Sobre valores, neste periodo promocional a sessao esta saindo por R$ 180 por regiao tratada.";
+      return "Sobre valores, atualmente 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados ja entram nessa regiao. Abdomen total fica R$ 550,00, incluindo superior + inferior.";
     case "regiao":
       return "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?\nExemplo: barriga, flancos, gluteos, coxas, seios ou outra regiao.";
     case "subregiao":

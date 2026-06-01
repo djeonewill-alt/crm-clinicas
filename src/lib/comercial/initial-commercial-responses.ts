@@ -1158,4 +1158,117 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     internalNotes:
       "BASE 15U.4: organiza barriga e glúteos/bumbum sem repetir perguntas já respondidas.",
   },
+  {
+    categorySlug: "preco-promocao",
+    title: "Valores atuais — v14",
+    answerText:
+      "Sobre os valores, atualmente trabalhamos assim:\n\n• 1 região: R$ 377,00\n• Quando a região é bilateral, os dois lados já entram dentro dessa região.\n• Abdômen superior: R$ 377,00\n• Abdômen inferior: R$ 377,00\n• Abdômen total: R$ 550,00, incluindo superior + inferior\n\nTambém existem condições especiais para pacotes de 5 sessões, mas isso é orientado somente após avaliação presencial, porque a especialista precisa ver a pele, a extensão das estrias e a região certinha antes de indicar um pacote.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
+    exampleQuestions: [
+      "qual valor",
+      "quanto custa",
+      "valor da sessão",
+      "qual preço",
+      "tem pacote",
+    ],
+    tags: ["preço", "valor", "região", "abdômen", "pacote", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 170,
+    internalNotes:
+      "BASE 15U.7: valores atuais. Pacote de 5 sessões apenas como possibilidade sob avaliação presencial.",
+  },
+  {
+    categorySlug: "preco-promocao",
+    title: "Como funciona e valores atuais — v14",
+    answerText:
+      "Funciona assim: trabalhamos com um tratamento regenerativo para estrias, feito com protocolo de microagulhamento. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta.\n\nSobre os valores atuais:\n• 1 região: R$ 377,00\n• Abdômen superior: R$ 377,00\n• Abdômen inferior: R$ 377,00\n• Abdômen total: R$ 550,00, incluindo superior + inferior\n\nQuando a região é bilateral, os dois lados já entram dentro dessa região.\n\nPara pacotes de 5 sessões, existem condições especiais, mas somente sob avaliação presencial.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
+    exampleQuestions: [
+      "como funciona e valores",
+      "como funciona e quanto custa",
+      "valor e tratamento",
+      "qual valor do procedimento",
+    ],
+    tags: ["como funciona", "valores", "preço", "microagulhamento", "pacote", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 169,
+    internalNotes:
+      "BASE 15U.7: funcionamento + valores atuais sem prometer pacote fechado sem avaliação.",
+  },
+  {
+    categorySlug: "regioes-corpo",
+    title: "Abdômen superior inferior total — v14",
+    answerText:
+      "No caso do abdômen, normalmente dividimos assim:\n\n• Abdômen superior: parte acima do umbigo — R$ 377,00\n• Abdômen inferior: parte abaixo do umbigo — R$ 377,00\n• Abdômen total: superior + inferior — R$ 550,00\n\nEssa divisão ajuda a organizar o atendimento e dar uma noção inicial de região. A especialista confirma certinho presencialmente, porque ela avalia a pele, a extensão das estrias e o protocolo mais indicado.\n\nNa sua barriga, as estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?",
+    exampleQuestions: [
+      "abdômen total",
+      "abdômen superior",
+      "abdômen inferior",
+      "barriga é uma região",
+      "valor da barriga",
+    ],
+    tags: ["abdômen", "abdômen superior", "abdômen inferior", "região", "preço", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 168,
+    internalNotes:
+      "BASE 15U.7: divisão atual do abdômen com valores de superior, inferior e total.",
+  },
+  {
+    categorySlug: "caso-sensivel-revisao-humana",
+    title: "Dor e sensibilidade — v14",
+    answerText:
+      "Sobre dor, cada pessoa tem uma sensibilidade diferente, então não gosto de prometer que não vai sentir nada.\n\nMas muitas clientes relatam que o procedimento é mais tranquilo do que imaginavam, principalmente pela forma como a especialista conduz a técnica e explica tudo antes.\n\nPode haver incômodo ou sensibilidade, mas o atendimento é feito com cuidado para deixar a experiência o mais confortável possível.\n\nNo dia da avaliação, a especialista também te explica certinho como funciona e tira suas dúvidas com segurança.",
+    exampleQuestions: [
+      "dói?",
+      "dói muito?",
+      "é suportável?",
+      "tenho medo de dor",
+      "sente dor no procedimento?",
+    ],
+    tags: ["dor", "sensibilidade", "incomodo", "procedimento", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 167,
+    internalNotes:
+      "BASE 15U.7: não prometer ausência de dor; assuntos médicos sensíveis ficam com especialista.",
+  },
+  {
+    categorySlug: "caso-sensivel-revisao-humana",
+    title: "Anestesia no procedimento — v14",
+    answerText:
+      "Em geral, não utilizamos anestesia/anestésico como padrão para esse tipo de procedimento em áreas extensas.\n\nA especialista explica tudo antes e conduz o atendimento com cuidado para deixar a experiência o mais confortável possível. A sensibilidade varia de pessoa para pessoa, então ela orienta com segurança conforme a região e o seu caso.\n\nSe você tiver alguma condição de saúde ou preocupação específica, é importante comentar na avaliação presencial.",
+    exampleQuestions: [
+      "usa anestesia?",
+      "tem anestésico?",
+      "passa pomada?",
+      "usa pomada anestésica?",
+      "tem anestesia para não doer?",
+    ],
+    tags: ["anestesia", "anestésico", "pomada anestésica", "dor", "sensibilidade", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 166,
+    internalNotes:
+      "BASE 15U.7: não usar anestesia/anestésico como promessa ou padrão em áreas extensas.",
+  },
+  {
+    categorySlug: "preco-promocao",
+    title: "Pacote de 5 sessões — v14",
+    answerText:
+      "Temos condições especiais para pacotes de 5 sessões, mas essa orientação é feita somente após avaliação presencial.\n\nIsso porque a especialista precisa avaliar a região, o tipo de estria, a extensão e como está a pele antes de indicar se pacote faz sentido para o seu caso.\n\nNa avaliação, ela consegue te orientar com mais segurança sobre protocolo, quantidade estimada de sessões e melhor opção.",
+    exampleQuestions: [
+      "tem pacote?",
+      "pacote de 5 sessões",
+      "faz pacote?",
+      "qual valor do pacote?",
+      "tem desconto em pacote?",
+    ],
+    tags: ["pacote", "5 sessões", "avaliação presencial", "preço", "valor", "v14"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 165,
+    internalNotes:
+      "BASE 15U.7: pacote de 5 sessões apenas como possibilidade sob avaliação presencial.",
+  },
 ];
