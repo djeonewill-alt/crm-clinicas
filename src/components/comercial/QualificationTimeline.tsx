@@ -3,6 +3,7 @@
 import type {
   QualificationJourneyState,
   QualificationTimelineCheckpointStatus,
+  QualificationTimelineStateForAI,
 } from "@/lib/comercial/qualification-journey";
 import { getQualificationTimelineStateForAI } from "@/lib/comercial/qualification-journey";
 import type { Lead } from "@/types/lead";
@@ -12,12 +13,14 @@ type QualificationTimelineProps = {
   lead: Pick<Lead, "funnel" | "diaProsp">;
   history: LeadHistoryItem[];
   journeyState: QualificationJourneyState;
+  timelineState?: QualificationTimelineStateForAI;
   isApplyingAction?: boolean;
   onQualify?: () => void;
+  onUseSuggestion?: (message: string) => void;
 };
 
 const STATUS_LABELS: Record<QualificationTimelineCheckpointStatus, string> = {
-  done: "concluído",
+  done: "concluido",
   current: "atual",
   pending: "pendente",
   touched: "respondido fora de ordem",
@@ -42,19 +45,24 @@ export function QualificationTimeline({
   lead,
   history,
   journeyState,
+  timelineState: providedTimelineState,
   isApplyingAction = false,
   onQualify,
+  onUseSuggestion,
 }: QualificationTimelineProps) {
-  const timelineState = getQualificationTimelineStateForAI({
-    lead,
-    recentHistory: history,
-    journeyState,
-  });
+  const timelineState =
+    providedTimelineState ??
+    getQualificationTimelineStateForAI({
+      lead,
+      recentHistory: history,
+      journeyState,
+    });
   const checkpoints = timelineState.checkpoints;
-  const actionText =
-    timelineState.nextBestQuestion ??
-    journeyState.pendingQuestion ??
-    journeyState.guidance;
+  const nextSuggestion = timelineState.nextSuggestion;
+  const nextStepLabel =
+    nextSuggestion?.label ??
+    timelineState.nextBestLabel ??
+    "Acompanhar atendimento";
 
   return (
     <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)]">
@@ -63,11 +71,9 @@ export function QualificationTimeline({
           <span className="font-semibold text-[var(--text)]">
             Jornada do atendimento
           </span>
-          {journeyState.nextLabel && (
-            <span className="ml-2 text-[var(--text3)]">
-              Próximo passo: {journeyState.nextLabel}
-            </span>
-          )}
+          <span className="ml-2 text-[var(--text3)]">
+            Proximo passo: {nextStepLabel}
+          </span>
         </div>
 
         {journeyState.shouldSuggestQualification && lead.funnel === "prospeccao" && (
@@ -88,14 +94,16 @@ export function QualificationTimeline({
             <div key={checkpoint.key} className="flex items-start">
               <div
                 className="flex w-20 flex-col items-center gap-1 text-center"
-                title={`${checkpoint.label}: ${STATUS_LABELS[checkpoint.status]} — ${checkpoint.evidence ?? ""}`}
+                title={`${checkpoint.label}: ${STATUS_LABELS[checkpoint.status]} - ${
+                  checkpoint.evidence ?? ""
+                }`}
               >
                 <span
                   className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold ${getDotClass(
                     checkpoint.status
                   )}`}
                 >
-                  {checkpoint.status === "done" ? "✓" : index + 1}
+                  {checkpoint.status === "done" ? "ok" : index + 1}
                 </span>
                 <span className="text-[10px] leading-tight text-[var(--text2)]">
                   {checkpoint.label}
@@ -113,10 +121,30 @@ export function QualificationTimeline({
         </div>
       </div>
 
-      {actionText && (
-        <p className="mt-2 text-[11px] text-[var(--text3)]">
-          Ação sugerida: {actionText}
-        </p>
+      {nextSuggestion && (
+        <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                Proxima sugestao
+              </p>
+              <p className="mt-1 text-[11px] font-semibold text-[var(--text)]">
+                {nextSuggestion.label}
+              </p>
+              <p className="mt-1 whitespace-pre-line text-[11px] leading-relaxed text-[var(--text2)]">
+                {nextSuggestion.message}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!onUseSuggestion}
+              onClick={() => onUseSuggestion?.(nextSuggestion.message)}
+              className="rounded-md border border-[var(--accent)]/40 bg-[rgba(232,197,71,.12)] px-2 py-1 text-[11px] font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.2)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Usar sugestao
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

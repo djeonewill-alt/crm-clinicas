@@ -6,7 +6,6 @@ import { LeadAssistedServicePanel } from "@/components/comercial/LeadAssistedSer
 import { LeadCommercialContextSelector } from "@/components/comercial/LeadCommercialContextSelector";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
-import { LeadJourneyCard } from "@/components/comercial/LeadJourneyCard";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import { FUNNELS } from "@/lib/constants/crm";
 import {
@@ -123,7 +122,6 @@ export function LeadDetail({
   onDisqualify,
   onArchiveLead,
   onDeleteLead,
-  onSendToRecovery,
   onMoveToRetorno,
   onUpdateLeadDetails,
   onSetResultado,
@@ -138,7 +136,6 @@ export function LeadDetail({
   onUpdateCommercialContext,
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [showJourney, setShowJourney] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [closeForm, setCloseForm] = useState<CloseClientInput>(
     createInitialCloseForm
@@ -500,39 +497,6 @@ export function LeadDetail({
           {progress.isComplete ? "Avançar dia e próximo lead" : "Próximo lead"}
         </button>
       </div>
-
-      <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
-              Jornada Comercial
-            </p>
-            <p className="mt-1 text-xs text-[var(--text2)]">
-              Jornada: {getFunnelLabel(lead.funnel)} · {lead.diaProsp || "d1"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowJourney((current) => !current)}
-            className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
-          >
-            {showJourney ? "Ocultar jornada" : "Ver jornada"}
-          </button>
-        </div>
-
-        {showJourney && (
-          <div className="mt-3">
-            <LeadJourneyCard
-              lead={lead}
-              tentativas={tentativas}
-              recentHistory={leadHistory.slice(0, 10)}
-              currentCommercialContext={currentCommercialContext}
-              onSendToRecovery={onSendToRecovery}
-              onMoveToQualification={() => onMoveToQualificacao(lead)}
-            />
-          </div>
-        )}
-      </section>
 
       <TentativasList
         lead={lead}

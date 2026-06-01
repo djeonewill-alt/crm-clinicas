@@ -1,32 +1,30 @@
-import type { Lead } from "@/types/lead";
-import type { LeadHistoryItem } from "@/types/lead-history";
-
 export type QualificationCheckpoint =
-  | "lead_entrada"
-  | "primeira_abordagem_enviada"
+  | "novo_contato"
   | "cliente_respondeu_abordagem"
-  | "qualificacao_iniciada"
-  | "pacote_inicial_pendente"
   | "aguardando_regiao"
   | "aguardando_subregiao"
-  | "regioes_estimadas"
-  | "aguardando_intencao_tratamento"
   | "aguardando_unidade"
   | "aguardando_disponibilidade"
-  | "aguardando_confirmacao_horario"
   | "aguardando_sinal"
-  | "aguardando_comprovante"
   | "agendamento_confirmado";
 
 export type QualificationJourneyState = {
   currentCheckpoint: QualificationCheckpoint;
-  currentLabel: string;
   nextCheckpoint: QualificationCheckpoint | null;
+  currentLabel: string;
   nextLabel: string | null;
-  shouldSuggestQualification: boolean;
   pendingQuestion: string | null;
-  knownFields: Record<string, string | boolean>;
   guidance: string;
+  shouldQualifyLead: boolean;
+  shouldSuggestQualification: boolean;
+  knownFields: {
+    hasRegion: boolean;
+    hasSubregion: boolean;
+    hasUnit: boolean;
+    hasAvailability: boolean;
+    hasPaymentSignal: boolean;
+    hasConfirmedSchedule: boolean;
+  };
 };
 
 export type QualificationTimelineCheckpointKey =
@@ -40,17 +38,19 @@ export type QualificationTimelineCheckpointKey =
   | "sinal"
   | "confirmacao";
 
-export type QualificationTimelineCheckpointStatus =
-  | "done"
-  | "current"
-  | "pending"
-  | "touched";
+export type QualificationTimelineCheckpointStatus = "done" | "current" | "pending" | "touched";
 
 export type QualificationTimelineCheckpoint = {
   key: QualificationTimelineCheckpointKey;
   label: string;
   status: QualificationTimelineCheckpointStatus;
   evidence?: string;
+};
+
+export type QualificationNextSuggestion = {
+  key: QualificationTimelineCheckpointKey | "retorno";
+  label: string;
+  message: string;
 };
 
 export type QualificationTimelineStateForAI = {
@@ -62,76 +62,47 @@ export type QualificationTimelineStateForAI = {
   nextBestKey?: QualificationTimelineCheckpointKey;
   nextBestLabel?: string;
   nextBestQuestion?: string;
+  nextSuggestion?: QualificationNextSuggestion;
   summaryForAI: string;
 };
 
-type GetQualificationJourneyStateInput = {
-  lead: Pick<Lead, "funnel" | "diaProsp">;
-  recentHistory?: LeadHistoryItem[];
-  currentMessage?: string;
+type HistoryLike = {
+  title?: string | null;
+  description?: string | null;
+  created_at?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
-type GetQualificationTimelineStateForAIInput = {
-  lead: Pick<Lead, "funnel" | "diaProsp">;
-  recentHistory?: LeadHistoryItem[];
-  currentMessage?: string;
-  journeyState?: QualificationJourneyState;
+type LeadLike = {
+  id?: string | number | null;
+  nome?: string | null;
+  status?: string | null;
+  funnel?: string | null;
+  funil_etapa?: string | null;
+  retorno_data?: string | null;
 };
 
 const CHECKPOINT_LABELS: Record<QualificationCheckpoint, string> = {
-  lead_entrada: "Lead recebido",
-  primeira_abordagem_enviada: "Primeira abordagem enviada",
+  novo_contato: "Novo contato",
   cliente_respondeu_abordagem: "Cliente respondeu",
-  qualificacao_iniciada: "Qualificacao iniciada",
-  pacote_inicial_pendente: "Pacote inicial pendente",
-  aguardando_regiao: "Perguntar regiao do corpo",
+  aguardando_regiao: "Coletar regiao",
   aguardando_subregiao: "Detalhar sub-regiao",
-  regioes_estimadas: "Regioes estimadas",
-  aguardando_intencao_tratamento: "Entender intencao",
-  aguardando_unidade: "Perguntar unidade",
-  aguardando_disponibilidade: "Perguntar disponibilidade",
-  aguardando_confirmacao_horario: "Confirmar horario",
-  aguardando_sinal: "Orientar sinal",
-  aguardando_comprovante: "Aguardar comprovante",
+  aguardando_unidade: "Confirmar unidade",
+  aguardando_disponibilidade: "Ver disponibilidade",
+  aguardando_sinal: "Orientar reserva",
   agendamento_confirmado: "Agendamento confirmado",
 };
 
-const PENDING_QUESTIONS: Partial<Record<QualificationCheckpoint, string>> = {
-  qualificacao_iniciada: "Quer que eu te explique como funciona e depois te pergunto a regiao?",
-  pacote_inicial_pendente: "Explicar o pacote inicial e perguntar qual regiao do corpo a cliente quer tratar.",
-  aguardando_regiao: "Qual regiao do corpo voce deseja tratar?",
-  aguardando_subregiao: "Essa regiao fica acima, abaixo do umbigo ou nas duas partes?",
-  aguardando_intencao_tratamento: "O que mais te incomoda nessa regiao hoje?",
-  aguardando_unidade: "Qual unidade fica melhor para voce: Paulista, Tatuape ou Mairipora?",
-  aguardando_disponibilidade: "Qual periodo ou dia costuma ser melhor para voce?",
-  aguardando_confirmacao_horario: "Confirmar o horario manualmente antes de responder.",
-  aguardando_sinal: "Orientar sinal somente se o atendimento ja estiver nesse momento.",
-  aguardando_comprovante: "Pedir comprovante se o Pix/sinal ja foi combinado.",
-};
-
-const REGION_WORDS = [
-  "barriga",
-  "abdomen",
-  "abdômen",
-  "flanco",
-  "flancos",
-  "gluteo",
-  "gluteos",
-  "glúteo",
-  "glúteos",
-  "coxa",
-  "coxas",
-  "costas",
-  "seio",
-  "seios",
-  "braco",
-  "bracos",
-  "braço",
-  "braços",
+const CHECKPOINT_ORDER: QualificationCheckpoint[] = [
+  "novo_contato",
+  "cliente_respondeu_abordagem",
+  "aguardando_regiao",
+  "aguardando_subregiao",
+  "aguardando_unidade",
+  "aguardando_disponibilidade",
+  "aguardando_sinal",
+  "agendamento_confirmado",
 ];
-
-const UNIT_WORDS = ["paulista", "tatuape", "tatuapé", "mairipora", "mairiporã"];
-const PIX_WORDS = ["pix", "sinal", "reserva", "pagamento", "comprovante"];
 
 const TIMELINE_CHECKPOINTS: Array<{
   key: QualificationTimelineCheckpointKey;
@@ -147,298 +118,417 @@ const TIMELINE_CHECKPOINTS: Array<{
   { key: "sinal", label: "Sinal" },
   { key: "confirmacao", label: "Confirmacao" },
 ];
-const TIMELINE_ORDER = TIMELINE_CHECKPOINTS.map((checkpoint) => checkpoint.key);
-const TIMELINE_CURRENT_MAP: Partial<
-  Record<QualificationCheckpoint, QualificationTimelineCheckpointKey>
-> = {
-  lead_entrada: "entrada",
-  primeira_abordagem_enviada: "entrada",
-  cliente_respondeu_abordagem: "funcionamento",
-  qualificacao_iniciada: "funcionamento",
-  pacote_inicial_pendente: "funcionamento",
-  aguardando_regiao: "regiao",
-  aguardando_subregiao: "subregiao",
-  regioes_estimadas: "unidade",
-  aguardando_intencao_tratamento: "unidade",
-  aguardando_unidade: "unidade",
-  aguardando_disponibilidade: "agenda",
-  aguardando_confirmacao_horario: "agenda",
-  aguardando_sinal: "sinal",
-  aguardando_comprovante: "sinal",
-  agendamento_confirmado: "confirmacao",
+
+const NEXT_STEP_LABELS: Record<QualificationTimelineCheckpointKey, string> = {
+  entrada: "Iniciar atendimento",
+  funcionamento: "Explicar funcionamento",
+  valor: "Explicar valor",
+  regiao: "Coletar regiao do corpo",
+  subregiao: "Detalhar sub-regiao",
+  unidade: "Confirmar unidade",
+  agenda: "Ver disponibilidade",
+  sinal: "Orientar reserva",
+  confirmacao: "Confirmar comprovante",
 };
-const FUNCTION_WORDS = [
-  "funciona",
-  "tratamento",
-  "microagulhamento",
-  "regenerativo",
-  "laser",
-  "camuflagem",
-  "pintura",
-  "tinta",
+
+const BODY_REGION_PATTERNS = [
+  "barriga",
+  "abdomen",
+  "abdominal",
+  "flanco",
+  "flancos",
+  "gluteo",
+  "gluteos",
+  "bumbum",
+  "coxa",
+  "coxas",
+  "seio",
+  "seios",
+  "braco",
+  "bracos",
+  "costas",
+  "perna",
+  "pernas",
+  "panturrilha",
+  "panturrilhas",
+  "quadril",
+  "lateral do corpo",
+  "interno de coxa",
+  "externo de coxa",
 ];
-const VALUE_WORDS = [
-  "valor",
-  "preco",
-  "preco",
-  "r$180",
-  "r$ 180",
-  "promocao",
-  "promocao",
-  "campanha",
-  "sessao",
-  "sessao",
-];
-const SUBREGION_WORDS = [
+
+const SUBREGION_PATTERNS = [
   "acima do umbigo",
   "abaixo do umbigo",
+  "nas duas partes",
   "duas partes",
   "superior",
   "inferior",
-  "interna",
-  "externa",
+  "parte interna",
+  "parte externa",
   "lateral",
+  "proximo ao ombro",
+  "perto do quadril",
   "um lado",
   "dois lados",
+  "nos dois gluteos",
+  "lado direito",
+  "lado esquerdo",
+  "frente da coxa",
+  "atras da coxa",
 ];
-const SCHEDULE_WORDS = [
-  "agenda",
-  "agendar",
-  "avaliacao",
-  "avaliacao",
-  "disponibilidade",
-  "horario",
-  "horario",
-  "manha",
+
+const UNIT_PATTERNS = [
+  "paulista",
+  "paraiso",
+  "tatuape",
+  "mairipora",
+  "rua manoel",
+  "brigadeiro",
+  "unidade paulista",
+  "unidade tatuape",
+  "unidade mairipora",
+];
+
+const FUNCTIONING_PATTERNS = [
+  "como funciona",
+  "microagulhamento",
+  "regenerativo",
+  "nao e laser",
+  "nao e pintura",
+  "camuflagem",
+  "tratamento para estrias",
+  "protocolo",
+];
+
+const VALUE_DONE_PATTERNS = [
+  "r$ 180",
+  "r$180",
+  "180 por regiao",
+  "180 por sessao",
+  "sessao esta saindo",
+  "valor promocional",
+  "valor de r$",
+  "por regiao tratada",
+];
+
+const VALUE_TOUCHED_PATTERNS = [
+  "quanto custa",
+  "qual valor",
+  "valores",
+  "preco",
+  "precos",
+  "promocao",
+  "campanha",
+];
+
+const AGENDA_DONE_PATTERNS = [
+  "segunda",
+  "terca",
+  "quarta",
+  "quinta",
+  "sexta",
+  "sabado",
+  "domingo",
   "manha",
   "tarde",
-  "sabado",
-  "sabado",
-  "quarta",
-  "sexta",
-  "dia",
+  "horario",
+  "as 9",
+  "as 10",
+  "as 11",
+  "as 12",
+  "as 13",
+  "as 14",
+  "as 15",
+  "as 16",
+  "as 17",
+  "as 18",
+  "dia 20",
+  "dia 27",
+  "esse horario funciona",
+  "confirmar horario",
+  "pode ser tal dia",
+  "disponibilidade",
 ];
-const TIMELINE_QUESTIONS: Partial<
-  Record<QualificationTimelineCheckpointKey, string>
-> = {
-  regiao:
-    "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?",
-  subregiao:
-    "Na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?",
-  unidade:
-    "Qual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora?",
-  agenda:
-    "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?",
-  sinal:
-    "Esse horario funciona para voce? Se quiser garantir, posso te passar as informacoes da reserva.",
-  confirmacao:
-    "Me envia o comprovante por aqui para confirmarmos sua reserva no sistema.",
-};
 
-function normalizeText(value: string) {
+const AGENDA_TOUCHED_PATTERNS = [
+  "vou agendar",
+  "agendo depois",
+  "quando eu puder",
+  "horarios corridos",
+  "em breve",
+  "ver agenda",
+  "qual dia posso fazer avaliacao",
+  "posso fazer avaliacao",
+];
+
+const SIGNAL_PATTERNS = ["pix", "sinal", "reserva", "comprovante"];
+
+const RETORNO_PATTERNS = [
+  "depois eu vejo",
+  "vejo depois",
+  "mais tarde",
+  "retorno depois",
+  "quando eu puder",
+  "chamo depois",
+  "chamar depois",
+];
+
+export function getCheckpointLabel(checkpoint: QualificationCheckpoint | null | undefined): string {
+  if (!checkpoint) return "Sem etapa";
+  return CHECKPOINT_LABELS[checkpoint] ?? checkpoint;
+}
+
+export function getNextCheckpointLabel(checkpoint: QualificationCheckpoint | null | undefined): string | null {
+  if (!checkpoint) return null;
+  return getCheckpointLabel(checkpoint);
+}
+
+function normalizeText(value: string): string {
   return value
-    .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s$]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function getEvent(item: LeadHistoryItem) {
-  const event = item.metadata?.event;
-  return typeof event === "string" ? event : "";
+function metadataString(item: HistoryLike, key: string): string {
+  const value = item.metadata?.[key];
+  return typeof value === "string" ? value : "";
 }
 
-function getHistoryText(item: LeadHistoryItem) {
-  return [item.title, item.description, JSON.stringify(item.metadata ?? {})]
+function metadataEvent(item: HistoryLike): string {
+  return metadataString(item, "event");
+}
+
+function getConversationText(item: HistoryLike): string {
+  return [
+    metadataString(item, "messageText"),
+    metadataString(item, "replyText"),
+    item.description ?? "",
+  ]
     .filter(Boolean)
     .join(" ");
 }
 
-function sortOldestFirst(items: LeadHistoryItem[]) {
-  return [...items].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
+function getCustomerMessageText(item: HistoryLike): string {
+  return metadataEvent(item) === "customer_message_received" ? getConversationText(item) : "";
 }
 
-function hasTextMatch(text: string, words: string[]) {
+function getAssistantReplyText(item: HistoryLike): string {
+  return metadataEvent(item) === "commercial_reply_sent" ? getConversationText(item) : "";
+}
+
+function historyTime(item: HistoryLike): number {
+  const time = item.created_at ? new Date(item.created_at).getTime() : Number.NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function dedupeTimelineHistory(history: HistoryLike[]): HistoryLike[] {
+  const seen = new Set<string>();
+  return [...history]
+    .sort((a, b) => historyTime(a) - historyTime(b))
+    .filter((item) => {
+      const event = metadataEvent(item) || item.title || "unknown";
+      const text = normalizeText(getConversationText(item));
+      if (!text) return true;
+      const fingerprint = `${event}:${text}`;
+      if (seen.has(fingerprint)) return false;
+      seen.add(fingerprint);
+      return true;
+    });
+}
+
+function hasAny(text: string, patterns: string[]): boolean {
   const normalized = normalizeText(text);
-  return words.some((word) => normalized.includes(normalizeText(word)));
+  return patterns.some((pattern) => normalized.includes(normalizeText(pattern)));
 }
 
-export function getCheckpointLabel(checkpoint: QualificationCheckpoint) {
-  return CHECKPOINT_LABELS[checkpoint];
+function hasScheduleConfirmationEvent(history: HistoryLike[]): boolean {
+  return history.some((item) => {
+    const event = metadataEvent(item);
+    const text = normalizeText(getConversationText(item));
+    return (
+      event === "lead_closed_with_schedule" ||
+      event === "lead_schedule_confirmed" ||
+      text.includes("agendamento confirmado") ||
+      text.includes("reserva confirmada")
+    );
+  });
 }
 
-export function getNextCheckpointLabel(
-  checkpoint: QualificationCheckpoint | null
-) {
-  return checkpoint ? CHECKPOINT_LABELS[checkpoint] : null;
+function hasCustomerAfterAssistant(history: HistoryLike[]): boolean {
+  let assistantSeen = false;
+  for (const item of history) {
+    const event = metadataEvent(item);
+    if (event === "commercial_reply_sent") assistantSeen = true;
+    if (assistantSeen && event === "customer_message_received") return true;
+  }
+  return false;
 }
 
-function getTimelineCurrentKey(journeyState: QualificationJourneyState) {
-  return (
-    TIMELINE_CURRENT_MAP[journeyState.currentCheckpoint] ??
-    (journeyState.nextCheckpoint
-      ? TIMELINE_CURRENT_MAP[journeyState.nextCheckpoint]
-      : null)
-  );
+function buildEvidenceLabel(label: string, evidence: boolean): string | undefined {
+  return evidence ? label : undefined;
 }
 
-function getTimelineQuestion(
-  key: QualificationTimelineCheckpointKey,
-  combinedText: string
-) {
-  if (key === "subregiao") {
-    if (hasTextMatch(combinedText, ["gluteo", "gluteos", "bumbum"])) {
-      return "As estrias ficam em um lado, nos dois gluteos ou mais na lateral/proximo ao quadril?";
-    }
-
-    return TIMELINE_QUESTIONS.subregiao;
+function getLikelySubregionQuestion(customerText: string): string {
+  if (hasAny(customerText, ["gluteo", "gluteos", "bumbum"])) {
+    return "As estrias ficam em um lado, nos dois gluteos ou mais na lateral/proximo ao quadril?";
   }
 
-  return TIMELINE_QUESTIONS[key];
+  if (hasAny(customerText, ["barriga", "abdomen", "abdominal"])) {
+    return "Na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?";
+  }
+
+  return "Me explica um pouco melhor em qual parte dessa regiao ficam as estrias?";
 }
 
-function getNextBestTimelineKey(
-  doneEvidence: Partial<Record<QualificationTimelineCheckpointKey, string>>,
-  currentKey: QualificationTimelineCheckpointKey | null
-) {
-  const priority: QualificationTimelineCheckpointKey[] = [
-    "regiao",
-    "subregiao",
-    "unidade",
-    "agenda",
-    "sinal",
-    "confirmacao",
-  ];
-  const next = priority.find((key) => !doneEvidence[key]);
+function buildNextQuestion(key: QualificationTimelineCheckpointKey, customerText: string): string {
+  switch (key) {
+    case "funcionamento":
+      return "Posso te explicar rapidinho como funciona o tratamento com microagulhamento para estrias.";
+    case "valor":
+      return "Sobre valores, neste periodo promocional a sessao esta saindo por R$ 180 por regiao tratada.";
+    case "regiao":
+      return "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?\nExemplo: barriga, flancos, gluteos, coxas, seios ou outra regiao.";
+    case "subregiao":
+      return getLikelySubregionQuestion(customerText);
+    case "unidade":
+      return "Qual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora?";
+    case "agenda":
+      return "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?";
+    case "sinal":
+      return "Esse horario funciona para voce? Se quiser garantir, posso te passar as informacoes da reserva.";
+    case "confirmacao":
+      return "Me envia o comprovante por aqui para confirmarmos sua reserva no sistema.";
+    case "entrada":
+    default:
+      return "Me chama por aqui que eu te ajudo a ver a melhor opcao para o seu atendimento.";
+  }
+}
 
-  if (next) return next;
-  if (currentKey && !doneEvidence[currentKey]) return currentKey;
+function buildReturnSuggestion(): QualificationNextSuggestion {
+  return {
+    key: "retorno",
+    label: "Retorno programado",
+    message:
+      "Sem problema. Quando quiser retomar, me chama por aqui que eu te ajudo a ver a melhor opcao para o seu atendimento.",
+  };
+}
 
+function chooseNextBestKey(args: {
+  done: Partial<Record<QualificationTimelineCheckpointKey, boolean>>;
+  touched: Partial<Record<QualificationTimelineCheckpointKey, boolean>>;
+}): QualificationTimelineCheckpointKey | undefined {
+  const { done } = args;
+
+  if (!done.regiao) return "regiao";
+  if (!done.subregiao) return "subregiao";
+  if (!done.unidade) return "unidade";
+  if (!done.agenda) return "agenda";
+  if (done.unidade && done.agenda && !done.sinal) return "sinal";
+  if (done.sinal && !done.confirmacao) return "confirmacao";
   return undefined;
 }
 
-export function getQualificationTimelineStateForAI({
-  lead,
-  recentHistory = [],
-  currentMessage = "",
-  journeyState,
-}: GetQualificationTimelineStateForAIInput): QualificationTimelineStateForAI {
-  const resolvedJourneyState =
-    journeyState ??
-    getQualificationJourneyState({
-      lead,
-      recentHistory,
-      currentMessage,
-    });
-  const history = sortOldestFirst(recentHistory).slice(-30);
-  const historyText = history.map(getHistoryText).join(" ");
-  const combinedText = `${historyText} ${currentMessage}`;
-  const hasClosedSchedule =
-    lead.funnel === "clientes" ||
-    history.some((item) => getEvent(item) === "lead_closed_with_schedule");
-  const doneEvidence: Partial<
-    Record<QualificationTimelineCheckpointKey, string>
-  > = {
-    entrada: "lead existe no CRM",
+export function getQualificationTimelineStateForAI(args: {
+  lead?: LeadLike | null;
+  recentHistory?: HistoryLike[];
+  currentMessage?: string | null;
+  journeyState?: QualificationJourneyState | null;
+}): QualificationTimelineStateForAI {
+  const lead = args.lead ?? null;
+  const history = dedupeTimelineHistory(args.recentHistory ?? []);
+  const currentMessage = args.currentMessage ?? "";
+
+  const customerText = [
+    ...history.map(getCustomerMessageText),
+    currentMessage,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const assistantText = history.map(getAssistantReplyText).filter(Boolean).join(" ");
+  const conversationText = history.map(getConversationText).filter(Boolean).join(" ");
+  const fullText = [conversationText, currentMessage].filter(Boolean).join(" ");
+
+  const hasConfirmedSchedule =
+    hasScheduleConfirmationEvent(history) || normalizeText(lead?.funil_etapa ?? lead?.status ?? "").includes("cliente");
+
+  const done: Partial<Record<QualificationTimelineCheckpointKey, boolean>> = {
+    entrada: Boolean(lead) || history.length > 0,
+    funcionamento: hasAny([customerText, assistantText].join(" "), FUNCTIONING_PATTERNS),
+    valor: hasAny(assistantText, VALUE_DONE_PATTERNS) || hasAny(conversationText, VALUE_DONE_PATTERNS),
+    regiao: hasAny(customerText, BODY_REGION_PATTERNS),
+    subregiao: hasAny(customerText, SUBREGION_PATTERNS),
+    unidade: hasAny(customerText, UNIT_PATTERNS) || hasAny(assistantText, ["rua manoel", "brigadeiro", "unidade paulista", "unidade tatuape", "unidade mairipora"]),
+    agenda: hasAny(conversationText, AGENDA_DONE_PATTERNS) || hasConfirmedSchedule,
+    sinal: hasAny(conversationText, SIGNAL_PATTERNS),
+    confirmacao: hasConfirmedSchedule,
   };
 
-  if (hasTextMatch(combinedText, FUNCTION_WORDS)) {
-    doneEvidence.funcionamento =
-      "conversa menciona funcionamento, tratamento ou metodo";
-  }
+  const touched: Partial<Record<QualificationTimelineCheckpointKey, boolean>> = {
+    valor: !done.valor && hasAny([customerText, assistantText].join(" "), VALUE_TOUCHED_PATTERNS),
+    agenda: !done.agenda && hasAny([customerText, assistantText].join(" "), AGENDA_TOUCHED_PATTERNS),
+  };
 
-  if (hasTextMatch(combinedText, VALUE_WORDS)) {
-    doneEvidence.valor = "conversa menciona valor, promocao ou sessao";
-  }
+  const hasReturnIntent = hasAny(customerText, RETORNO_PATTERNS);
+  const nextBestKey = hasReturnIntent ? undefined : chooseNextBestKey({ done, touched });
+  const nextBestLabel = nextBestKey ? NEXT_STEP_LABELS[nextBestKey] : hasReturnIntent ? "Retorno programado" : undefined;
+  const nextBestQuestion = nextBestKey ? buildNextQuestion(nextBestKey, customerText) : hasReturnIntent ? buildReturnSuggestion().message : undefined;
+  const nextSuggestion = hasReturnIntent
+    ? buildReturnSuggestion()
+    : nextBestKey && nextBestLabel && nextBestQuestion
+      ? {
+          key: nextBestKey,
+          label: nextBestLabel,
+          message: nextBestQuestion,
+        }
+      : undefined;
 
-  if (hasTextMatch(combinedText, REGION_WORDS)) {
-    doneEvidence.regiao = "conversa menciona regiao do corpo";
-  }
+  const checkpoints = TIMELINE_CHECKPOINTS.map((checkpoint): QualificationTimelineCheckpoint => {
+    const key = checkpoint.key;
+    const status: QualificationTimelineCheckpointStatus = done[key]
+      ? "done"
+      : touched[key]
+        ? "touched"
+        : key === nextBestKey
+          ? "current"
+          : "pending";
 
-  if (hasTextMatch(combinedText, SUBREGION_WORDS)) {
-    doneEvidence.subregiao = "conversa menciona detalhe/sub-regiao";
-  }
+    const evidence =
+      buildEvidenceLabel("lead/historico existente", key === "entrada" && Boolean(done[key])) ??
+      buildEvidenceLabel("explicacao do tratamento na conversa", key === "funcionamento" && Boolean(done[key])) ??
+      buildEvidenceLabel("valor real comunicado", key === "valor" && Boolean(done[key])) ??
+      buildEvidenceLabel("cliente informou regiao corporal", key === "regiao" && Boolean(done[key])) ??
+      buildEvidenceLabel("cliente detalhou sub-regiao", key === "subregiao" && Boolean(done[key])) ??
+      buildEvidenceLabel("unidade mencionada/escolhida", key === "unidade" && Boolean(done[key])) ??
+      buildEvidenceLabel("conversa operacional sobre agenda", key === "agenda" && Boolean(done[key])) ??
+      buildEvidenceLabel("sinal/reserva/comprovante mencionado", key === "sinal" && Boolean(done[key])) ??
+      buildEvidenceLabel("agendamento confirmado", key === "confirmacao" && Boolean(done[key])) ??
+      buildEvidenceLabel("assunto tocado sem confirmacao completa", Boolean(touched[key]));
 
-  if (hasTextMatch(combinedText, UNIT_WORDS)) {
-    doneEvidence.unidade = "conversa menciona unidade";
-  }
+    return {
+      ...checkpoint,
+      status,
+      evidence,
+    };
+  });
 
-  if (hasTextMatch(combinedText, SCHEDULE_WORDS)) {
-    doneEvidence.agenda = "conversa menciona agenda ou disponibilidade";
-  }
+  const doneKeys = checkpoints.filter((item) => item.status === "done").map((item) => item.key);
+  const pendingKeys = checkpoints.filter((item) => item.status === "pending").map((item) => item.key);
+  const touchedKeys = checkpoints.filter((item) => item.status === "touched").map((item) => item.key);
+  const currentKey = checkpoints.find((item) => item.status === "current")?.key;
 
-  if (hasTextMatch(combinedText, PIX_WORDS)) {
-    doneEvidence.sinal = "conversa menciona Pix, sinal, reserva ou comprovante";
-  }
-
-  if (hasClosedSchedule) {
-    doneEvidence.confirmacao = "agendamento/fechamento registrado";
-  }
-
-  const currentKey = getTimelineCurrentKey(resolvedJourneyState);
-  const currentIndex = currentKey ? TIMELINE_ORDER.indexOf(currentKey) : -1;
-  const nextBestKey = getNextBestTimelineKey(doneEvidence, currentKey ?? null);
-  const checkpoints = TIMELINE_CHECKPOINTS.map<QualificationTimelineCheckpoint>(
-    (checkpoint, index) => {
-      const evidence = doneEvidence[checkpoint.key];
-
-      if (evidence) {
-        return {
-          ...checkpoint,
-          status: checkpoint.key === currentKey ? "current" : "done",
-          evidence,
-        };
-      }
-
-      if (checkpoint.key === nextBestKey || checkpoint.key === currentKey) {
-        return {
-          ...checkpoint,
-          status: "current",
-          evidence: resolvedJourneyState.currentLabel,
-        };
-      }
-
-      if (currentIndex > 0 && index < currentIndex) {
-        return {
-          ...checkpoint,
-          status: "touched",
-          evidence:
-            "etapa anterior ao ponto atual sem evidencia clara no historico",
-        };
-      }
-
-      return {
-        ...checkpoint,
-        status: "pending",
-        evidence: "pendente",
-      };
-    }
-  );
-  const doneKeys = checkpoints
-    .filter((checkpoint) => checkpoint.status === "done")
-    .map((checkpoint) => checkpoint.key);
-  const pendingKeys = checkpoints
-    .filter((checkpoint) => checkpoint.status === "pending")
-    .map((checkpoint) => checkpoint.key);
-  const touchedKeys = checkpoints
-    .filter((checkpoint) => checkpoint.status === "touched")
-    .map((checkpoint) => checkpoint.key);
-  const nextBestLabel = nextBestKey
-    ? TIMELINE_CHECKPOINTS.find((checkpoint) => checkpoint.key === nextBestKey)
-        ?.label
-    : undefined;
-  const nextBestQuestion =
-    (nextBestKey && getTimelineQuestion(nextBestKey, combinedText)) ||
-    resolvedJourneyState.pendingQuestion ||
-    undefined;
   const summaryForAI = [
     `Concluidos: ${doneKeys.join(", ") || "nenhum"}.`,
-    `Tocados fora de ordem/parciais: ${touchedKeys.join(", ") || "nenhum"}.`,
     `Pendentes: ${pendingKeys.join(", ") || "nenhum"}.`,
+    `Tocados fora de ordem/parciais: ${touchedKeys.join(", ") || "nenhum"}.`,
     currentKey ? `Atual: ${currentKey}.` : "",
-    nextBestKey ? `Proximo melhor: ${nextBestKey}.` : "",
-    nextBestQuestion ? `Pergunta guia: ${nextBestQuestion}` : "",
+    nextBestKey ? `Proximo passo: ${nextBestKey} - ${nextBestLabel}.` : nextBestLabel ? `Proximo passo: ${nextBestLabel}.` : "",
+    nextBestQuestion ? `Pergunta sugerida: ${nextBestQuestion}` : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -448,162 +538,95 @@ export function getQualificationTimelineStateForAI({
     doneKeys,
     pendingKeys,
     touchedKeys,
-    currentKey: currentKey ?? undefined,
+    currentKey,
     nextBestKey,
     nextBestLabel,
     nextBestQuestion,
+    nextSuggestion,
     summaryForAI,
   };
 }
 
-export function getQualificationJourneyState({
-  lead,
-  recentHistory = [],
-  currentMessage = "",
-}: GetQualificationJourneyStateInput): QualificationJourneyState {
-  const history = sortOldestFirst(recentHistory).slice(-30);
-  const historyText = history.map(getHistoryText).join(" ");
-  const combinedText = `${historyText} ${currentMessage}`;
-  const knownFields: Record<string, string | boolean> = {};
-
-  const hasClosedSchedule = history.some(
-    (item) => getEvent(item) === "lead_closed_with_schedule"
-  );
-  if (hasClosedSchedule || lead.funnel === "clientes") {
-    return buildState({
-      checkpoint: "agendamento_confirmado",
-      nextCheckpoint: null,
-      shouldSuggestQualification: false,
-      knownFields,
-      guidance: "Atendimento ja fechado/agendado. Nao conduzir para qualificacao.",
-    });
-  }
-
-  const sentIndexes = history
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => getEvent(item) === "commercial_reply_sent")
-    .map(({ index }) => index);
-  const receivedIndexes = history
-    .map((item, index) => ({ item, index }))
-    .filter(({ item }) => getEvent(item) === "customer_message_received")
-    .map(({ index }) => index);
-  const lastReceivedIndex = receivedIndexes.at(-1) ?? -1;
-  const hasSentBeforeLastReceived = sentIndexes.some(
-    (index) => lastReceivedIndex >= 0 && index < lastReceivedIndex
-  );
-
-  if (lead.funnel === "prospeccao") {
-    if (hasSentBeforeLastReceived) {
-      return buildState({
-        checkpoint: "cliente_respondeu_abordagem",
-        nextCheckpoint: "qualificacao_iniciada",
-        shouldSuggestQualification: true,
-        knownFields,
-        guidance:
-          "Cliente respondeu a primeira abordagem. Sugerir mover manualmente para Qualificacao e conduzir para o pacote inicial.",
-      });
-    }
-
-    if (sentIndexes.length > 0) {
-      return buildState({
-        checkpoint: "primeira_abordagem_enviada",
-        nextCheckpoint: "cliente_respondeu_abordagem",
-        shouldSuggestQualification: false,
-        knownFields,
-        guidance: "Aguardar resposta do cliente antes de qualificar.",
-      });
-    }
-
-    return buildState({
-      checkpoint: "lead_entrada",
-      nextCheckpoint: "primeira_abordagem_enviada",
-      shouldSuggestQualification: false,
-      knownFields,
-      guidance: "Lead ainda em entrada/prospeccao.",
-    });
-  }
-
-  if (hasTextMatch(combinedText, UNIT_WORDS)) {
-    knownFields.unitMentioned = true;
-  }
-
-  if (hasTextMatch(combinedText, PIX_WORDS)) {
-    knownFields.paymentMentioned = true;
-  }
-
-  if (hasTextMatch(combinedText, REGION_WORDS)) {
-    knownFields.regionMentioned = true;
-  }
-
-  if (lead.funnel === "qualificacao") {
-    if (knownFields.paymentMentioned) {
-      return buildState({
-        checkpoint: "aguardando_comprovante",
-        nextCheckpoint: "agendamento_confirmado",
-        shouldSuggestQualification: false,
-        knownFields,
-        guidance:
-          "Pagamento/sinal apareceu na conversa. Nao confirmar recebimento sem revisao humana.",
-      });
-    }
-
-    if (knownFields.unitMentioned) {
-      return buildState({
-        checkpoint: "aguardando_disponibilidade",
-        nextCheckpoint: "aguardando_confirmacao_horario",
-        shouldSuggestQualification: false,
-        knownFields,
-        guidance: "Unidade mencionada. Proximo passo e entender disponibilidade.",
-      });
-    }
-
-    if (knownFields.regionMentioned) {
-      return buildState({
-        checkpoint: "aguardando_subregiao",
-        nextCheckpoint: "regioes_estimadas",
-        shouldSuggestQualification: false,
-        knownFields,
-        guidance:
-          "Regiao do corpo mencionada. Detalhar sub-regiao antes de avancar.",
-      });
-    }
-
-    return buildState({
-      checkpoint: "pacote_inicial_pendente",
-      nextCheckpoint: "aguardando_regiao",
-      shouldSuggestQualification: false,
-      knownFields,
-      guidance:
-        "Em qualificacao sem regiao detectada. Enviar pacote inicial curto e perguntar regiao do corpo.",
-    });
-  }
-
-  return buildState({
-    checkpoint: "qualificacao_iniciada",
-    nextCheckpoint: "aguardando_regiao",
-    shouldSuggestQualification: false,
-    knownFields,
-    guidance: "Usar o funil atual sem avancar etapas automaticamente.",
-  });
+function getNextCheckpoint(current: QualificationCheckpoint): QualificationCheckpoint | null {
+  const index = CHECKPOINT_ORDER.indexOf(current);
+  if (index < 0 || index >= CHECKPOINT_ORDER.length - 1) return null;
+  return CHECKPOINT_ORDER[index + 1];
 }
 
-function buildState(input: {
-  checkpoint: QualificationCheckpoint;
-  nextCheckpoint: QualificationCheckpoint | null;
-  shouldSuggestQualification: boolean;
-  knownFields: Record<string, string | boolean>;
-  guidance: string;
+function buildJourneyGuidance(current: QualificationCheckpoint, pendingQuestion: string | null): string {
+  if (pendingQuestion) return pendingQuestion;
+
+  switch (current) {
+    case "novo_contato":
+      return "Aguardar resposta da cliente antes de avancar a qualificacao.";
+    case "cliente_respondeu_abordagem":
+      return "Cliente respondeu. Se ainda estiver em prospeccao, pode qualificar para iniciar o atendimento.";
+    case "agendamento_confirmado":
+      return "Atendimento com agendamento confirmado. Manter acompanhamento normal.";
+    default:
+      return "Continuar a conversa pelo proximo checkpoint pendente.";
+  }
+}
+
+export function getQualificationJourneyState(args: {
+  lead?: LeadLike | null;
+  recentHistory?: HistoryLike[];
+  currentMessage?: string | null;
 }): QualificationJourneyState {
+  const lead = args.lead ?? null;
+  const history = dedupeTimelineHistory(args.recentHistory ?? []);
+  const currentMessage = args.currentMessage ?? "";
+  const timeline = getQualificationTimelineStateForAI({
+    lead,
+    recentHistory: history,
+    currentMessage,
+  });
+
+  const hasRegion = timeline.doneKeys.includes("regiao");
+  const hasSubregion = timeline.doneKeys.includes("subregiao");
+  const hasUnit = timeline.doneKeys.includes("unidade");
+  const hasAvailability = timeline.doneKeys.includes("agenda");
+  const hasPaymentSignal = timeline.doneKeys.includes("sinal");
+  const hasConfirmedSchedule = timeline.doneKeys.includes("confirmacao");
+  const leadFunnel = normalizeText(lead?.funnel ?? lead?.funil_etapa ?? "");
+  const shouldQualifyLead = hasCustomerAfterAssistant(history) && leadFunnel.includes("prospeccao");
+
+  let currentCheckpoint: QualificationCheckpoint = "novo_contato";
+  if (hasConfirmedSchedule) {
+    currentCheckpoint = "agendamento_confirmado";
+  } else if (hasPaymentSignal) {
+    currentCheckpoint = "aguardando_sinal";
+  } else if (hasAvailability) {
+    currentCheckpoint = "aguardando_sinal";
+  } else if (hasUnit) {
+    currentCheckpoint = "aguardando_disponibilidade";
+  } else if (hasSubregion) {
+    currentCheckpoint = "aguardando_unidade";
+  } else if (hasRegion) {
+    currentCheckpoint = "aguardando_subregiao";
+  } else if (shouldQualifyLead || history.some((item) => metadataEvent(item) === "customer_message_received")) {
+    currentCheckpoint = "cliente_respondeu_abordagem";
+  }
+
+  const nextCheckpoint = getNextCheckpoint(currentCheckpoint);
+  const pendingQuestion = timeline.nextBestQuestion ?? null;
+
   return {
-    currentCheckpoint: input.checkpoint,
-    currentLabel: getCheckpointLabel(input.checkpoint),
-    nextCheckpoint: input.nextCheckpoint,
-    nextLabel: getNextCheckpointLabel(input.nextCheckpoint),
-    shouldSuggestQualification: input.shouldSuggestQualification,
-    pendingQuestion: input.nextCheckpoint
-      ? PENDING_QUESTIONS[input.nextCheckpoint] ?? null
-      : null,
-    knownFields: input.knownFields,
-    guidance: input.guidance,
+    currentCheckpoint,
+    nextCheckpoint,
+    currentLabel: getCheckpointLabel(currentCheckpoint),
+    nextLabel: getNextCheckpointLabel(nextCheckpoint),
+    pendingQuestion,
+    guidance: buildJourneyGuidance(currentCheckpoint, pendingQuestion),
+    shouldQualifyLead,
+    shouldSuggestQualification: shouldQualifyLead,
+    knownFields: {
+      hasRegion,
+      hasSubregion,
+      hasUnit,
+      hasAvailability,
+      hasPaymentSignal,
+      hasConfirmedSchedule,
+    },
   };
 }

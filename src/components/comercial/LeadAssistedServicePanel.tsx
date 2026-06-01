@@ -655,6 +655,15 @@ export function LeadAssistedServicePanel({
       }),
     [lead, leadHistory]
   );
+  const timelineState = useMemo(
+    () =>
+      getQualificationTimelineStateForAI({
+        lead,
+        recentHistory: leadHistory,
+        journeyState,
+      }),
+    [lead, leadHistory, journeyState]
+  );
   const whatsappWindowState = useMemo(
     () =>
       getEstimatedWhatsAppWindowState({
@@ -987,6 +996,23 @@ export function LeadAssistedServicePanel({
     );
   }
 
+  function handleUseTimelineSuggestion(message: string) {
+    if (
+      replyText.trim() &&
+      !window.confirm(
+        "Substituir a resposta sugerida atual pela sugestao do checkpoint?"
+      )
+    ) {
+      return;
+    }
+
+    setReplyText(message);
+    setSuggestionMatch(null);
+    setNextActionSuggestion(null);
+    resetAiAdaptationState();
+    setCopyFeedbackMessage("Sugestao aplicada na resposta.");
+  }
+
   function todayInputValue() {
     const now = new Date();
     const timezoneOffset = now.getTimezoneOffset() * 60000;
@@ -1081,6 +1107,7 @@ export function LeadAssistedServicePanel({
             nextBestKey: timelineContext.nextBestKey ?? null,
             nextBestLabel: timelineContext.nextBestLabel ?? null,
             nextBestQuestion: timelineContext.nextBestQuestion ?? null,
+            nextSuggestion: timelineContext.nextSuggestion ?? null,
             summaryForAI: timelineContext.summaryForAI,
           },
         },
@@ -2056,8 +2083,10 @@ export function LeadAssistedServicePanel({
           lead={lead}
           history={leadHistory}
           journeyState={journeyState}
+          timelineState={timelineState}
           isApplyingAction={isApplyingAction}
           onQualify={() => void handleMoveToQualification()}
+          onUseSuggestion={handleUseTimelineSuggestion}
         />
         <p className="mt-2 text-xs text-[var(--text3)]">
           {whatsappWindowState.label}
