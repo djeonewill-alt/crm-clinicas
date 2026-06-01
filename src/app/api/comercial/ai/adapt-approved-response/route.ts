@@ -75,6 +75,11 @@ type AdaptApprovedResponseOutput = {
   requiresHumanReview: boolean;
   safetyNotes: string[];
   usedApprovedAnswerOnly: boolean;
+  multiIntentHandled?: boolean;
+  finalJourneyQuestion?: string;
+  questionCount?: number;
+  copiedPreviousReplyDetected?: boolean;
+  usedKnowledgeAsFacts?: boolean;
 };
 
 const MAX_TEXT_LENGTH = 8000;
@@ -256,6 +261,13 @@ function normalizeOutput(value: unknown): AdaptApprovedResponseOutput | null {
       ? record.safetyNotes.map(String).map((item) => item.trim()).filter(Boolean)
       : [],
     usedApprovedAnswerOnly: record.usedApprovedAnswerOnly !== false,
+    multiIntentHandled: record.multiIntentHandled === true,
+    finalJourneyQuestion: sanitizeText(record.finalJourneyQuestion),
+    questionCount: Number.isFinite(Number(record.questionCount))
+      ? Math.max(0, Math.floor(Number(record.questionCount)))
+      : countQuestionMarks(adaptedReply),
+    copiedPreviousReplyDetected: record.copiedPreviousReplyDetected === true,
+    usedKnowledgeAsFacts: record.usedKnowledgeAsFacts === true,
   };
 }
 
@@ -264,6 +276,59 @@ function normalizeSearchText(value: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function countQuestionMarks(value: string) {
+  return (value.match(/\?/g) || []).length;
+}
+
+function getCopiedPreviousReplyHint(input: {
+  customerMessage: string;
+  recentHistory: RecentHistoryInput[];
+}) {
+  const customerMessage = sanitizeText(input.customerMessage);
+  const normalizedMessage = normalizeSearchText(customerMessage).replace(/\s+/g, " ");
+
+  if (normalizedMessage.length < 80) {
+    return {
+      detected: false,
+      likelyNewText: "",
+    };
+  }
+
+  const sentReplies = input.recentHistory
+    .filter((item) => {
+      const event = String(item.metadata?.event || "");
+      return event === "commercial_reply_sent" || event === "assistant_reply_sent";
+    })
+    .map((item) => sanitizeText(item.description))
+    .filter((text) => text.length >= 80)
+    .slice(-5);
+
+  for (const reply of sentReplies) {
+    const normalizedReply = normalizeSearchText(reply).replace(/\s+/g, " ");
+    const sample = normalizedReply.slice(0, 120);
+
+    if (sample.length < 80 || !normalizedMessage.includes(sample.slice(0, 80))) {
+      continue;
+    }
+
+    const likelyNewText = customerMessage
+      .slice(Math.min(customerMessage.length, reply.length))
+      .replace(/^["'\s:;,.!?-]+/, "")
+      .trim()
+      .slice(0, 500);
+
+    return {
+      detected: true,
+      likelyNewText,
+    };
+  }
+
+  return {
+    detected: false,
+    likelyNewText: "",
+  };
 }
 
 function looksLikeScheduleIntent(value: string | null | undefined) {
@@ -315,6 +380,12 @@ function extractResponseText(data: Record<string, unknown>) {
 
 function buildUserPayload(input: AdaptApprovedResponseInput) {
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const customerMessage = sanitizeText(input.customerMessage);
+  const recentHistory = sanitizeRecentHistory(input.recentHistory);
+  const copiedPreviousReplyHint = getCopiedPreviousReplyHint({
+    customerMessage,
+    recentHistory,
+  });
   const primaryApprovedResponse =
     sanitizePrimaryApprovedResponse(input.primaryApprovedResponse) ??
     (approvedAnswerText
@@ -330,7 +401,7 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       : null);
 
   return {
-    customerMessage: sanitizeText(input.customerMessage),
+    customerMessage,
     approvedAnswerText,
     approvedResponseTitle: sanitizeOptionalText(input.approvedResponseTitle),
     approvedResponseCategory: sanitizeOptionalText(input.approvedResponseCategory),
@@ -350,7 +421,7 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       journeyStep: sanitizeOptionalText(input.leadJourneyStep),
     },
     conversation: {
-      recentHistory: sanitizeRecentHistory(input.recentHistory),
+      recentHistory,
       stage: sanitizeOptionalText(input.conversationStage),
       hasPriorConversation: input.hasPriorConversation === true,
       shouldAvoidGreeting: input.shouldAvoidGreeting === true,
@@ -358,6 +429,10 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       shouldOfferEvaluationNow: input.shouldOfferEvaluationNow === true,
     },
     journeyContext: sanitizeJourneyContext(input.journeyContext),
+    analysisHints: {
+      copiedPreviousReplyDetected: copiedPreviousReplyHint.detected,
+      likelyNewCustomerTextAfterCopiedReply: copiedPreviousReplyHint.likelyNewText,
+    },
     flags: {
       requiresHuman: input.requiresHuman === true,
       canAutoReply: input.canAutoReply === true,
@@ -406,6 +481,27 @@ export async function POST(request: Request) {
     "BASE 15O.2: responda usando a resposta aprovada principal e knowledgeCandidates como base de conhecimento aprovada.",
     "BASE 15U: tambem use journeyContext para entender o momento da jornada comercial antes de escolher o foco da resposta.",
     "BASE 15U.2: seja context-first. Ordem de decisao obrigatoria: 1 mensagem atual do cliente; 2 historico recente; 3 jornada/checkpoint; 4 base de conhecimento aprovada; 5 resposta aprovada principal.",
+    "BASE 15U.3: casos reais de atendimento. A mensagem atual manda mais que a resposta aprovada. A resposta aprovada NAO e molde obrigatorio; e apenas uma fonte aprovada de fatos quando encaixar no momento.",
+    "Ordem de decisao 15U.3, sem excecao: 1 entender exatamente a mensagem atual; 2 considerar o historico recente para nao repetir pergunta; 3 respeitar checkpoint/jornada; 4 usar knowledgeCandidates/contexto como fonte de fatos; 5 usar primaryApprovedResponse somente se encaixar perfeitamente.",
+    "Preserve 80% a 90% da resposta aprovada apenas quando ela encaixar perfeitamente na pergunta atual, no historico e no checkpoint. Se nao encaixar, use os fatos e escreva uma resposta nova, humana e contextual.",
+    "Responda somente o que o cliente perguntou. Nao puxe preco, sinal, Pix, reserva, unidade ou agenda se isso nao foi pedido e nao for o checkpoint certo.",
+    "Regra de preco: so informe preco se a mensagem atual falar valor, preco, quanto custa, promocao, sessao, valores, 'como funciona e valores' ou equivalente. Se a mensagem for apenas 'como funciona?', explique funcionamento e nao informe R$ 180.",
+    "Para 'Boa tarde, como funciona?' ou 'como funciona?': cumprimente se for abertura; explique microagulhamento/tratamento regenerativo; diga que nao e laser, pintura ou camuflagem quando isso estiver na base; mencione avaliacao presencial como parte do processo; finalize perguntando a regiao do corpo.",
+    "Para 'como funciona e valores': explique funcionamento, informe R$ 180 por regiao/sessao somente se esse fato estiver na base/contexto, e finalize perguntando a regiao do corpo.",
+    "Se a mensagem atual trouxer varios assuntos, responda em blocos curtos na ordem dos assuntos. Nao misture tudo em um paragrafo so e nao ignore nenhum assunto.",
+    "Exemplo multiassunto: se cliente informa 'Barriga e braco' e pergunta 'O periodo promocional vai ate quando?', responda um bloco sobre regioes e outro sobre promocao. Termine com uma unica pergunta, preferencialmente sobre sub-regiao da barriga.",
+    "Promocao sem Pix cedo: se perguntar 'promocao vai ate quando?', 'ate quando esse valor?', 'periodo promocional' ou similar, diga que R$ 180 por sessao/regiao esta dentro da campanha atual e que a promocao e garantida para quem faz a reserva dentro do mes vigente; campanhas podem mudar depois. Nao puxe sinal/Pix/reserva em detalhes, a menos que o cliente pergunte sobre isso, o checkpoint seja aguardando_sinal/aguardando_comprovante, ou horario ja tenha sido aceito.",
+    "Evite nessas respostas promocionais frases como 'faz o sinal', 'esse sinal reserva', 'fica como credito' se o momento ainda nao for reserva.",
+    "Quando o cliente escolher uma unidade especifica depois de perguntar localizacao, confirme a unidade, envie endereco completo se existir na base/contexto e continue a jornada com uma unica pergunta util.",
+    "Unidade Paulista: Rua Manoel da Nobrega, 354 - Paraiso; CEP 04001-001; referencia proximo a estacao Brigadeiro; 9 andar, sala 93. Se cliente responder 'Avenida Paulista' ou 'Paulista', use esses dados se nao houver dado melhor no contexto.",
+    "Regra de foto: nao pedir foto proativamente. Se a cliente perguntar se pode mandar foto, diga que pode mandar como referencia/anexo de atendimento/prontuario, mas reforce que avaliacao definitiva e presencial porque foto pode enganar e nao mostra profundidade, textura, extensao e pele com precisao.",
+    "Se o cliente respondeu uma pergunta do checkpoint e perguntou outra coisa na mesma mensagem, reconheca a resposta dada e NAO pergunte a mesma coisa de novo.",
+    "Se analysisHints.copiedPreviousReplyDetected for true, trate o trecho copiado como citacao/repeticao do atendimento anterior e foque no texto novo em analysisHints.likelyNewCustomerTextAfterCopiedReply. Se a mensagem contem uma resposta sua antiga seguida de 'Barriga e bumbum', responda sobre barriga e bumbum, nao sobre a citacao antiga.",
+    "Quando o cliente informar barriga e bumbum/gluteos: confirme, organize para prontuario, explique abdomen superior/inferior, explique gluteos/bumbum como um lado, dois lados ou lateral/proximo ao quadril, reforce que e base inicial e a especialista confirma presencialmente. Finalize com uma unica pergunta sobre a barriga: acima, abaixo do umbigo ou nas duas partes.",
+    "Quando o cliente informar barriga e braco: organize barriga como superior/inferior/duas partes e braco como parte de cima/proximo ao ombro, parte interna ou outra area. Finalize com uma unica pergunta de maior valor para o checkpoint.",
+    "Regra de uma pergunta final: a resposta final deve ter no maximo UMA pergunta de avanco. Nao termine com regiao + unidade + periodo; escolha a pergunta mais util ao checkpoint atual.",
+    "Estilo 15U.3: atendente humano experiente no WhatsApp, natural, organizada, acolhedora, simples, sem parecer colagem da base, sem resposta seca, sem excesso de emoji.",
+    "Para regioes, use linguagem como 'vou so organizar melhor', 'para deixar certinho no seu atendimento', 'essa informacao e so uma base inicial' e 'a especialista confirma certinho no dia da avaliacao presencial', quando couber.",
     "Quando uma regra mencionar resposta aprovada, entenda como primaryApprovedResponse e knowledgeCandidates.",
     "Responda a pergunta completa do cliente como um atendente humano experiente, sem depender de uma unica resposta quando houver mais candidatos relevantes.",
     "Use somente informacoes presentes na resposta aprovada principal, nos knowledgeCandidates, no contexto comercial e no historico recente.",
@@ -482,6 +578,7 @@ export async function POST(request: Request) {
     "Exemplo de como funciona: cliente pergunta 'Como funciona o tratamento?'. Resposta boa: 'O tratamento é regenerativo, não é pintura nem camuflagem.\\n\\nA especialista avalia o tipo de estria, a região e a resposta da pele para definir o protocolo mais adequado. O objetivo é estimular a melhora da textura, aparência e profundidade das estrias de forma progressiva.'",
     "Exemplo de continuação: se hasPriorConversation for true, não use 'Oi', 'Olá', 'Claro' nem emoji como padrão. Responda como continuação da conversa.",
     "Devolva apenas JSON válido no schema solicitado.",
+    "Metadados do JSON: multiIntentHandled=true se respondeu mais de um assunto da mensagem atual; finalJourneyQuestion deve conter a unica pergunta final de avanco ou string vazia; questionCount deve contar perguntas na adaptedReply; copiedPreviousReplyDetected deve refletir analysisHints; usedKnowledgeAsFacts=true quando voce usou a base como fonte de fatos em vez de copiar como molde.",
   ].join("\n");
 
   try {
@@ -521,6 +618,11 @@ export async function POST(request: Request) {
                   items: { type: "string" },
                 },
                 usedApprovedAnswerOnly: { type: "boolean" },
+                multiIntentHandled: { type: "boolean" },
+                finalJourneyQuestion: { type: "string" },
+                questionCount: { type: "number", minimum: 0 },
+                copiedPreviousReplyDetected: { type: "boolean" },
+                usedKnowledgeAsFacts: { type: "boolean" },
               },
               required: [
                 "adaptedReply",
@@ -528,6 +630,11 @@ export async function POST(request: Request) {
                 "requiresHumanReview",
                 "safetyNotes",
                 "usedApprovedAnswerOnly",
+                "multiIntentHandled",
+                "finalJourneyQuestion",
+                "questionCount",
+                "copiedPreviousReplyDetected",
+                "usedKnowledgeAsFacts",
               ],
             },
           },
@@ -561,6 +668,14 @@ export async function POST(request: Request) {
       parsed.safetyNotes = [
         ...parsed.safetyNotes,
         "Resposta pode não ter respondido a intenção de agenda.",
+      ];
+    }
+
+    if ((parsed.questionCount ?? countQuestionMarks(parsed.adaptedReply)) > 1) {
+      parsed.requiresHumanReview = true;
+      parsed.safetyNotes = [
+        ...parsed.safetyNotes,
+        "Resposta pode ter mais de uma pergunta final.",
       ];
     }
 
