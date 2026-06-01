@@ -1016,4 +1016,146 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     requiresHuman: false,
     priority: 121,
   },
+  {
+    categorySlug: "como-funciona-tratamento",
+    title: "Como funciona o tratamento — v13",
+    answerText:
+      "Boa tarde 😊\n\nO tratamento é feito com um protocolo de microagulhamento voltado para estrias. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta. É um tratamento regenerativo.\n\nAntes de iniciar, a especialista avalia presencialmente a região para entender o tipo de estria, a profundidade, a quantidade e como está a pele, porque cada caso responde de uma forma.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar? Barriga, flancos, glúteos, coxas, seios ou outra região?",
+    exampleQuestions: [
+      "como funciona?",
+      "como é o tratamento?",
+      "o que vocês fazem nas estrias?",
+    ],
+    tags: [
+      "como funciona",
+      "tratamento",
+      "microagulhamento",
+      "regenerativo",
+      "sem preco",
+      "v13",
+    ],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 160,
+    internalNotes:
+      "BASE 15U.4: resposta para funcionamento sem puxar preço. Usar quando a cliente não perguntou valores.",
+  },
+  {
+    categorySlug: "preco-promocao",
+    title: "Como funciona e valores — v13",
+    answerText:
+      "Funciona assim: trabalhamos com um tratamento regenerativo para estrias, feito com protocolo de microagulhamento. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta.\n\nSobre valores, neste período promocional a sessão está saindo por R$ 180 por região tratada.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
+    exampleQuestions: [
+      "como funciona e valores",
+      "como funciona e quanto custa",
+      "valor e tratamento",
+    ],
+    tags: [
+      "como funciona",
+      "valores",
+      "preco",
+      "promocao",
+      "microagulhamento",
+      "v13",
+    ],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 159,
+    internalNotes:
+      "BASE 15U.4: usar quando a mensagem atual perguntar funcionamento e valores no mesmo momento.",
+  },
+  {
+    categorySlug: "avaliacao-por-foto",
+    title: "Foto como referência de prontuário — v13",
+    answerText:
+      "Pode mandar sim, sem problema.\n\nA foto pode ficar anexada ao seu atendimento/prontuário como referência inicial.\n\nSó reforçando: a gente não faz avaliação definitiva por foto ou pelo WhatsApp, porque pela imagem nem sempre dá para ver profundidade, textura, extensão das estrias e como está a pele. A confirmação certinha das regiões e do protocolo é feita presencialmente pela especialista no dia.\n\nMas pela foto e pelas informações que você já me passou, eu consigo te dar uma noção inicial de quais regiões parecem estar envolvidas, só para organizar melhor seu atendimento e te orientar sobre o próximo passo.",
+    exampleQuestions: [
+      "posso mandar foto?",
+      "posso enviar foto?",
+      "posso mandar imagem?",
+      "posso mandar foto para avaliar?",
+      "vocês avaliam por foto?",
+    ],
+    tags: ["foto", "prontuario", "referencia", "avaliacao presencial", "v13"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 158,
+    internalNotes:
+      "BASE 15U.4: não pedir foto proativamente e não prometer avaliação definitiva por WhatsApp.",
+  },
+  {
+    categorySlug: "endereco-como-chegar",
+    title: "Endereço Paulista completo — v13",
+    answerText:
+      "Perfeito.\n\nA unidade Paulista fica neste endereço:\n\n📍 Rua Manoel da Nóbrega, 354 – Paraíso\nCEP: 04001-001\nReferência: próximo à estação Brigadeiro\n9º andar, sala 93\n\nPara eu te orientar melhor agora, qual região do corpo você gostaria de tratar?\nExemplo: barriga, flancos, glúteos, coxas, seios ou outra região.",
+    exampleQuestions: [
+      "avenida paulista",
+      "paulista",
+      "endereço da paulista",
+      "onde fica a unidade paulista?",
+      "quero a unidade paulista",
+    ],
+    tags: ["endereco", "paulista", "paraiso", "brigadeiro", "unidade", "v13"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 157,
+    internalNotes:
+      "BASE 15U.4: usar quando a cliente escolhe Paulista/Avenida Paulista; inclui endereço completo e próximo checkpoint.",
+  },
+  {
+    categorySlug: "promocao-validade",
+    title: "Promoção campanha atual sem Pix cedo — v13",
+    answerText:
+      "Sobre a promoção: o valor de R$ 180 por sessão/região está dentro da campanha atual.\n\nA promoção é garantida para quem faz a reserva dentro do mês vigente, porque as campanhas podem mudar depois.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
+    exampleQuestions: [
+      "promoção vai até quando?",
+      "até quando esse valor?",
+      "período promocional",
+      "esse valor é por quanto tempo?",
+      "a promoção ainda vale?",
+    ],
+    tags: ["promocao", "validade", "campanha atual", "sem pix cedo", "v13"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 156,
+    internalNotes:
+      "BASE 15U.4: não explicar Pix/sinal aqui; Pix/sinal só em resposta própria ou checkpoint de reserva.",
+  },
+  {
+    categorySlug: "regioes-corpo",
+    title: "Região barriga e braço — v13",
+    answerText:
+      "Sobre as regiões: como você falou barriga e braço, vou só organizar melhor para deixar certinho no seu atendimento.\n\nNa barriga, normalmente dividimos em:\n\n• Abdômen superior: acima do umbigo\n• Abdômen inferior: abaixo do umbigo\n\nNo braço, precisamos entender se as estrias ficam mais na parte de cima/próximo ao ombro, na parte interna ou em outra área do braço.\n\nEssa informação é só para deixar uma base inicial no seu prontuário. A especialista confirma certinho no dia da avaliação presencial, combinado?\n\nMe confirma só uma coisa: na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?",
+    exampleQuestions: [
+      "barriga e braço",
+      "tenho na barriga e no braço",
+      "braço e barriga",
+      "estrias na barriga e braço",
+    ],
+    tags: ["regiao", "barriga", "braco", "abdomen", "prontuario", "v13"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 155,
+    internalNotes:
+      "BASE 15U.4: organiza múltiplas regiões e termina com uma única pergunta de avanço.",
+  },
+  {
+    categorySlug: "regioes-corpo",
+    title: "Região barriga e bumbum glúteos — v13",
+    answerText:
+      "Perfeito.\n\nEntão vamos organizar assim para deixar certinho no seu atendimento/prontuário:\n\nNa barriga, normalmente dividimos em:\n\n• Abdômen superior: parte acima do umbigo\n• Abdômen inferior: parte abaixo do umbigo\n\nNos glúteos, precisamos entender se as estrias ficam em um lado, nos dois lados ou mais na lateral/próximo ao quadril.\n\nEssa informação é só para termos uma base inicial e para você entender como funciona a divisão das regiões. A especialista confirma tudo certinho no dia da avaliação presencial, combinado?\n\nMe confirma só uma coisa: na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?",
+    exampleQuestions: [
+      "barriga e bumbum",
+      "barriga e glúteos",
+      "bumbum",
+      "glúteos",
+      "tenho na barriga e no bumbum",
+    ],
+    tags: ["regiao", "barriga", "bumbum", "gluteos", "abdomen", "v13"],
+    canAutoReply: false,
+    requiresHuman: true,
+    priority: 154,
+    internalNotes:
+      "BASE 15U.4: organiza barriga e glúteos/bumbum sem repetir perguntas já respondidas.",
+  },
 ];
