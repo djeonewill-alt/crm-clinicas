@@ -92,6 +92,7 @@ function getAttachmentTypeLabel(value: string) {
 }
 
 function getMaterialTypeLabel(value: string) {
+  if (value === "image") return "Imagem";
   if (value === "before_after") return "Antes e depois";
   if (value === "evolution_1_session") return "Evolução 1 sessão";
   if (value === "evolution_2_sessions") return "Evolução 2 sessões";
@@ -102,6 +103,24 @@ function getMaterialTypeLabel(value: string) {
   if (value === "certification") return "Certificação / profissional";
   if (value === "document") return "Documento";
   return "Outro";
+}
+
+function getMaterialCategoryLabel(value: string) {
+  if (value === "before_after") return "Antes e depois";
+  if (value === "address") return "Endereço";
+  if (value === "payment_pix") return "Pix / pagamento";
+  if (value === "schedule") return "Agenda / horário";
+  if (value === "certification") return "Certificação";
+  if (value === "document") return "Documento";
+  if (value === "other") return "Outro";
+  return value || "Não informada";
+}
+
+function getMaterialSessionsLabel(value: string) {
+  if (!value) return "";
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return numericValue === 1 ? "1 sessão" : `${numericValue} sessões`;
 }
 
 export function LeadHistory({
@@ -260,10 +279,62 @@ export function LeadHistory({
                 <div className="mt-3 rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs text-[var(--text2)]">
                   <div>
                     Material:{" "}
-                    {getMetadataString(item.metadata, "materialLabel") ||
+                    {getMetadataString(item.metadata, "materialTitle") ||
+                      getMetadataString(item.metadata, "materialLabel") ||
                       getMaterialTypeLabel(
                         getMetadataString(item.metadata, "materialType")
                       )}
+                  </div>
+                  {getMetadataString(item.metadata, "materialCategory") && (
+                    <div className="mt-1">
+                      Categoria:{" "}
+                      {getMaterialCategoryLabel(
+                        getMetadataString(item.metadata, "materialCategory")
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[var(--text3)]">
+                    {getMetadataDisplayString(item.metadata, "materialRegion") && (
+                      <span>
+                        Região:{" "}
+                        {getMetadataDisplayString(
+                          item.metadata,
+                          "materialRegion"
+                        )}
+                      </span>
+                    )}
+                    {getMetadataDisplayString(item.metadata, "materialSkinTone") && (
+                      <span>
+                        Pele:{" "}
+                        {getMetadataDisplayString(
+                          item.metadata,
+                          "materialSkinTone"
+                        )}
+                      </span>
+                    )}
+                    {getMetadataDisplayString(
+                      item.metadata,
+                      "materialSessionsCount"
+                    ) && (
+                      <span>
+                        Sessões:{" "}
+                        {getMaterialSessionsLabel(
+                          getMetadataDisplayString(
+                            item.metadata,
+                            "materialSessionsCount"
+                          )
+                        )}
+                      </span>
+                    )}
+                    {getMetadataDisplayString(item.metadata, "materialAudience") && (
+                      <span>
+                        Público:{" "}
+                        {getMetadataDisplayString(
+                          item.metadata,
+                          "materialAudience"
+                        )}
+                      </span>
+                    )}
                   </div>
                   {getMetadataString(item.metadata, "fileName") && (
                     <div className="mt-1">

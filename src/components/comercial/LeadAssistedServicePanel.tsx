@@ -12,8 +12,16 @@ import {
   type CommercialNextActionSuggestion,
   type CommercialSuggestedFunnel,
 } from "@/lib/comercial/commercial-next-action-suggester";
+import {
+  buildHistoryEventFingerprint,
+  isDuplicateHistoryEvent,
+} from "@/lib/comercial/history-duplicates";
 import { getQualificationJourneyState } from "@/lib/comercial/qualification-journey";
 import { getEstimatedWhatsAppWindowState } from "@/lib/comercial/whatsapp-window";
+import {
+  listCommercialMaterials,
+  type CommercialMaterial,
+} from "@/lib/services/commercial-materials-client";
 import { createCommercialResponse } from "@/lib/services/commercial-responses-client";
 import { createLeadHistoryEvent } from "@/lib/services/lead-history-client";
 import type {
@@ -100,6 +108,8 @@ type LeadMaterialSentType =
   | "certification"
   | "document"
   | "other";
+
+type MaterialSentMode = "catalog" | "manual";
 
 type LeadAssistedServicePanelProps = {
   lead: Lead;
@@ -244,6 +254,19 @@ const MATERIAL_SENT_TYPE_OPTIONS: Array<{
   { value: "other", label: "Outro" },
 ];
 
+const MATERIAL_CATEGORY_LABELS: Record<string, string> = {
+  before_after: "Antes e depois",
+  address: "Endereço",
+  payment_pix: "Pix / pagamento",
+  schedule: "Agenda / horário",
+  certification: "Certificação",
+  document: "Documento",
+  other: "Outro",
+};
+
+const DEFAULT_MATERIAL_CAPTION =
+  "Vou te mandar um exemplo para você ter uma noção visual da evolução.";
+const IMAGE_CLIPBOARD_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const RELEVANT_HISTORY_EVENTS = new Set([
   "customer_message_received",
   "commercial_reply_sent",
@@ -260,37 +283,6 @@ const deferToNextFrame = () =>
 function getHistoryEvent(item: LeadHistoryItem) {
   const event = item.metadata?.event;
   return typeof event === "string" ? event : "";
-}
-
-function normalizeHistoryText(value?: string | null) {
-  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function getHistoryMetadataText(item: LeadHistoryItem, key: string) {
-  const value = item.metadata?.[key];
-  return typeof value === "string" ? value : "";
-}
-
-function hasDuplicateHistoryEvent(input: {
-  history: LeadHistoryItem[];
-  event: "customer_message_received" | "commercial_reply_sent";
-  text: string;
-}) {
-  const normalizedText = normalizeHistoryText(input.text);
-
-  if (!normalizedText) return false;
-
-  const textMetadataKey =
-    input.event === "customer_message_received" ? "messageText" : "replyText";
-  const recentMatchingEvents = input.history
-    .filter((item) => getHistoryEvent(item) === input.event)
-    .slice(0, RECENT_DUPLICATE_HISTORY_LIMIT);
-
-  return recentMatchingEvents.some((item) => {
-    const rawText =
-      getHistoryMetadataText(item, textMetadataKey) || item.description;
-    return normalizeHistoryText(rawText) === normalizedText;
-  });
 }
 
 function getAttachmentTitle(attachmentType: LeadAttachmentType) {
@@ -312,6 +304,56 @@ function getMaterialSentTitle(materialType: LeadMaterialSentType) {
   if (materialType === "payment_pix") return "Pix/pagamento enviado";
   if (materialType === "schedule") return "Informação de agenda enviada";
   return "Material enviado ao cliente";
+}
+
+function getMaterialCategoryLabel(category?: string | null) {
+  return MATERIAL_CATEGORY_LABELS[category ?? ""] ?? "Outro";
+}
+
+function getMaterialSessionsLabel(value?: number | null) {
+  if (!value) return "";
+  return value === 1 ? "1 sessão" : `${value} sessões`;
+}
+
+function truncateMaterialText(value?: string | null, maxLength = 110) {
+  const normalized = value?.trim() ?? "";
+
+  if (normalized.length <= maxLength) return normalized;
+
+  return `${normalized.slice(0, maxLength).trim()}...`;
+}
+
+function getUniqueMaterialOptions(
+  materials: CommercialMaterial[],
+  key: "category" | "region" | "skinTone" | "audience"
+) {
+  return Array.from(
+    new Set(
+      materials
+        .map((material) => material[key])
+        .filter((value): value is string => Boolean(value))
+    )
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function materialMatchesFilters(input: {
+  material: CommercialMaterial;
+  category: string;
+  region: string;
+  skinTone: string;
+  audience: string;
+  sessionsCount: string;
+}) {
+  const { material, category, region, skinTone, audience, sessionsCount } =
+    input;
+
+  return (
+    (!category || material.category === category) &&
+    (!region || material.region === region) &&
+    (!skinTone || material.skinTone === skinTone) &&
+    (!audience || material.audience === audience) &&
+    (!sessionsCount || String(material.sessionsCount ?? "") === sessionsCount)
+  );
 }
 
 function getRecentAiHistory(history: LeadHistoryItem[] = []) {
@@ -572,6 +614,19 @@ export function LeadAssistedServicePanel({
   const [isRegisteringAttachment, setIsRegisteringAttachment] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [showMaterialSentForm, setShowMaterialSentForm] = useState(false);
+  const [materialSentMode, setMaterialSentMode] =
+    useState<MaterialSentMode>("catalog");
+  const [commercialMaterials, setCommercialMaterials] = useState<
+    CommercialMaterial[]
+  >([]);
+  const [isLoadingCommercialMaterials, setIsLoadingCommercialMaterials] =
+    useState(false);
+  const [commercialMaterialsError, setCommercialMaterialsError] = useState("");
+  const [materialFilterCategory, setMaterialFilterCategory] = useState("");
+  const [materialFilterRegion, setMaterialFilterRegion] = useState("");
+  const [materialFilterSkinTone, setMaterialFilterSkinTone] = useState("");
+  const [materialFilterSessions, setMaterialFilterSessions] = useState("");
+  const [materialFilterAudience, setMaterialFilterAudience] = useState("");
   const [materialSentType, setMaterialSentType] =
     useState<LeadMaterialSentType>("before_after");
   const [materialSentName, setMaterialSentName] = useState("");
@@ -580,6 +635,7 @@ export function LeadAssistedServicePanel({
   const [isRegisteringMaterialSent, setIsRegisteringMaterialSent] =
     useState(false);
   const materialSentInputRef = useRef<HTMLInputElement | null>(null);
+  const recentSavedHistoryFingerprintsRef = useRef<Set<string>>(new Set());
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -603,6 +659,54 @@ export function LeadAssistedServicePanel({
       }),
     [lead, leadHistory]
   );
+  const materialCategoryOptions = useMemo(
+    () => getUniqueMaterialOptions(commercialMaterials, "category"),
+    [commercialMaterials]
+  );
+  const materialRegionOptions = useMemo(
+    () => getUniqueMaterialOptions(commercialMaterials, "region"),
+    [commercialMaterials]
+  );
+  const materialSkinToneOptions = useMemo(
+    () => getUniqueMaterialOptions(commercialMaterials, "skinTone"),
+    [commercialMaterials]
+  );
+  const materialAudienceOptions = useMemo(
+    () => getUniqueMaterialOptions(commercialMaterials, "audience"),
+    [commercialMaterials]
+  );
+  const materialSessionsOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          commercialMaterials
+            .map((material) => material.sessionsCount)
+            .filter((value): value is number => Boolean(value))
+        )
+      ).sort((a, b) => a - b),
+    [commercialMaterials]
+  );
+  const filteredCommercialMaterials = useMemo(
+    () =>
+      commercialMaterials.filter((material) =>
+        materialMatchesFilters({
+          material,
+          category: materialFilterCategory,
+          region: materialFilterRegion,
+          skinTone: materialFilterSkinTone,
+          audience: materialFilterAudience,
+          sessionsCount: materialFilterSessions,
+        })
+      ),
+    [
+      commercialMaterials,
+      materialFilterAudience,
+      materialFilterCategory,
+      materialFilterRegion,
+      materialFilterSessions,
+      materialFilterSkinTone,
+    ]
+  );
 
   useEffect(() => {
     setLocalCommercialResponses(commercialResponses);
@@ -619,6 +723,7 @@ export function LeadAssistedServicePanel({
   }, [copyFeedbackMessage]);
 
   useEffect(() => {
+    recentSavedHistoryFingerprintsRef.current = new Set();
     setReceivedMessage("");
     setReplyText("");
     setStatusMessage("");
@@ -644,6 +749,14 @@ export function LeadAssistedServicePanel({
       attachmentInputRef.current.value = "";
     }
     setShowMaterialSentForm(false);
+    setMaterialSentMode("catalog");
+    setCommercialMaterials([]);
+    setCommercialMaterialsError("");
+    setMaterialFilterCategory("");
+    setMaterialFilterRegion("");
+    setMaterialFilterSkinTone("");
+    setMaterialFilterSessions("");
+    setMaterialFilterAudience("");
     setMaterialSentType("before_after");
     setMaterialSentName("");
     setMaterialSentFile(null);
@@ -662,6 +775,20 @@ export function LeadAssistedServicePanel({
     resetApprovedResponseForm();
   }, [leadId]);
 
+  useEffect(() => {
+    if (!showMaterialSentForm || materialSentMode !== "catalog") return;
+    if (commercialMaterials.length > 0 || isLoadingCommercialMaterials) return;
+    if (commercialMaterialsError) return;
+
+    void loadCommercialMaterials();
+  }, [
+    commercialMaterialsError,
+    commercialMaterials.length,
+    isLoadingCommercialMaterials,
+    materialSentMode,
+    showMaterialSentForm,
+  ]);
+
   function resetApprovedResponseForm() {
     setNewResponseCategoryId("");
     setNewResponseTitle("");
@@ -677,6 +804,53 @@ export function LeadAssistedServicePanel({
     setNewResponseUseCurrentContext(true);
     setApprovedResponseMessage("");
     setIsCreatingApprovedResponse(false);
+  }
+
+  async function loadCommercialMaterials() {
+    setIsLoadingCommercialMaterials(true);
+    setCommercialMaterialsError("");
+
+    try {
+      const materials = await listCommercialMaterials(empresaId, {
+        activeStatus: "active",
+      });
+      setCommercialMaterials(materials);
+    } catch (error) {
+      setCommercialMaterialsError(
+        error instanceof Error
+          ? error.message
+          : "Erro ao carregar materiais cadastrados."
+      );
+    } finally {
+      setIsLoadingCommercialMaterials(false);
+    }
+  }
+
+  function hasDuplicateEvent(input: {
+    eventName: string;
+    description?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    return isDuplicateHistoryEvent({
+      history: leadHistory,
+      eventName: input.eventName,
+      description: input.description,
+      metadata: input.metadata,
+      recentFingerprints: recentSavedHistoryFingerprintsRef.current,
+      limit: RECENT_DUPLICATE_HISTORY_LIMIT,
+    });
+  }
+
+  function rememberSavedEvent(input: {
+    eventName: string;
+    description?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const fingerprint = buildHistoryEventFingerprint(input);
+
+    if (fingerprint) {
+      recentSavedHistoryFingerprintsRef.current.add(fingerprint);
+    }
   }
 
   function resetAiAdaptationState() {
@@ -1033,6 +1207,12 @@ export function LeadAssistedServicePanel({
 
   async function handleRegisterReceived() {
     const trimmedMessage = receivedMessage.trim();
+    const metadata = {
+      event: "customer_message_received",
+      source: "whatsapp_manual",
+      messageText: trimmedMessage,
+      assistedPanel: true,
+    };
 
     if (!trimmedMessage) {
       setStatusMessage("Cole a mensagem recebida antes de registrar.");
@@ -1040,13 +1220,15 @@ export function LeadAssistedServicePanel({
     }
 
     if (
-      hasDuplicateHistoryEvent({
-        history: leadHistory,
-        event: "customer_message_received",
-        text: trimmedMessage,
+      hasDuplicateEvent({
+        eventName: "customer_message_received",
+        description: trimmedMessage,
+        metadata,
       })
     ) {
-      setStatusMessage("Essa mensagem já foi registrada neste atendimento.");
+      setStatusMessage(
+        "Essa mensagem recebida já foi registrada neste atendimento."
+      );
       return;
     }
 
@@ -1061,14 +1243,14 @@ export function LeadAssistedServicePanel({
         type: "note",
         title: "Mensagem recebida do cliente",
         description: trimmedMessage,
-        metadata: {
-          event: "customer_message_received",
-          source: "whatsapp_manual",
-          messageText: trimmedMessage,
-          assistedPanel: true,
-        },
+        metadata,
       });
 
+      rememberSavedEvent({
+        eventName: "customer_message_received",
+        description: trimmedMessage,
+        metadata,
+      });
       await onHistoryChanged?.();
       setReceivedMessage("");
       setStatusMessage("Mensagem recebida registrada.");
@@ -1085,6 +1267,35 @@ export function LeadAssistedServicePanel({
 
   async function handleRegisterReplySent() {
     const trimmedReply = replyText.trim();
+    const metadata = {
+      event: "commercial_reply_sent",
+      source: "whatsapp_manual",
+      sendMode: "manual_whatsapp_desktop",
+      channel: "whatsapp",
+      sentByApi: false,
+      apiMessageSent: false,
+      manualSendConfirmed: true,
+      registeredAfterManualSend: true,
+      replyText: trimmedReply,
+      assistedPanel: true,
+      aiAdapted,
+      aiKnowledgeCandidateCount,
+      aiUsedKnowledgeBase: aiAdapted && aiKnowledgeCandidateCount > 0,
+      approvedResponseId: suggestionMatch?.response.id ?? null,
+      approvedResponseTitle: suggestionMatch?.response.title ?? null,
+      journeyCheckpoint: journeyState.currentCheckpoint,
+      journeyLabel: journeyState.currentLabel,
+      whatsappWindowSnapshot: {
+        lastCustomerMessageAt: whatsappWindowState.lastCustomerMessageAt,
+        inside24hServiceWindow: whatsappWindowState.inside24hServiceWindow,
+        hoursSinceLastCustomerMessage:
+          whatsappWindowState.hoursSinceLastCustomerMessage,
+        likelyInside72hAdWindow: whatsappWindowState.likelyInside72hAdWindow,
+        estimatedCostRisk: whatsappWindowState.estimatedCostRisk,
+      },
+      requiresHumanReview:
+        aiRequiresHumanReview || suggestionMatch?.response.requiresHuman === true,
+    };
 
     if (!trimmedReply) {
       setStatusMessage("Escreva ou cole a resposta antes de registrar.");
@@ -1092,13 +1303,13 @@ export function LeadAssistedServicePanel({
     }
 
     if (
-      hasDuplicateHistoryEvent({
-        history: leadHistory,
-        event: "commercial_reply_sent",
-        text: trimmedReply,
+      hasDuplicateEvent({
+        eventName: "commercial_reply_sent",
+        description: trimmedReply,
+        metadata,
       })
     ) {
-      setStatusMessage("Essa mensagem já foi registrada neste atendimento.");
+      setStatusMessage("Essa resposta já foi registrada neste atendimento.");
       return;
     }
 
@@ -1113,40 +1324,14 @@ export function LeadAssistedServicePanel({
         type: "note",
         title: "Resposta enviada ao cliente",
         description: trimmedReply,
-        metadata: {
-          event: "commercial_reply_sent",
-          source: "whatsapp_manual",
-          sendMode: "manual_whatsapp_desktop",
-          channel: "whatsapp",
-          sentByApi: false,
-          apiMessageSent: false,
-          manualSendConfirmed: true,
-          registeredAfterManualSend: true,
-          replyText: trimmedReply,
-          assistedPanel: true,
-          aiAdapted,
-          aiKnowledgeCandidateCount,
-          aiUsedKnowledgeBase: aiAdapted && aiKnowledgeCandidateCount > 0,
-          approvedResponseId: suggestionMatch?.response.id ?? null,
-          approvedResponseTitle: suggestionMatch?.response.title ?? null,
-          journeyCheckpoint: journeyState.currentCheckpoint,
-          journeyLabel: journeyState.currentLabel,
-          whatsappWindowSnapshot: {
-            lastCustomerMessageAt: whatsappWindowState.lastCustomerMessageAt,
-            inside24hServiceWindow:
-              whatsappWindowState.inside24hServiceWindow,
-            hoursSinceLastCustomerMessage:
-              whatsappWindowState.hoursSinceLastCustomerMessage,
-            likelyInside72hAdWindow:
-              whatsappWindowState.likelyInside72hAdWindow,
-            estimatedCostRisk: whatsappWindowState.estimatedCostRisk,
-          },
-          requiresHumanReview:
-            aiRequiresHumanReview ||
-            suggestionMatch?.response.requiresHuman === true,
-        },
+        metadata,
       });
 
+      rememberSavedEvent({
+        eventName: "commercial_reply_sent",
+        description: trimmedReply,
+        metadata,
+      });
       await onHistoryChanged?.();
       let attemptMessage = "";
 
@@ -1191,6 +1376,26 @@ export function LeadAssistedServicePanel({
       const description = trimmedNote
         ? `${attachmentFile.name}\n\n${trimmedNote}`
         : attachmentFile.name;
+      const metadata = {
+        event: "lead_attachment_received",
+        source: "assisted_panel",
+        attachmentType,
+        fileName: attachmentFile.name,
+        fileSize: attachmentFile.size,
+        mimeType: attachmentFile.type || "application/octet-stream",
+        assistedPanel: true,
+      };
+
+      if (
+        hasDuplicateEvent({
+          eventName: "lead_attachment_received",
+          description,
+          metadata,
+        })
+      ) {
+        setStatusMessage("Esse anexo já foi registrado neste atendimento.");
+        return;
+      }
 
       await createLeadHistoryEvent({
         leadId: String(leadId),
@@ -1198,17 +1403,14 @@ export function LeadAssistedServicePanel({
         type: "note",
         title: getAttachmentTitle(attachmentType),
         description,
-        metadata: {
-          event: "lead_attachment_received",
-          source: "assisted_panel",
-          attachmentType,
-          fileName: attachmentFile.name,
-          fileSize: attachmentFile.size,
-          mimeType: attachmentFile.type || "application/octet-stream",
-          assistedPanel: true,
-        },
+        metadata,
       });
 
+      rememberSavedEvent({
+        eventName: "lead_attachment_received",
+        description,
+        metadata,
+      });
       await onHistoryChanged?.();
       setAttachmentFile(null);
       setAttachmentNote("");
@@ -1231,6 +1433,12 @@ export function LeadAssistedServicePanel({
   }
 
   function resetMaterialSentForm() {
+    setMaterialSentMode("catalog");
+    setMaterialFilterCategory("");
+    setMaterialFilterRegion("");
+    setMaterialFilterSkinTone("");
+    setMaterialFilterSessions("");
+    setMaterialFilterAudience("");
     setMaterialSentType("before_after");
     setMaterialSentName("");
     setMaterialSentFile(null);
@@ -1253,6 +1461,33 @@ export function LeadAssistedServicePanel({
     ]
       .filter(Boolean)
       .join("\n\n");
+    const metadata = {
+      event: "lead_material_sent",
+      source: "assisted_panel",
+      materialType: materialSentType,
+      materialLabel,
+      ...(materialSentFile
+        ? {
+            fileName: materialSentFile.name,
+            fileSize: materialSentFile.size,
+            mimeType: materialSentFile.type || "application/octet-stream",
+          }
+        : {}),
+      assistedPanel: true,
+    };
+
+    if (
+      hasDuplicateEvent({
+        eventName: "lead_material_sent",
+        description,
+        metadata,
+      })
+    ) {
+      setStatusMessage(
+        "Esse material já foi registrado como enviado neste atendimento."
+      );
+      return;
+    }
 
     setIsRegisteringMaterialSent(true);
     setStatusMessage("");
@@ -1265,26 +1500,143 @@ export function LeadAssistedServicePanel({
         type: "note",
         title: getMaterialSentTitle(materialSentType),
         description,
-        metadata: {
-          event: "lead_material_sent",
-          source: "assisted_panel",
-          materialType: materialSentType,
-          materialLabel,
-          ...(materialSentFile
-            ? {
-                fileName: materialSentFile.name,
-                fileSize: materialSentFile.size,
-                mimeType:
-                  materialSentFile.type || "application/octet-stream",
-              }
-            : {}),
-          assistedPanel: true,
-        },
+        metadata,
       });
 
+      rememberSavedEvent({
+        eventName: "lead_material_sent",
+        description,
+        metadata,
+      });
       await onHistoryChanged?.();
       resetMaterialSentForm();
       setShowMaterialSentForm(false);
+      setStatusMessage("Material enviado registrado no histórico.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? `Erro ao registrar material enviado: ${error.message}`
+          : "Erro ao registrar material enviado."
+      );
+    } finally {
+      setIsRegisteringMaterialSent(false);
+    }
+  }
+
+  async function handleCopyMaterialCaption(material: CommercialMaterial) {
+    try {
+      await navigator.clipboard.writeText(
+        material.caption?.trim() || DEFAULT_MATERIAL_CAPTION
+      );
+      setCopyFeedbackMessage("Legenda copiada.");
+    } catch {
+      setCopyFeedbackMessage(
+        "Não foi possível copiar a legenda automaticamente."
+      );
+    }
+  }
+
+  async function handleCopyMaterialImage(material: CommercialMaterial) {
+    if (!material.publicUrl) {
+      setCopyFeedbackMessage("Este material não tem imagem pública para copiar.");
+      return;
+    }
+
+    if (
+      !("ClipboardItem" in window) ||
+      !navigator.clipboard ||
+      typeof navigator.clipboard.write !== "function"
+    ) {
+      setCopyFeedbackMessage(
+        "Não foi possível copiar a imagem automaticamente. Abra a imagem e copie/baixe manualmente."
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch(material.publicUrl);
+      const blob = await response.blob();
+      const mimeType = blob.type || material.fileMimeType || "";
+
+      if (!IMAGE_CLIPBOARD_TYPES.includes(mimeType)) {
+        setCopyFeedbackMessage(
+          "Só é possível copiar imagens JPG, PNG ou WebP. Abra a imagem e copie/baixe manualmente."
+        );
+        return;
+      }
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [mimeType]: blob,
+        }),
+      ]);
+      setCopyFeedbackMessage("Imagem copiada. Agora cole no WhatsApp com Ctrl+V.");
+    } catch {
+      setCopyFeedbackMessage(
+        "Não foi possível copiar a imagem automaticamente. Abra a imagem e copie/baixe manualmente."
+      );
+    }
+  }
+
+  async function handleRegisterCatalogMaterialSent(material: CommercialMaterial) {
+    const description = `Material enviado: ${material.title}`;
+    const metadata = {
+      event: "lead_material_sent",
+      source: "assisted_panel",
+      materialId: material.id,
+      materialTitle: material.title,
+      materialType: material.materialType,
+      materialCategory: material.category,
+      materialRegion: material.region,
+      materialSkinTone: material.skinTone,
+      materialSessionsCount: material.sessionsCount,
+      materialAudience: material.audience,
+      fileName: material.fileName,
+      mimeType: material.fileMimeType,
+      fileSize: material.fileSize,
+      publicUrl: material.publicUrl,
+      storageBucket: material.storageBucket,
+      storagePath: material.storagePath,
+      caption: material.caption,
+      sentMode: "manual_whatsapp_desktop",
+      channel: "whatsapp",
+      sentByApi: false,
+      assistedPanel: true,
+    };
+
+    if (
+      hasDuplicateEvent({
+        eventName: "lead_material_sent",
+        description,
+        metadata,
+      })
+    ) {
+      setStatusMessage(
+        "Esse material já foi registrado como enviado neste atendimento."
+      );
+      return;
+    }
+
+    setIsRegisteringMaterialSent(true);
+    setStatusMessage("");
+
+    try {
+      await deferToNextFrame();
+      await createLeadHistoryEvent({
+        leadId: String(leadId),
+        empresaId: String(empresaId),
+        type: "note",
+        title: "Material enviado",
+        description,
+        metadata,
+      });
+
+      rememberSavedEvent({
+        eventName: "lead_material_sent",
+        description,
+        metadata,
+      });
+      await onHistoryChanged?.();
       setStatusMessage("Material enviado registrado no histórico.");
     } catch (error) {
       setStatusMessage(
@@ -1880,6 +2232,233 @@ export function LeadAssistedServicePanel({
 
           {showMaterialSentForm && (
             <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg3)] p-3">
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMaterialSentMode("catalog")}
+                  className={
+                    materialSentMode === "catalog"
+                      ? "rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-3 py-2 text-xs font-semibold text-[var(--accent)]"
+                      : "rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+                  }
+                >
+                  Escolher material cadastrado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMaterialSentMode("manual")}
+                  className={
+                    materialSentMode === "manual"
+                      ? "rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-3 py-2 text-xs font-semibold text-[var(--accent)]"
+                      : "rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:text-[var(--text)]"
+                  }
+                >
+                  Registrar manualmente
+                </button>
+              </div>
+
+              {materialSentMode === "catalog" && (
+                <div>
+                  <div className="grid gap-2 md:grid-cols-5">
+                    <select
+                      value={materialFilterCategory}
+                      onChange={(event) =>
+                        setMaterialFilterCategory(event.target.value)
+                      }
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Todas categorias</option>
+                      {materialCategoryOptions.map((category) => (
+                        <option key={category} value={category}>
+                          {getMaterialCategoryLabel(category)}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={materialFilterRegion}
+                      onChange={(event) =>
+                        setMaterialFilterRegion(event.target.value)
+                      }
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Todas regiões</option>
+                      {materialRegionOptions.map((region) => (
+                        <option key={region} value={region}>
+                          {region}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={materialFilterSkinTone}
+                      onChange={(event) =>
+                        setMaterialFilterSkinTone(event.target.value)
+                      }
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Todas peles</option>
+                      {materialSkinToneOptions.map((skinTone) => (
+                        <option key={skinTone} value={skinTone}>
+                          {skinTone}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={materialFilterSessions}
+                      onChange={(event) =>
+                        setMaterialFilterSessions(event.target.value)
+                      }
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Todas sessões</option>
+                      {materialSessionsOptions.map((sessionsCount) => (
+                        <option key={sessionsCount} value={sessionsCount}>
+                          {getMaterialSessionsLabel(sessionsCount)}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={materialFilterAudience}
+                      onChange={(event) =>
+                        setMaterialFilterAudience(event.target.value)
+                      }
+                      className="rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)] outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Todos públicos</option>
+                      {materialAudienceOptions.map((audience) => (
+                        <option key={audience} value={audience}>
+                          {audience}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {commercialMaterialsError && (
+                    <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                      {commercialMaterialsError}
+                    </p>
+                  )}
+
+                  {isLoadingCommercialMaterials ? (
+                    <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)]">
+                      Carregando materiais cadastrados...
+                    </p>
+                  ) : filteredCommercialMaterials.length === 0 ? (
+                    <p className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text3)]">
+                      Nenhum material ativo encontrado com esses filtros.
+                    </p>
+                  ) : (
+                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                      {filteredCommercialMaterials.map((material) => (
+                        <article
+                          key={material.id}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3"
+                        >
+                          <div className="flex gap-3">
+                            {material.publicUrl ? (
+                              <img
+                                src={material.publicUrl}
+                                alt={material.title}
+                                className="h-20 w-20 rounded-lg border border-[var(--border2)] object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-[var(--border2)] bg-[var(--bg3)] text-center text-[10px] text-[var(--text3)]">
+                                Sem imagem
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-semibold text-[var(--text)]">
+                                {material.title}
+                              </h4>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                                  {getMaterialCategoryLabel(material.category)}
+                                </span>
+                                {material.region && (
+                                  <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                                    {material.region}
+                                  </span>
+                                )}
+                                {material.skinTone && (
+                                  <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                                    {material.skinTone}
+                                  </span>
+                                )}
+                                {material.sessionsCount && (
+                                  <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                                    {getMaterialSessionsLabel(
+                                      material.sessionsCount
+                                    )}
+                                  </span>
+                                )}
+                                {material.audience && (
+                                  <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                                    {material.audience}
+                                  </span>
+                                )}
+                              </div>
+                              {material.caption && (
+                                <p className="mt-2 text-xs text-[var(--text3)]">
+                                  {truncateMaterialText(material.caption)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={!material.publicUrl}
+                              onClick={() =>
+                                void handleCopyMaterialImage(material)
+                              }
+                              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Copiar imagem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleCopyMaterialCaption(material)
+                              }
+                              className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                            >
+                              Copiar legenda
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isRegisteringMaterialSent}
+                              onClick={() =>
+                                void handleRegisterCatalogMaterialSent(material)
+                              }
+                              className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Registrar enviado
+                            </button>
+                            {material.publicUrl && (
+                              <a
+                                href={material.publicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-xs font-semibold text-[var(--text2)] hover:border-[var(--accent)] hover:text-[var(--text)]"
+                              >
+                                Abrir imagem
+                              </a>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {materialSentMode === "manual" && (
+                <div>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text3)]">
                   Tipo do material
@@ -1964,6 +2543,8 @@ export function LeadAssistedServicePanel({
                   Cancelar
                 </button>
               </div>
+                </div>
+              )}
             </div>
           )}
 
