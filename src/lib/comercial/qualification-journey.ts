@@ -40,6 +40,21 @@ export type QualificationTimelineCheckpointKey =
 
 export type QualificationTimelineCheckpointStatus = "done" | "current" | "pending" | "touched";
 
+export type BodyRegionKey =
+  | "abdomen"
+  | "flancos"
+  | "gluteos"
+  | "coxas"
+  | "seios"
+  | "bracos"
+  | "costas"
+  | "ombros"
+  | "peitoral"
+  | "pernas"
+  | "quadril"
+  | "panturrilha"
+  | "unknown";
+
 export type QualificationTimelineCheckpoint = {
   key: QualificationTimelineCheckpointKey;
   label: string;
@@ -64,6 +79,10 @@ export type QualificationTimelineStateForAI = {
   nextBestQuestion?: string;
   nextSuggestion?: QualificationNextSuggestion;
   summaryForAI: string;
+  detectedRegions?: BodyRegionKey[];
+  detectedRegionLabels?: string[];
+  detectedSubregions?: string[];
+  regionSummaryForAI?: string;
 };
 
 type HistoryLike = {
@@ -152,6 +171,10 @@ const BODY_REGION_PATTERNS = [
   "panturrilha",
   "panturrilhas",
   "quadril",
+  "ombro",
+  "ombros",
+  "peitoral",
+  "peito",
   "lateral do corpo",
   "interno de coxa",
   "externo de coxa",
@@ -160,22 +183,124 @@ const BODY_REGION_PATTERNS = [
 const SUBREGION_PATTERNS = [
   "acima do umbigo",
   "abaixo do umbigo",
+  "mais embaixo",
+  "embaixo",
+  "parte de baixo",
+  "um pouco acima",
+  "um pouco em cima",
+  "acima",
+  "abaixo",
   "nas duas partes",
   "duas partes",
   "superior",
   "inferior",
   "parte interna",
+  "interna",
   "parte externa",
+  "externa",
   "lateral",
   "proximo ao ombro",
+  "perto do ombro",
   "perto do quadril",
+  "proximo ao quadril",
   "um lado",
   "dois lados",
+  "dos dois lados",
   "nos dois gluteos",
   "lado direito",
   "lado esquerdo",
+  "frente",
   "frente da coxa",
+  "atrás",
+  "atras",
   "atras da coxa",
+  "um ombro",
+  "dois ombros",
+  "dois lados do ombro",
+  "peitoral dos dois lados",
+];
+
+const BODY_REGION_LABELS: Record<BodyRegionKey, string> = {
+  abdomen: "abdomen/barriga",
+  flancos: "flancos",
+  gluteos: "gluteos/bumbum",
+  coxas: "coxas",
+  seios: "seios",
+  bracos: "bracos",
+  costas: "costas",
+  ombros: "ombros",
+  peitoral: "peitoral",
+  pernas: "pernas",
+  quadril: "quadril",
+  panturrilha: "panturrilha",
+  unknown: "outra regiao",
+};
+
+const BODY_REGION_SYNONYMS: Array<{
+  key: BodyRegionKey;
+  terms: string[];
+}> = [
+  { key: "abdomen", terms: ["barriga", "abdomen", "abdominal"] },
+  { key: "flancos", terms: ["flanco", "flancos"] },
+  { key: "gluteos", terms: ["gluteo", "gluteos", "bumbum"] },
+  { key: "coxas", terms: ["coxa", "coxas"] },
+  { key: "seios", terms: ["seio", "seios"] },
+  { key: "bracos", terms: ["braco", "bracos"] },
+  { key: "costas", terms: ["costas"] },
+  { key: "ombros", terms: ["ombro", "ombros"] },
+  { key: "peitoral", terms: ["peitoral", "peito"] },
+  { key: "pernas", terms: ["perna", "pernas"] },
+  { key: "quadril", terms: ["quadril"] },
+  { key: "panturrilha", terms: ["panturrilha", "panturrilhas"] },
+];
+
+const SUBREGION_SYNONYMS: Array<{
+  label: string;
+  terms: string[];
+}> = [
+  {
+    label: "acima/superior",
+    terms: [
+      "acima do umbigo",
+      "um pouco acima",
+      "um pouco em cima",
+      "acima",
+      "superior",
+    ],
+  },
+  {
+    label: "abaixo/inferior",
+    terms: [
+      "abaixo do umbigo",
+      "mais embaixo",
+      "embaixo",
+      "parte de baixo",
+      "abaixo",
+      "inferior",
+    ],
+  },
+  { label: "duas partes", terms: ["nas duas partes", "duas partes"] },
+  { label: "parte interna", terms: ["parte interna", "interna", "interno de coxa"] },
+  { label: "parte externa", terms: ["parte externa", "externa", "externo de coxa"] },
+  { label: "lateral", terms: ["lateral", "perto do quadril", "proximo ao quadril"] },
+  { label: "frente", terms: ["frente", "frente da coxa"] },
+  { label: "atras", terms: ["atras", "atrás", "atras da coxa"] },
+  { label: "proximo ao ombro", terms: ["proximo ao ombro", "perto do ombro"] },
+  {
+    label: "um lado",
+    terms: ["um lado", "lado direito", "lado esquerdo", "um ombro"],
+  },
+  {
+    label: "dois lados",
+    terms: [
+      "dois lados",
+      "dos dois lados",
+      "nos dois gluteos",
+      "dois ombros",
+      "dois lados do ombro",
+      "peitoral dos dois lados",
+    ],
+  },
 ];
 
 const UNIT_PATTERNS = [
@@ -402,6 +527,48 @@ function hasAny(text: string, patterns: string[]): boolean {
   return patterns.some((pattern) => normalized.includes(normalizeText(pattern)));
 }
 
+function uniqueValues<T>(values: T[]): T[] {
+  return Array.from(new Set(values));
+}
+
+export function detectBodyRegions(text: string): BodyRegionKey[] {
+  const normalized = normalizeText(text);
+  const regions = BODY_REGION_SYNONYMS.flatMap(({ key, terms }) =>
+    terms.some((term) => normalized.includes(normalizeText(term))) ? [key] : []
+  );
+
+  return uniqueValues(regions);
+}
+
+export function detectSubregions(text: string): string[] {
+  const normalized = normalizeText(text);
+  const subregions = SUBREGION_SYNONYMS.flatMap(({ label, terms }) =>
+    terms.some((term) => normalized.includes(normalizeText(term))) ? [label] : []
+  );
+
+  return uniqueValues(subregions);
+}
+
+function getRegionLabels(regions: BodyRegionKey[]): string[] {
+  return regions.map((region) => BODY_REGION_LABELS[region] ?? region);
+}
+
+function buildRegionSummaryForAI(regions: BodyRegionKey[], subregions: string[]) {
+  const labels = getRegionLabels(regions);
+  const parts = [
+    labels.length ? `Regioes detectadas: ${labels.join(", ")}.` : "",
+    subregions.length ? `Sub-regioes detectadas: ${subregions.join(", ")}.` : "",
+  ];
+
+  if (regions.includes("ombros") && regions.includes("peitoral")) {
+    parts.push(
+      "Ombros e peitoral apareceram juntos; peitoral normalmente e outra regiao, mas a confirmacao final e presencial."
+    );
+  }
+
+  return parts.filter(Boolean).join(" ");
+}
+
 function hasScheduleConfirmationEvent(history: HistoryLike[]): boolean {
   return history.some((item) => {
     const event = metadataEvent(item);
@@ -466,19 +633,54 @@ function hasStrongAgendaEvidence(text: string): boolean {
   return hasAny(text, AGENDA_DONE_PATTERNS) || hasAgendaPeriodContext(text);
 }
 
-function getLikelySubregionQuestion(customerText: string): string {
-  if (hasAny(customerText, ["gluteo", "gluteos", "bumbum"])) {
+function getLikelySubregionQuestion(
+  customerText: string,
+  detectedRegions: BodyRegionKey[] = detectBodyRegions(customerText)
+): string {
+  if (detectedRegions.includes("coxas")) {
+    return "As estrias ficam mais na parte interna, externa, na frente ou atras das coxas?";
+  }
+
+  if (detectedRegions.includes("ombros")) {
+    return "Fica em um ombro so ou nos dois? E pega so ombro ou tambem peitoral, costas ou braco?";
+  }
+
+  if (detectedRegions.includes("peitoral")) {
+    return "No peitoral aparece de um lado so ou dos dois lados?";
+  }
+
+  if (detectedRegions.includes("gluteos")) {
     return "As estrias ficam em um lado, nos dois gluteos ou mais na lateral/proximo ao quadril?";
   }
 
-  if (hasAny(customerText, ["barriga", "abdomen", "abdominal"])) {
+  if (detectedRegions.includes("bracos")) {
+    return "As estrias ficam mais na parte interna do braco, proxima ao ombro ou em outra area?";
+  }
+
+  if (detectedRegions.includes("flancos")) {
+    return "Fica em um lado so ou nos dois flancos?";
+  }
+
+  if (detectedRegions.includes("costas")) {
+    return "Nas costas, fica mais na parte superior, inferior ou mais nas laterais?";
+  }
+
+  if (detectedRegions.includes("seios")) {
+    return "Nos seios, fica em um lado so ou nos dois?";
+  }
+
+  if (detectedRegions.includes("abdomen")) {
     return "Na barriga, suas estrias ficam mais acima do umbigo, abaixo do umbigo ou nas duas partes?";
   }
 
   return "Me explica um pouco melhor em qual parte dessa regiao ficam as estrias?";
 }
 
-function buildNextQuestion(key: QualificationTimelineCheckpointKey, customerText: string): string {
+function buildNextQuestion(
+  key: QualificationTimelineCheckpointKey,
+  customerText: string,
+  detectedRegions: BodyRegionKey[] = detectBodyRegions(customerText)
+): string {
   switch (key) {
     case "funcionamento":
       return "Posso te explicar rapidinho como funciona o tratamento com microagulhamento para estrias.";
@@ -487,7 +689,7 @@ function buildNextQuestion(key: QualificationTimelineCheckpointKey, customerText
     case "regiao":
       return "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?\nExemplo: barriga, flancos, gluteos, coxas, seios ou outra regiao.";
     case "subregiao":
-      return getLikelySubregionQuestion(customerText);
+      return getLikelySubregionQuestion(customerText, detectedRegions);
     case "unidade":
       return "Qual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora?";
     case "agenda":
@@ -546,6 +748,13 @@ export function getQualificationTimelineStateForAI(args: {
   const assistantText = history.map(getAssistantReplyText).filter(Boolean).join(" ");
   const conversationText = history.map(getConversationText).filter(Boolean).join(" ");
   const fullText = [conversationText, currentMessage].filter(Boolean).join(" ");
+  const detectedRegions = detectBodyRegions(customerText);
+  const detectedRegionLabels = getRegionLabels(detectedRegions);
+  const detectedSubregions = detectSubregions(customerText);
+  const regionSummaryForAI = buildRegionSummaryForAI(
+    detectedRegions,
+    detectedSubregions
+  );
 
   const hasConfirmedSchedule =
     hasScheduleConfirmationEvent(history) || normalizeText(lead?.funil_etapa ?? lead?.status ?? "").includes("cliente");
@@ -554,8 +763,8 @@ export function getQualificationTimelineStateForAI(args: {
     entrada: Boolean(lead) || history.length > 0,
     funcionamento: hasAny([customerText, assistantText].join(" "), FUNCTIONING_PATTERNS),
     valor: hasAny(assistantText, VALUE_DONE_PATTERNS) || hasAny(conversationText, VALUE_DONE_PATTERNS),
-    regiao: hasAny(customerText, BODY_REGION_PATTERNS),
-    subregiao: hasAny(customerText, SUBREGION_PATTERNS),
+    regiao: detectedRegions.length > 0,
+    subregiao: detectedSubregions.length > 0,
     unidade: hasAny(customerText, UNIT_PATTERNS) || hasAny(assistantText, ["rua manoel", "brigadeiro", "unidade paulista", "unidade tatuape", "unidade mairipora"]),
     agenda: hasStrongAgendaEvidence(conversationText) || hasConfirmedSchedule,
     sinal: hasAny(conversationText, SIGNAL_PATTERNS),
@@ -570,7 +779,7 @@ export function getQualificationTimelineStateForAI(args: {
   const hasReturnIntent = hasAny(customerText, RETORNO_PATTERNS);
   const nextBestKey = hasReturnIntent ? undefined : chooseNextBestKey({ done, touched });
   const nextBestLabel = nextBestKey ? NEXT_STEP_LABELS[nextBestKey] : hasReturnIntent ? "Retorno programado" : undefined;
-  const nextBestQuestion = nextBestKey ? buildNextQuestion(nextBestKey, customerText) : hasReturnIntent ? buildReturnSuggestion().message : undefined;
+  const nextBestQuestion = nextBestKey ? buildNextQuestion(nextBestKey, customerText, detectedRegions) : hasReturnIntent ? buildReturnSuggestion().message : undefined;
   const nextSuggestion = hasReturnIntent
     ? buildReturnSuggestion()
     : nextBestKey && nextBestLabel && nextBestQuestion
@@ -619,6 +828,7 @@ export function getQualificationTimelineStateForAI(args: {
     `Concluidos: ${doneKeys.join(", ") || "nenhum"}.`,
     `Pendentes: ${pendingKeys.join(", ") || "nenhum"}.`,
     `Tocados fora de ordem/parciais: ${touchedKeys.join(", ") || "nenhum"}.`,
+    regionSummaryForAI,
     currentKey ? `Atual: ${currentKey}.` : "",
     nextBestKey ? `Proximo passo: ${nextBestKey} - ${nextBestLabel}.` : nextBestLabel ? `Proximo passo: ${nextBestLabel}.` : "",
     nextBestQuestion ? `Pergunta sugerida: ${nextBestQuestion}` : "",
@@ -637,6 +847,10 @@ export function getQualificationTimelineStateForAI(args: {
     nextBestQuestion,
     nextSuggestion,
     summaryForAI,
+    detectedRegions,
+    detectedRegionLabels,
+    detectedSubregions,
+    regionSummaryForAI,
   };
 }
 
