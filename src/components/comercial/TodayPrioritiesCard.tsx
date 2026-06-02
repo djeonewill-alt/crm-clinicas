@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {
+  getRecommendedCallLeads,
+  type CallPriorityItem,
+} from "@/lib/comercial/call-priorities";
 import type { Lead } from "@/types/lead";
 
 type TodayPrioritiesCardProps = {
@@ -20,6 +24,7 @@ type PriorityGroup = {
 };
 
 const MAX_ITEMS_PER_GROUP = 5;
+const MAX_CALL_ITEMS = 10;
 
 function hasCompletedAttempt(lead: Lead) {
   return (lead.tentativas ?? []).some((tentativa) =>
@@ -148,6 +153,12 @@ function getLeadName(lead: Lead) {
   return lead.nome?.trim() || lead.tel || "Lead sem nome";
 }
 
+function getCallPriorityClass(priority: CallPriorityItem["priority"]) {
+  if (priority === "alta") return "border-red-500/40 bg-red-500/10 text-red-300";
+  if (priority === "media") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
+  return "border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]";
+}
+
 export function TodayPrioritiesCard({
   leads,
   selectedLeadId = null,
@@ -155,6 +166,7 @@ export function TodayPrioritiesCard({
   leadHref,
 }: TodayPrioritiesCardProps) {
   const groups = getGroups(leads);
+  const recommendedCalls = getRecommendedCallLeads(leads).slice(0, MAX_CALL_ITEMS);
   const totalPriorities = groups
     .filter((group) => !group.countOnly)
     .reduce((total, group) => total + group.leads.length, 0);
@@ -174,6 +186,101 @@ export function TodayPrioritiesCard({
         <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-3 py-1 text-xs font-semibold text-[var(--text2)]">
           {totalPriorities} lead(s) com ação
         </span>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--text)]">
+              Ligações recomendadas
+            </p>
+            <p className="mt-1 text-xs text-[var(--text3)]">
+              Clientes que podem precisar de ligação agora, com base no funil,
+              retorno e tentativas.
+            </p>
+          </div>
+          <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-xs font-semibold text-[var(--text2)]">
+            {recommendedCalls.length}
+          </span>
+        </div>
+
+        {recommendedCalls.length > 0 ? (
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {recommendedCalls.map((item) => {
+              const active = String(selectedLeadId) === String(item.leadId);
+              const content = (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-[var(--text)]">
+                        {item.nome}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-[var(--text3)]">
+                        {item.tel}
+                      </span>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${getCallPriorityClass(
+                        item.priority
+                      )}`}
+                    >
+                      {item.priority}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                      {item.funnel}
+                    </span>
+                    <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                      {item.hasCallToday ? "ligação já feita hoje" : "sem ligação hoje"}
+                    </span>
+                    {item.hasMessageToday && (
+                      <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
+                        mensagem hoje
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-[11px] text-[var(--text2)]">
+                    {item.reason}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-[var(--accent)]">
+                    {leadHref ? "Abrir em Trabalho" : item.actionLabel}
+                  </p>
+                </>
+              );
+              const itemClass = `w-full rounded-lg border px-3 py-2 text-left transition ${
+                active
+                  ? "border-[var(--accent)] bg-[rgba(232,197,71,.10)]"
+                  : "border-[var(--border2)] bg-[var(--bg3)] hover:border-[var(--accent)]"
+              }`;
+
+              return onSelectLead ? (
+                <button
+                  key={item.leadId}
+                  type="button"
+                  onClick={() => onSelectLead(item.lead)}
+                  className={itemClass}
+                >
+                  {content}
+                </button>
+              ) : (
+                <Link
+                  key={item.leadId}
+                  href={leadHref ?? "/comercial/trabalho"}
+                  className={itemClass}
+                >
+                  {content}
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-[var(--text3)]">
+            Sem ligações recomendadas agora.
+          </p>
+        )}
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-5">

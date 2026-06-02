@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LeadActions } from "@/components/comercial/LeadActions";
 import { LeadAssistedServicePanel } from "@/components/comercial/LeadAssistedServicePanel";
+import { LeadCallScriptPanel } from "@/components/comercial/LeadCallScriptPanel";
 import { LeadCommercialContextSelector } from "@/components/comercial/LeadCommercialContextSelector";
 import { LeadEditForm } from "@/components/comercial/LeadEditForm";
 import { LeadHistory } from "@/components/comercial/LeadHistory";
@@ -443,6 +444,8 @@ export function LeadDetail({
           </section>
         </>
       )}
+
+      <LeadCallScriptPanel lead={lead} leadHistory={leadHistory} />
 
       <LeadAssistedServicePanel
         lead={lead}
