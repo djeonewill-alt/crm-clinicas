@@ -911,7 +911,7 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     categorySlug: "como-funciona-tratamento",
     title: "Microagulhamento ou laser — v12",
     answerText:
-      "O tratamento é feito com protocolo de microagulhamento, não com laser.\n\nÉ um tratamento regenerativo: o objetivo é estimular a própria pele da região tratada para melhorar o aspecto, a textura e a aparência das estrias com o tempo.",
+      "O tratamento é feito com protocolo de microagulhamento e ativos, conforme avaliação da especialista, não com laser.\n\nÉ um tratamento regenerativo: o objetivo é estimular a própria pele da região tratada para melhorar o aspecto, a textura e a aparência das estrias com o tempo.",
     exampleQuestions: [
       "é microagulhamento?",
       "é laser?",
@@ -925,6 +925,7 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     ],
     tags: [
       "microagulhamento",
+      "ativos",
       "laser",
       "tratamento",
       "regenerativo",
@@ -1020,7 +1021,7 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     categorySlug: "como-funciona-tratamento",
     title: "Como funciona o tratamento — v13",
     answerText:
-      "Boa tarde 😊\n\nO tratamento é feito com um protocolo de microagulhamento voltado para estrias. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta. É um tratamento regenerativo.\n\nAntes de iniciar, a especialista avalia presencialmente a região para entender o tipo de estria, a profundidade, a quantidade e como está a pele, porque cada caso responde de uma forma.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar? Barriga, flancos, glúteos, coxas, seios ou outra região?",
+      "Boa tarde 😊\n\nO tratamento é feito com um protocolo de microagulhamento e ativos, conforme avaliação da especialista, voltado para estrias. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta. É um tratamento regenerativo.\n\nAntes de iniciar, a especialista avalia presencialmente a região para entender o tipo de estria, a profundidade, a quantidade e como está a pele, porque cada caso responde de uma forma.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar? Barriga, flancos, glúteos, coxas, seios ou outra região?",
     exampleQuestions: [
       "como funciona?",
       "como é o tratamento?",
@@ -1030,6 +1031,7 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
       "como funciona",
       "tratamento",
       "microagulhamento",
+      "ativos",
       "regenerativo",
       "sem preco",
       "v13",
@@ -1181,14 +1183,14 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     categorySlug: "preco-promocao",
     title: "Como funciona e valores atuais — v14",
     answerText:
-      "Funciona assim: trabalhamos com um tratamento regenerativo para estrias, feito com protocolo de microagulhamento. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta.\n\nSobre os valores atuais:\n• 1 região: R$ 377,00\n• Abdômen superior: R$ 377,00\n• Abdômen inferior: R$ 377,00\n• Abdômen total: R$ 550,00, incluindo superior + inferior\n\nQuando a região é bilateral, os dois lados já entram dentro dessa região.\n\nPara pacotes de 5 sessões, existem condições especiais, mas somente sob avaliação presencial.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
+      "Funciona assim: trabalhamos com um tratamento regenerativo para estrias, feito com protocolo de microagulhamento e ativos, conforme avaliação da especialista. Ele estimula a própria pele da região tratada, ajudando na melhora do aspecto, textura e aparência das estrias ao longo das sessões.\n\nNão é laser, não é pintura e não é camuflagem com tinta.\n\nSobre os valores atuais:\n• 1 região: R$ 377,00\n• Abdômen superior: R$ 377,00\n• Abdômen inferior: R$ 377,00\n• Abdômen total: R$ 550,00, incluindo superior + inferior\n\nQuando a região é bilateral, os dois lados já entram dentro dessa região.\n\nPara pacotes de 5 sessões, existem condições especiais, mas somente sob avaliação presencial.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?",
     exampleQuestions: [
       "como funciona e valores",
       "como funciona e quanto custa",
       "valor e tratamento",
       "qual valor do procedimento",
     ],
-    tags: ["como funciona", "valores", "preço", "microagulhamento", "pacote", "v14"],
+    tags: ["como funciona", "valores", "preço", "microagulhamento", "ativos", "pacote", "v14"],
     canAutoReply: false,
     requiresHuman: true,
     priority: 169,
@@ -1275,7 +1277,7 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
     categorySlug: "primeira-abordagem",
     title: "Abertura padrão WhatsApp — v15",
     answerText:
-      "Boa tarde, tudo bem? Meu nome é Djeone, faço parte do atendimento do consultório Sr. e Sra. Estrias.\n\nVou te passar as informações sim 😊\n\nNosso tratamento é para melhora do aspecto das estrias, feito com protocolo de microagulhamento. Não é laser, pintura ou camuflagem; é um tratamento regenerativo.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?\nExemplo: barriga, flancos, glúteos, coxas, seios, braços ou outra região.",
+      "Boa tarde, tudo bem? Meu nome é Djeone, faço parte do atendimento do consultório Sr. e Sra. Estrias.\n\nVou te passar as informações sim 😊\n\nNosso tratamento é para melhora do aspecto das estrias, feito com protocolo de microagulhamento e ativos, conforme avaliação da especialista. Não é laser, pintura ou camuflagem; é um tratamento regenerativo.\n\nPara eu te orientar melhor, qual região do corpo você gostaria de tratar?\nExemplo: barriga, flancos, glúteos, coxas, seios, braços ou outra região.",
     exampleQuestions: [
       "Olá! Tenho interesse e queria mais informações, por favor.",
       "Tenho interesse e queria mais informações",
@@ -1290,12 +1292,13 @@ export const initialCommercialResponses: InitialCommercialResponse[] = [
       "interesse inicial",
       "região",
       "microagulhamento",
+      "ativos",
       "v15",
     ],
     canAutoReply: false,
     requiresHuman: true,
     priority: 180,
     internalNotes:
-      "BASE 15U.8: texto base usa Boa tarde por ser estatico; a rota da IA adapta a saudacao pelo horario de Sao Paulo.",
+      "BASE 15U.9: texto base usa Boa tarde por ser estatico; a rota da IA adapta a saudacao pelo horario de Sao Paulo.",
   },
 ];
