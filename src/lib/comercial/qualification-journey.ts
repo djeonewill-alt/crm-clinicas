@@ -569,6 +569,19 @@ function buildRegionSummaryForAI(regions: BodyRegionKey[], subregions: string[])
   return parts.filter(Boolean).join(" ");
 }
 
+function getRegionListText(regions: BodyRegionKey[]): string {
+  const labels = getRegionLabels(regions).map((label) =>
+    label
+      .replace("abdomen/barriga", "barriga")
+      .replace("gluteos/bumbum", "gluteos")
+  );
+
+  if (labels.length <= 1) return labels[0] ?? "";
+  if (labels.length === 2) return `${labels[0]} e ${labels[1]}`;
+
+  return `${labels.slice(0, -1).join(", ")} e ${labels[labels.length - 1]}`;
+}
+
 function hasScheduleConfirmationEvent(history: HistoryLike[]): boolean {
   return history.some((item) => {
     const event = metadataEvent(item);
@@ -602,6 +615,13 @@ function hasAgendaPeriodContext(text: string): boolean {
     "prefere a manha",
     "prefere tarde",
     "prefere a tarde",
+    "prefiro manha",
+    "prefiro a manha",
+    "prefiro tarde",
+    "prefiro a tarde",
+    "pode ser de manha",
+    "pode ser a tarde",
+    "pode ser na parte da tarde",
     "periodo melhor manha",
     "periodo melhor tarde",
     "periodo de manha",
@@ -637,6 +657,28 @@ function getLikelySubregionQuestion(
   customerText: string,
   detectedRegions: BodyRegionKey[] = detectBodyRegions(customerText)
 ): string {
+  const relevantRegions = detectedRegions.filter((region) => region !== "unknown");
+
+  if (relevantRegions.length > 2) {
+    return `Voce comentou ${getRegionListText(relevantRegions)}. Qual dessas regioes te incomoda mais ou por qual voce gostaria de comecar?`;
+  }
+
+  if (relevantRegions.includes("bracos") && relevantRegions.includes("costas")) {
+    return "So para eu organizar melhor: nos bracos, as estrias ficam mais na parte interna, proxima ao ombro ou em outra area?\n\nE nas costas, ficam mais na parte superior, inferior ou nas laterais?";
+  }
+
+  if (relevantRegions.includes("ombros") && relevantRegions.includes("peitoral")) {
+    return "Peitoral normalmente pode entrar como outra regiao, mas a confirmacao certinha e presencial com a especialista, porque ela avalia a extensao e como as estrias estao distribuidas.\n\nSo para eu organizar melhor: os ombros sao dos dois lados? E no peitoral aparece de um lado so ou dos dois?";
+  }
+
+  if (relevantRegions.includes("abdomen") && relevantRegions.includes("gluteos")) {
+    return "So para eu organizar melhor: na barriga, fica mais acima do umbigo, abaixo ou nas duas partes?\n\nE nos gluteos, fica em um lado, nos dois ou mais na lateral/proximo ao quadril?";
+  }
+
+  if (relevantRegions.includes("coxas") && relevantRegions.includes("gluteos")) {
+    return "So para eu organizar melhor: nas coxas, fica mais na parte interna, externa, frente ou atras?\n\nE nos gluteos, fica em um lado, nos dois ou mais na lateral/proximo ao quadril?";
+  }
+
   if (detectedRegions.includes("coxas")) {
     return "As estrias ficam mais na parte interna, externa, na frente ou atras das coxas?";
   }
@@ -766,7 +808,7 @@ export function getQualificationTimelineStateForAI(args: {
     regiao: detectedRegions.length > 0,
     subregiao: detectedSubregions.length > 0,
     unidade: hasAny(customerText, UNIT_PATTERNS) || hasAny(assistantText, ["rua manoel", "brigadeiro", "unidade paulista", "unidade tatuape", "unidade mairipora"]),
-    agenda: hasStrongAgendaEvidence(conversationText) || hasConfirmedSchedule,
+    agenda: hasStrongAgendaEvidence(fullText) || hasConfirmedSchedule,
     sinal: hasAny(conversationText, SIGNAL_PATTERNS),
     confirmacao: hasConfirmedSchedule,
   };

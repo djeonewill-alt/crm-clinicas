@@ -20,6 +20,7 @@ import {
 import {
   getQualificationJourneyState,
   getQualificationTimelineStateForAI,
+  type QualificationTimelineStateForAI,
 } from "@/lib/comercial/qualification-journey";
 import { getEstimatedWhatsAppWindowState } from "@/lib/comercial/whatsapp-window";
 import {
@@ -1021,10 +1022,10 @@ export function LeadAssistedServicePanel({
 
   async function adaptApprovedResponseWithAi(input: {
     customerMessage: string;
-    match: CommercialResponseMatch;
+    match: CommercialResponseMatch | null;
     knowledgeCandidates: AiKnowledgeCandidate[];
   }): Promise<AiAdaptationResult> {
-    const response = input.match.response;
+    const response = input.match?.response ?? null;
     const recentHistory = getRecentAiHistory(leadHistory);
     const conversationStage = detectConversationStage({
       message: input.customerMessage,
@@ -1056,21 +1057,23 @@ export function LeadAssistedServicePanel({
       },
       body: JSON.stringify({
         customerMessage: input.customerMessage,
-        approvedAnswerText: response.answerText,
-        approvedResponseTitle: response.title,
-        approvedResponseCategory: input.match.categoryName,
-        primaryApprovedResponse: {
-          id: response.id,
-          title: response.title,
-          answerText: response.answerText.slice(0, MAX_AI_KNOWLEDGE_ANSWER_LENGTH),
-          categoryName: input.match.categoryName,
-          contextScope:
-            input.match.contextScope === "current_context"
-              ? "current_context"
-              : "global",
-          requiresHuman: response.requiresHuman,
-          canAutoReply: response.canAutoReply,
-        },
+        approvedAnswerText: response?.answerText ?? "",
+        approvedResponseTitle: response?.title ?? null,
+        approvedResponseCategory: input.match?.categoryName ?? null,
+        primaryApprovedResponse: response
+          ? {
+              id: response.id,
+              title: response.title,
+              answerText: response.answerText.slice(0, MAX_AI_KNOWLEDGE_ANSWER_LENGTH),
+              categoryName: input.match?.categoryName ?? null,
+              contextScope:
+                input.match?.contextScope === "current_context"
+                  ? "current_context"
+                  : "global",
+              requiresHuman: response.requiresHuman,
+              canAutoReply: response.canAutoReply,
+            }
+          : null,
         knowledgeCandidates: input.knowledgeCandidates,
         useStrongModel: true,
         contextName: currentCommercialContext?.name ?? null,
@@ -1082,8 +1085,8 @@ export function LeadAssistedServicePanel({
         leadName: leadName ?? null,
         leadFunnel: currentFunnel ?? null,
         leadJourneyStep: currentJourneyStep ?? null,
-        requiresHuman: response.requiresHuman,
-        canAutoReply: response.canAutoReply,
+        requiresHuman: response?.requiresHuman ?? false,
+        canAutoReply: response?.canAutoReply ?? false,
         recentHistory,
         conversationStage,
         hasPriorConversation,
@@ -1165,6 +1168,62 @@ export function LeadAssistedServicePanel({
       }));
   }
 
+  function isJourneyFallbackCandidate(
+    timeline: QualificationTimelineStateForAI
+  ) {
+    const journeyKeys = new Set(["regiao", "subregiao", "unidade", "agenda"]);
+    return (
+      (timeline.detectedRegions?.length ?? 0) > 0 ||
+      (timeline.detectedSubregions?.length ?? 0) > 0 ||
+      timeline.doneKeys.some((key) => journeyKeys.has(key)) ||
+      timeline.touchedKeys.some((key) => journeyKeys.has(key))
+    );
+  }
+
+  function formatJourneyRegionList(timeline: QualificationTimelineStateForAI) {
+    const labels =
+      timeline.detectedRegionLabels?.length
+        ? timeline.detectedRegionLabels
+        : timeline.detectedRegions ?? [];
+
+    const normalizedLabels = labels.map((label) =>
+      label
+        .replace("abdomen/barriga", "barriga")
+        .replace("gluteos/bumbum", "gluteos")
+    );
+
+    if (normalizedLabels.length <= 1) return normalizedLabels[0] ?? "";
+    if (normalizedLabels.length === 2) {
+      return `${normalizedLabels[0]} e ${normalizedLabels[1]}`;
+    }
+
+    return `${normalizedLabels.slice(0, -1).join(", ")} e ${
+      normalizedLabels[normalizedLabels.length - 1]
+    }`;
+  }
+
+  function buildJourneyFallbackReply(timeline: QualificationTimelineStateForAI) {
+    const question =
+      timeline.nextBestQuestion ??
+      timeline.nextSuggestion?.message ??
+      "Me explica um pouco melhor para eu organizar certinho no atendimento?";
+    const regionList = formatJourneyRegionList(timeline);
+    const subregionList = timeline.detectedSubregions?.join(", ") ?? "";
+
+    if (timeline.nextBestKey === "subregiao" && regionList) {
+      return `Certo, ${regionList}.\n\n${question}`;
+    }
+
+    if (timeline.nextBestKey === "unidade") {
+      const subject = subregionList || regionList;
+      return subject
+        ? `Certo, ${subject}.\n\n${question}`
+        : question;
+    }
+
+    return question;
+  }
+
   async function handleAnalyzeMessage() {
     const trimmedMessage = receivedMessage.trim();
 
@@ -1184,6 +1243,75 @@ export function LeadAssistedServicePanel({
     });
 
     if (!result.bestMatch) {
+      const aiJourneyState = getQualificationJourneyState({
+        lead,
+        recentHistory: leadHistory,
+        currentMessage: trimmedMessage,
+      });
+      const timelineContext = getQualificationTimelineStateForAI({
+        lead,
+        recentHistory: leadHistory,
+        currentMessage: trimmedMessage,
+        journeyState: aiJourneyState,
+      });
+
+      if (isJourneyFallbackCandidate(timelineContext)) {
+        const nextAction: CommercialNextActionSuggestion = {
+          actionType: "answer_question",
+          title: "Sugestao pela jornada",
+          description: "Mensagem encaixa em um checkpoint do atendimento.",
+          suggestedFunnel: "keep_current",
+          shouldMoveFunnel: false,
+          requiresHuman: false,
+          riskLevel: "low",
+          reasons: [
+            "Nenhuma resposta aprovada direta encontrada.",
+            "Mensagem atual preenche ou toca checkpoint da jornada.",
+          ],
+        };
+        const knowledgeCandidates = createAiKnowledgeCandidates(result.matches);
+        const fallbackReply = buildJourneyFallbackReply(timelineContext);
+
+        setSuggestionMatch(null);
+        setNextActionSuggestion(nextAction);
+        setReplyText(fallbackReply);
+        setStatusMessage("Mensagem reconhecida pela jornada. Adaptando com IA...");
+        setIsAdaptingWithAi(true);
+
+        try {
+          const adapted = await adaptApprovedResponseWithAi({
+            customerMessage: trimmedMessage,
+            match: null,
+            knowledgeCandidates,
+          });
+
+          setReplyText(adapted.adaptedReply);
+          setAiAdapted(true);
+          setAiKnowledgeCandidateCount(knowledgeCandidates.length);
+          setAiRequiresHumanReview(adapted.requiresHumanReview);
+          setAiSafetyNotes(adapted.safetyNotes);
+          setAiAdaptationInfo("Sugestao gerada pela jornada do atendimento.");
+          setStatusMessage("Sugestao gerada pela jornada do atendimento.");
+        } catch (error) {
+          setReplyText(fallbackReply);
+          setAiAdapted(false);
+          setAiKnowledgeCandidateCount(knowledgeCandidates.length);
+          setAiRequiresHumanReview(false);
+          setAiSafetyNotes([]);
+          setAiAdaptationError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao adaptar resposta com IA."
+          );
+          setAiAdaptationInfo("Fallback local pela jornada do atendimento.");
+          setStatusMessage("Sugestao local gerada pela jornada do atendimento.");
+        } finally {
+          setIsAdaptingWithAi(false);
+        }
+
+        return;
+      }
+
       setNextActionSuggestion(
         suggestCommercialNextAction({
           message: trimmedMessage,

@@ -383,6 +383,29 @@ function defaultOpeningLooksLoose(value: string) {
   );
 }
 
+function hasJourneyFallbackEvidence(journeyContext: JourneyContextInput | null) {
+  const timeline = journeyContext?.timeline;
+  if (!timeline) return false;
+
+  const checkpointKeys = new Set(["regiao", "subregiao", "unidade", "agenda"]);
+
+  return (
+    (timeline.detectedRegions?.length ?? 0) > 0 ||
+    (timeline.detectedSubregions?.length ?? 0) > 0 ||
+    (timeline.doneKeys ?? []).some((key) => checkpointKeys.has(key)) ||
+    (timeline.touchedKeys ?? []).some((key) => checkpointKeys.has(key)) ||
+    Boolean(timeline.nextBestKey && checkpointKeys.has(timeline.nextBestKey))
+  );
+}
+
+function allowsMultiRegionQuestion(journeyContext: JourneyContextInput | null) {
+  const timeline = journeyContext?.timeline;
+  return (
+    timeline?.nextBestKey === "subregiao" &&
+    (timeline.detectedRegions?.length ?? 0) >= 2
+  );
+}
+
 function countQuestionMarks(value: string) {
   return (value.match(/\?/g) || []).length;
 }
@@ -485,6 +508,7 @@ function extractResponseText(data: Record<string, unknown>) {
 
 function buildUserPayload(input: AdaptApprovedResponseInput) {
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const sanitizedJourneyContext = sanitizeJourneyContext(input.journeyContext);
   const customerMessage = sanitizeText(input.customerMessage);
   const timeGreeting = getSaoPauloGreeting();
   const defaultWhatsAppInterestMessage =
@@ -538,7 +562,7 @@ function buildUserPayload(input: AdaptApprovedResponseInput) {
       shouldAvoidEmoji: input.shouldAvoidEmoji === true,
       shouldOfferEvaluationNow: input.shouldOfferEvaluationNow === true,
     },
-    journeyContext: sanitizeJourneyContext(input.journeyContext),
+    journeyContext: sanitizedJourneyContext,
     analysisHints: {
       copiedPreviousReplyDetected: copiedPreviousReplyHint.detected,
       likelyNewCustomerTextAfterCopiedReply: copiedPreviousReplyHint.likelyNewText,
@@ -572,6 +596,7 @@ export async function POST(request: Request) {
 
   const customerMessage = sanitizeText(input.customerMessage);
   const approvedAnswerText = sanitizeText(input.approvedAnswerText);
+  const sanitizedJourneyContext = sanitizeJourneyContext(input.journeyContext);
   const pureDefaultWhatsAppInterestMessage =
     isPureDefaultWhatsAppInterestMessage(customerMessage);
   const defaultWhatsAppOpening = buildDefaultWhatsAppOpening(getSaoPauloGreeting());
@@ -580,12 +605,18 @@ export async function POST(request: Request) {
   const hasPrimaryApprovedResponse = Boolean(
     sanitizePrimaryApprovedResponse(input.primaryApprovedResponse)
   );
+  const hasJourneyFallback = hasJourneyFallbackEvidence(sanitizedJourneyContext);
 
   if (!customerMessage) {
     return errorResponse("Mensagem do cliente não enviada.", 400);
   }
 
-  if (!approvedAnswerText && !hasKnowledgeCandidates && !hasPrimaryApprovedResponse) {
+  if (
+    !approvedAnswerText &&
+    !hasKnowledgeCandidates &&
+    !hasPrimaryApprovedResponse &&
+    !hasJourneyFallback
+  ) {
     return errorResponse("Resposta aprovada não enviada.", 400);
   }
 
@@ -608,6 +639,10 @@ export async function POST(request: Request) {
     "Timeline 15U.8 regioes: use journeyContext.timeline.detectedRegions, detectedRegionLabels, detectedSubregions e regionSummaryForAI para escolher a pergunta final. Nunca pergunte sub-regiao de barriga se a regiao detectada for coxas, ombros, peitoral, bracos, flancos, gluteos, seios ou costas.",
     "Timeline 15U.8 regioes: se detectedRegions inclui coxas e subregiao esta pendente, pergunte parte interna, externa, frente ou atras das coxas. Se inclui ombros, pergunte se fica em um ombro ou nos dois e se pega peitoral, costas ou braco. Se inclui peitoral, pergunte se aparece de um lado ou dos dois.",
     "Timeline 15U.8 regioes: se detectedSubregions ja tem dados e doneKeys inclui subregiao, nao refaca pergunta de sub-regiao; avance para o proximo checkpoint pendente real.",
+    "BASE 15AB jornada sem base: se nenhuma resposta aprovada principal encaixar, mas journeyContext.timeline trouxer detectedRegions, detectedSubregions, nextBestKey, doneKeys ou touchedKeys de regiao/subregiao/unidade/agenda, continue o atendimento pela jornada em vez de pedir revisao humana.",
+    "BASE 15AB jornada sem base: mensagens como 'Bracos e costas', 'Coxas', 'Coxas parte interna', 'Ombros', 'Ombros e peitoral', 'Barriga, mais embaixo', 'Avenida Paulista', 'Prefiro sabado' e 'Pode ser de manha' sao respostas de checkpoint. Nao diga que nao encontrou resposta aprovada nesses casos.",
+    "BASE 15AB regioes multiplas: se detectedRegions tiver duas regioes e nextBestKey=subregiao, reconheca as duas e faca uma pergunta curta por regiao. Para bracos e costas, pergunte parte interna/proxima ao ombro/outra area dos bracos e superior/inferior/laterais das costas. Para mais de duas regioes, pergunte qual incomoda mais ou por onde deseja comecar.",
+    "BASE 15AB checkpoint avancado: se detectedSubregions ja estiver preenchido e subregiao estiver em doneKeys, avance para unidade. Se unidade ou agenda for detectada fora da ordem, reconheca o dado e continue pelo proximo checkpoint pendente real.",
     "Timeline 15U.6: se pendingKeys incluir regiao, ela costuma ser o proximo dado comercial mais importante, exceto quando a mensagem atual exige resposta objetiva sobre outro assunto.",
     "Caso 15U.6 unidade: se cliente diz 'Avenida Paulista' ou 'Paulista' e regiao esta pendente, envie endereco completo da Paulista e conduza com uma pergunta de regiao.",
     "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
@@ -838,7 +873,14 @@ export async function POST(request: Request) {
       ];
     }
 
-    if ((parsed.questionCount ?? countQuestionMarks(parsed.adaptedReply)) > 1) {
+    const allowedQuestionCount = allowsMultiRegionQuestion(sanitizedJourneyContext)
+      ? 2
+      : 1;
+
+    if (
+      (parsed.questionCount ?? countQuestionMarks(parsed.adaptedReply)) >
+      allowedQuestionCount
+    ) {
       parsed.requiresHumanReview = true;
       parsed.safetyNotes = [
         ...parsed.safetyNotes,
