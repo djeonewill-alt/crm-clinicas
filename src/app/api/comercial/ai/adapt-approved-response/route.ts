@@ -425,6 +425,42 @@ function replyPushesReservation(value: string) {
   );
 }
 
+function hasDirectPriceQuestion(value: string | null | undefined) {
+  const text = normalizeInterestMessage(value ?? "");
+  return (
+    text.includes("qual valor") ||
+    text.includes("quanto custa") ||
+    text.includes("quanto fica") ||
+    text.includes("valor da sessao") ||
+    text.includes("tem pacote") ||
+    /\b(valor|valores|preco|precos|custa|fica)\b/.test(text)
+  );
+}
+
+function hasValueExplanationConsent(input: AdaptApprovedResponseInput) {
+  const customerText = normalizeInterestMessage(input.customerMessage ?? "");
+  const recentHistoryText = sanitizeRecentHistory(input.recentHistory)
+    .map((item) => item.description ?? "")
+    .join(" ");
+  const recentText = normalizeInterestMessage(recentHistoryText);
+  const previousBridge =
+    recentText.includes("explicar rapidinho como funcionam os valores") ||
+    recentText.includes("valores e a divisao das regioes");
+  const consent = /\b(sim|pode|claro|ok|quero|explica|explicar)\b/.test(customerText);
+
+  return previousBridge && consent;
+}
+
+function replyDumpsValues(value: string) {
+  const text = normalizeInterestMessage(value);
+  return (
+    text.includes("r 377") ||
+    text.includes("r 550") ||
+    text.includes("377 00") ||
+    text.includes("550 00")
+  );
+}
+
 function countQuestionMarks(value: string) {
   return (value.match(/\?/g) || []).length;
 }
@@ -662,10 +698,14 @@ export async function POST(request: Request) {
     "BASE 15AB jornada sem base: mensagens como 'Bracos e costas', 'Coxas', 'Coxas parte interna', 'Ombros', 'Ombros e peitoral', 'Barriga, mais embaixo', 'Avenida Paulista', 'Prefiro sabado' e 'Pode ser de manha' sao respostas de checkpoint. Nao diga que nao encontrou resposta aprovada nesses casos.",
     "BASE 15AB regioes multiplas: se detectedRegions tiver duas regioes e nextBestKey=subregiao, reconheca as duas e faca uma pergunta curta por regiao. Para bracos e costas, pergunte parte interna/proxima ao ombro/outra area dos bracos e superior/inferior/laterais das costas. Para mais de duas regioes, pergunte qual incomoda mais ou por onde deseja comecar.",
     "BASE 15AB checkpoint avancado: se detectedSubregions ja estiver preenchido e subregiao estiver em doneKeys, avance para unidade. Se unidade ou agenda for detectada fora da ordem, reconheca o dado e continue pelo proximo checkpoint pendente real.",
-    "BASE 15AC agenda/reserva: se valor nao estiver em doneKeys, nunca puxe Pix, sinal, reserva, garantir vaga ou informacoes da reserva. Antes de qualquer reserva, informe os valores atuais.",
+    "BASE 15AC agenda/reserva: se valor nao estiver em doneKeys, nunca puxe Pix, sinal, reserva, garantir vaga ou informacoes da reserva. Antes de qualquer reserva, o cliente precisa entender os valores.",
     "BASE 15AC agenda/reserva: agenda parcial, como 'periodo da tarde, semana', 'manha', 'tarde', 'semana' ou preferencia generica de sabado, nao significa horario fechado. Ofereca opcoes reais de dia/unidade e nao avance para sinal.",
     "BASE 15AC disponibilidade: Tatuape atende quarta e sexta a tarde, das 15h as 18h. Paulista/Paraiso atende quarta e sexta de manha, das 09h as 12h. Mairipora atende segunda-feira. Sabado precisa verificacao manual de horarios e unidades antes de passar ao cliente.",
-    "BASE 15AC caso Felippe: se unidade Tatuape, cliente preferiu tarde durante a semana e valor esta pendente, diga que Tatuape atende quartas e sextas das 15h as 18h, informe R$ 377,00 por regiao e R$ 550,00 abdomen total, explique que laterais/flancos podem ser outra regiao e a especialista confirma presencialmente, e finalize perguntando se prefere quarta ou sexta a tarde. Nao fale reserva.",
+    "BASE 15AD passagem suave: quando valor estiver pendente e a cliente estiver apenas respondendo agenda/unidade/periodo, nao despeje valores automaticamente se ela nao perguntou preco. Faca uma ponte: 'Antes de avancarmos para reserva, posso te explicar rapidinho como funcionam os valores e a divisao das regioes?'",
+    "BASE 15AD passagem suave: so explique valores completos se a cliente perguntou preco diretamente, aceitou ouvir a explicacao ('sim', 'pode', 'claro', 'me explica') ou se o atendimento ja estava claramente explicando valores.",
+    "BASE 15AD tom comercial: evite tom de tabela e bloco tecnico quando a cliente nao pediu preco. Evite assustar cedo demais com flancos/laterais; quando explicar, diga que pode envolver outra regiao e que a especialista confirma presencialmente.",
+    "BASE 15AD caso Felippe: se unidade Tatuape, cliente preferiu tarde durante a semana, valor esta pendente e ela nao perguntou preco, diga que Tatuape atende quartas e sextas das 15h as 18h e pergunte se pode explicar rapidinho como funcionam os valores e a divisao das regioes antes da reserva. Nao informe R$ 377,00/R$ 550,00 nessa primeira resposta e nao fale Pix/sinal.",
+    "BASE 15AD aceite de valores: se a cliente respondeu 'sim', 'pode', 'claro', 'quero', 'ok' ou 'me explica' logo depois da ponte de valores, explique R$ 377,00 por regiao, bilateral inclui os dois lados, abdomen superior/inferior R$ 377,00 e abdomen total R$ 550,00; flancos/laterais como possibilidade; depois volte para a escolha de dia conforme unidade.",
     "Timeline 15U.6: se pendingKeys incluir regiao, ela costuma ser o proximo dado comercial mais importante, exceto quando a mensagem atual exige resposta objetiva sobre outro assunto.",
     "Caso 15U.6 unidade: se cliente diz 'Avenida Paulista' ou 'Paulista' e regiao esta pendente, envie endereco completo da Paulista e conduza com uma pergunta de regiao.",
     "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
@@ -898,7 +938,10 @@ export async function POST(request: Request) {
 
     if (
       hasPendingValue(sanitizedJourneyContext) &&
-      replyPushesReservation(parsed.adaptedReply) &&
+      (replyPushesReservation(parsed.adaptedReply) ||
+        (!hasDirectPriceQuestion(input.customerMessage) &&
+          !hasValueExplanationConsent(input) &&
+          replyDumpsValues(parsed.adaptedReply))) &&
       sanitizedJourneyContext?.timeline?.nextBestQuestion
     ) {
       parsed.adaptedReply = sanitizedJourneyContext.timeline.nextBestQuestion;
@@ -911,7 +954,7 @@ export async function POST(request: Request) {
       parsed.usedKnowledgeAsFacts = true;
       parsed.safetyNotes = [
         ...parsed.safetyNotes,
-        "BASE 15AC: fallback aplicado para evitar reserva/sinal antes de valor comunicado.",
+        "BASE 15AD: fallback aplicado para evitar reserva/sinal ou despejo de valores antes do aval da cliente.",
       ];
     }
 

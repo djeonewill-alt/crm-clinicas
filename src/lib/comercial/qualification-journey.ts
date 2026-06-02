@@ -779,35 +779,100 @@ function buildAgendaQuestion(text: string): string {
   return "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?";
 }
 
-function buildValueQuestion(text: string): string {
+function hasDirectPriceQuestion(text: string): boolean {
   const normalized = normalizeText(text);
-  const hasAgendaPreference = hasPartialAgendaPreference(text);
+  return (
+    hasAny(text, [
+      "qual valor",
+      "quanto custa",
+      "valores",
+      "preco",
+      "precos",
+      "quanto fica",
+      "valor da sessao",
+      "tem pacote",
+    ]) ||
+    /\b(r\$|valor|preco|precos|custa|fica)\b/.test(normalized)
+  );
+}
+
+function hasValueExplanationConsent(text: string): boolean {
+  const normalized = normalizeText(text);
+  const previousBridge =
+    normalized.includes("explicar rapidinho como funcionam os valores") ||
+    normalized.includes("valores e a divisao das regioes");
+  const consent = /\b(sim|pode|claro|ok|quero|explica|explicar)\b/.test(normalized);
+
+  return previousBridge && consent;
+}
+
+function buildAgendaIntro(text: string): string {
+  const normalized = normalizeText(text);
+
+  if (normalized.includes("tatuape") && /\b(tarde|periodo da tarde|a tarde)\b/.test(normalized)) {
+    return "Para Tatuape no periodo da tarde, temos atendimento as quartas e sextas, das 15h as 18h.";
+  }
+
+  if (
+    (normalized.includes("paulista") ||
+      normalized.includes("paraiso") ||
+      normalized.includes("brigadeiro")) &&
+    /\b(manha|periodo da manha|de manha)\b/.test(normalized)
+  ) {
+    return "Para Paulista no periodo da manha, temos atendimento as quartas e sextas, das 09h as 12h.";
+  }
+
+  if (normalized.includes("mairipora")) {
+    return "Em Mairipora, o atendimento acontece as segundas.";
+  }
+
+  if (/\b(sabado)\b/.test(normalized)) {
+    return "Para sabado, preciso verificar manualmente quais horarios e unidades estao disponiveis antes de te passar certinho.";
+  }
+
+  return "";
+}
+
+function buildAgendaChoiceQuestion(text: string): string {
+  const normalized = normalizeText(text);
+
+  if (normalized.includes("tatuape") && /\b(tarde|periodo da tarde|a tarde)\b/.test(normalized)) {
+    return "Voces preferem quarta ou sexta a tarde?";
+  }
+
+  if (
+    (normalized.includes("paulista") ||
+      normalized.includes("paraiso") ||
+      normalized.includes("brigadeiro")) &&
+    /\b(manha|periodo da manha|de manha)\b/.test(normalized)
+  ) {
+    return "Voces preferem quarta ou sexta de manha?";
+  }
+
+  if (normalized.includes("mairipora")) {
+    return "Voces tem preferencia por algum horario para eu verificar?";
+  }
+
+  return "";
+}
+
+function buildValueQuestion(contextText: string, customerText: string): string {
+  const hasAgendaPreference = hasPartialAgendaPreference(contextText);
+  const directPriceQuestion = hasDirectPriceQuestion(customerText);
+  const consentToExplainValues = hasValueExplanationConsent(contextText);
+  const agendaIntro = buildAgendaIntro(contextText);
+  const agendaChoiceQuestion = buildAgendaChoiceQuestion(contextText);
+  const bridgeText =
+    "Antes de avancarmos para reserva, posso te explicar rapidinho como funcionam os valores e a divisao das regioes? Assim voces ja ficam com tudo claro antes de escolher o melhor dia.";
   const valueText =
-    "Antes de avancarmos para reserva, so para deixar voces cientes dos valores: atualmente, 1 regiao fica R$ 377,00. No caso do abdomen total, superior + inferior, fica R$ 550,00. Se tiver regiao central e lateral/flancos, a especialista confirma certinho presencialmente quais regioes entram no caso.";
+    "Hoje, 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados entram nessa mesma regiao.\n\nNo abdomen:\n\n* Abdomen superior: R$ 377,00\n* Abdomen inferior: R$ 377,00\n* Abdomen total, superior + inferior: R$ 550,00.\n\nSe houver laterais/flancos junto, pode envolver outra regiao, mas a especialista confirma certinho presencialmente conforme a extensao e distribuicao das estrias.";
 
-  if (hasAgendaPreference) {
-    if (normalized.includes("tatuape") && /\b(tarde|periodo da tarde|a tarde)\b/.test(normalized)) {
-      return `Para Tatuape no periodo da tarde, temos atendimento as quartas e sextas, das 15h as 18h.\n\n${valueText}\n\nVoces preferem quarta ou sexta a tarde?`;
-    }
+  if (hasAgendaPreference && !directPriceQuestion && !consentToExplainValues) {
+    return [agendaIntro, bridgeText].filter(Boolean).join("\n\n");
+  }
 
-    if (
-      (normalized.includes("paulista") ||
-        normalized.includes("paraiso") ||
-        normalized.includes("brigadeiro")) &&
-      /\b(manha|periodo da manha|de manha)\b/.test(normalized)
-    ) {
-      return `Para Paulista no periodo da manha, temos atendimento as quartas e sextas, das 09h as 12h.\n\n${valueText}\n\nVoces preferem quarta ou sexta de manha?`;
-    }
-
-    if (normalized.includes("mairipora")) {
-      return `Em Mairipora, o atendimento acontece as segundas.\n\n${valueText}\n\nVoces tem preferencia por algum horario para eu verificar?`;
-    }
-
-    if (/\b(sabado)\b/.test(normalized)) {
-      return `Para sabado, preciso verificar manualmente quais horarios e unidades estao disponiveis antes de passar certinho.\n\n${valueText}`;
-    }
-
-    return `${valueText}\n\n${buildAgendaQuestion(text)}`;
+  if (directPriceQuestion || consentToExplainValues) {
+    return [valueText, agendaChoiceQuestion].filter(Boolean).join("\n\n");
   }
 
   return "Sobre valores, atualmente 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados ja entram nessa regiao. Abdomen total fica R$ 550,00, incluindo superior + inferior.";
@@ -823,7 +888,7 @@ function buildNextQuestion(
     case "funcionamento":
       return "Posso te explicar rapidinho como funciona o tratamento com microagulhamento para estrias.";
     case "valor":
-      return buildValueQuestion(contextText);
+      return buildValueQuestion(contextText, customerText);
     case "regiao":
       return "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?\nExemplo: barriga, flancos, gluteos, coxas, seios ou outra regiao.";
     case "subregiao":
