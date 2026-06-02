@@ -475,6 +475,19 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+function extractUsefulWhatsAppText(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .map((line) =>
+      line.replace(
+        /^\s*\[[^\]]+\]\s*[^:]{1,80}:\s*/u,
+        ""
+      )
+    )
+    .join("\n")
+    .trim();
+}
+
 function metadataString(item: HistoryLike, key: string): string {
   const value = item.metadata?.[key];
   return typeof value === "string" ? value : "";
@@ -796,12 +809,25 @@ function hasDirectPriceQuestion(text: string): boolean {
   );
 }
 
-function hasValueExplanationConsent(text: string): boolean {
-  const normalized = normalizeText(text);
+function hasValueExplanationConsent(contextText: string, customerText: string): boolean {
+  const normalizedContext = normalizeText(contextText);
+  const normalizedCustomer = normalizeText(extractUsefulWhatsAppText(customerText));
   const previousBridge =
-    normalized.includes("explicar rapidinho como funcionam os valores") ||
-    normalized.includes("valores e a divisao das regioes");
-  const consent = /\b(sim|pode|claro|ok|quero|explica|explicar)\b/.test(normalized);
+    normalizedContext.includes("explicar rapidinho como funcionam os valores") ||
+    normalizedContext.includes("posso te explicar como funcionam os valores") ||
+    normalizedContext.includes("valores e a divisao das regioes") ||
+    normalizedContext.includes("antes de avancarmos para reserva") ||
+    normalizedContext.includes("antes de avancarmos para a reserva");
+  const consent =
+    /\b(sim|pode|claro|ok|quero|explica|explicar|favor|favot|manda|passar|fala)\b/.test(
+      normalizedCustomer
+    ) ||
+    normalizedCustomer.includes("me explica") ||
+    normalizedCustomer.includes("pode explicar") ||
+    normalizedCustomer.includes("pode me explicar") ||
+    normalizedCustomer.includes("por favor") ||
+    normalizedCustomer.includes("me fala") ||
+    normalizedCustomer.includes("pode passar");
 
   return previousBridge && consent;
 }
@@ -859,13 +885,16 @@ function buildAgendaChoiceQuestion(text: string): string {
 function buildValueQuestion(contextText: string, customerText: string): string {
   const hasAgendaPreference = hasPartialAgendaPreference(contextText);
   const directPriceQuestion = hasDirectPriceQuestion(customerText);
-  const consentToExplainValues = hasValueExplanationConsent(contextText);
+  const consentToExplainValues = hasValueExplanationConsent(
+    contextText,
+    customerText
+  );
   const agendaIntro = buildAgendaIntro(contextText);
   const agendaChoiceQuestion = buildAgendaChoiceQuestion(contextText);
   const bridgeText =
     "Antes de avancarmos para reserva, posso te explicar rapidinho como funcionam os valores e a divisao das regioes? Assim voces ja ficam com tudo claro antes de escolher o melhor dia.";
   const valueText =
-    "Hoje, 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados entram nessa mesma regiao.\n\nNo abdomen:\n\n* Abdomen superior: R$ 377,00\n* Abdomen inferior: R$ 377,00\n* Abdomen total, superior + inferior: R$ 550,00.\n\nSe houver laterais/flancos junto, pode envolver outra regiao, mas a especialista confirma certinho presencialmente conforme a extensao e distribuicao das estrias.";
+    "Hoje, 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados entram nessa mesma regiao.\n\nPor exemplo: bracos, ombros, peitoral, coxas ou gluteos, quando tratados como uma regiao bilateral, ja consideram os dois lados.\n\nNo abdomen:\n\n* Abdomen superior: R$ 377,00\n* Abdomen inferior: R$ 377,00\n* Abdomen total, superior + inferior: R$ 550,00.\n\nSe houver laterais/flancos junto, pode envolver outra regiao, mas a especialista confirma certinho presencialmente conforme a extensao e distribuicao das estrias.";
 
   if (hasAgendaPreference && !directPriceQuestion && !consentToExplainValues) {
     return [agendaIntro, bridgeText].filter(Boolean).join("\n\n");

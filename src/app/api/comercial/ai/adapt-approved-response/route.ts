@@ -348,6 +348,19 @@ function normalizeInterestMessage(value: string) {
     .trim();
 }
 
+function extractUsefulWhatsAppText(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) =>
+      line.replace(
+        /^\s*\[[^\]]+\]\s*[^:]{1,80}:\s*/u,
+        ""
+      )
+    )
+    .join("\n")
+    .trim();
+}
+
 const DEFAULT_INTEREST_MESSAGE_PATTERNS = [
   "ola tenho interesse e queria mais informacoes por favor",
   "ola tenho interesse e queria mais informacoes",
@@ -426,7 +439,7 @@ function replyPushesReservation(value: string) {
 }
 
 function hasDirectPriceQuestion(value: string | null | undefined) {
-  const text = normalizeInterestMessage(value ?? "");
+  const text = normalizeInterestMessage(extractUsefulWhatsAppText(value ?? ""));
   return (
     text.includes("qual valor") ||
     text.includes("quanto custa") ||
@@ -438,15 +451,29 @@ function hasDirectPriceQuestion(value: string | null | undefined) {
 }
 
 function hasValueExplanationConsent(input: AdaptApprovedResponseInput) {
-  const customerText = normalizeInterestMessage(input.customerMessage ?? "");
+  const customerText = normalizeInterestMessage(
+    extractUsefulWhatsAppText(input.customerMessage ?? "")
+  );
   const recentHistoryText = sanitizeRecentHistory(input.recentHistory)
     .map((item) => item.description ?? "")
     .join(" ");
   const recentText = normalizeInterestMessage(recentHistoryText);
   const previousBridge =
     recentText.includes("explicar rapidinho como funcionam os valores") ||
-    recentText.includes("valores e a divisao das regioes");
-  const consent = /\b(sim|pode|claro|ok|quero|explica|explicar)\b/.test(customerText);
+    recentText.includes("posso te explicar como funcionam os valores") ||
+    recentText.includes("valores e a divisao das regioes") ||
+    recentText.includes("antes de avancarmos para reserva") ||
+    recentText.includes("antes de avancarmos para a reserva");
+  const consent =
+    /\b(sim|pode|claro|ok|quero|explica|explicar|favor|favot|manda|passar|fala)\b/.test(
+      customerText
+    ) ||
+    customerText.includes("me explica") ||
+    customerText.includes("pode explicar") ||
+    customerText.includes("pode me explicar") ||
+    customerText.includes("por favor") ||
+    customerText.includes("me fala") ||
+    customerText.includes("pode passar");
 
   return previousBridge && consent;
 }
@@ -706,6 +733,9 @@ export async function POST(request: Request) {
     "BASE 15AD tom comercial: evite tom de tabela e bloco tecnico quando a cliente nao pediu preco. Evite assustar cedo demais com flancos/laterais; quando explicar, diga que pode envolver outra regiao e que a especialista confirma presencialmente.",
     "BASE 15AD caso Felippe: se unidade Tatuape, cliente preferiu tarde durante a semana, valor esta pendente e ela nao perguntou preco, diga que Tatuape atende quartas e sextas das 15h as 18h e pergunte se pode explicar rapidinho como funcionam os valores e a divisao das regioes antes da reserva. Nao informe R$ 377,00/R$ 550,00 nessa primeira resposta e nao fale Pix/sinal.",
     "BASE 15AD aceite de valores: se a cliente respondeu 'sim', 'pode', 'claro', 'quero', 'ok' ou 'me explica' logo depois da ponte de valores, explique R$ 377,00 por regiao, bilateral inclui os dois lados, abdomen superior/inferior R$ 377,00 e abdomen total R$ 550,00; flancos/laterais como possibilidade; depois volte para a escolha de dia conforme unidade.",
+    "BASE 15AE aceite de valores: se o atendimento acabou de perguntar se pode explicar valores/regioes e a cliente respondeu 'Me explica por favor', 'Favor', 'pode explicar', 'sim', 'claro', 'ok', 'quero', 'me fala', 'manda' ou typo como 'favot', isso e aceite contextual. Explique valores/regioes e nao repita 'posso te explicar?'.",
+    "BASE 15AE whatsapp colado: se a mensagem atual vier colada com prefixo de WhatsApp como '[2:55 PM, 02/06/2026] Felippe: Me explica por favor', considere apenas o texto depois dos dois-pontos para entender a intencao.",
+    "BASE 15AE exemplo: historico recente: 'Antes de avancarmos para a reserva, posso te explicar rapidinho como funcionam os valores e a divisao das regioes?'. Cliente: 'Me explica por favor'. Resposta: explique R$ 377,00 por regiao, bilateral inclui os dois lados, abdomen total R$ 550,00, flancos/laterais como possibilidade com confirmacao presencial, e finalize perguntando quarta ou sexta se Tatuape a tarde. Nao fale Pix/sinal/reserva.",
     "Timeline 15U.6: se pendingKeys incluir regiao, ela costuma ser o proximo dado comercial mais importante, exceto quando a mensagem atual exige resposta objetiva sobre outro assunto.",
     "Caso 15U.6 unidade: se cliente diz 'Avenida Paulista' ou 'Paulista' e regiao esta pendente, envie endereco completo da Paulista e conduza com uma pergunta de regiao.",
     "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
