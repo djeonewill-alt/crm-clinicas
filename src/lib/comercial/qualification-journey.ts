@@ -650,7 +650,37 @@ function hasAgendaPeriodContext(text: string): boolean {
 }
 
 function hasStrongAgendaEvidence(text: string): boolean {
-  return hasAny(text, AGENDA_DONE_PATTERNS) || hasAgendaPeriodContext(text);
+  const normalized = normalizeText(text);
+  const legacyConfirmationPatterns = AGENDA_DONE_PATTERNS.filter((pattern) => {
+    const normalizedPattern = normalizeText(pattern);
+    return (
+      normalizedPattern.includes("confirm") ||
+      normalizedPattern.includes("marcada") ||
+      normalizedPattern.includes("consulta marcada") ||
+      normalizedPattern.includes("esse horario funciona")
+    );
+  });
+  const hasConfirmedAgendaText = hasAny(text, legacyConfirmationPatterns);
+  const choseKnownDay =
+    /\b(segunda|quarta|sexta)\b/.test(normalized);
+  const choseSpecificHour =
+    /\b(as|das)\s*(9|10|11|12|13|14|15|16|17|18)\b/.test(normalized) ||
+    /\b(9|10|11|12|13|14|15|16|17|18)\s*h\b/.test(normalized) ||
+    /\bpode ser\s+(9|10|11|12|13|14|15|16|17|18)\b/.test(normalized);
+  const choseCalendarDay = /\bdia\s+\d{1,2}\b/.test(normalized);
+
+  return hasConfirmedAgendaText || choseKnownDay || choseSpecificHour || choseCalendarDay;
+}
+
+function hasPartialAgendaPreference(text: string): boolean {
+  const normalized = normalizeText(text);
+  return (
+    hasAny(text, AGENDA_TOUCHED_PATTERNS) ||
+    hasAgendaPeriodContext(text) ||
+    /\b(semana|durante a semana|dia de semana)\b/.test(normalized) ||
+    /\b(manha|tarde|periodo da manha|periodo da tarde)\b/.test(normalized) ||
+    /\b(sabado)\b/.test(normalized)
+  );
 }
 
 function getLikelySubregionQuestion(
@@ -718,16 +748,82 @@ function getLikelySubregionQuestion(
   return "Me explica um pouco melhor em qual parte dessa regiao ficam as estrias?";
 }
 
+function buildAgendaQuestion(text: string): string {
+  const normalized = normalizeText(text);
+  const mentionsTatuape = normalized.includes("tatuape");
+  const mentionsPaulista =
+    normalized.includes("paulista") ||
+    normalized.includes("paraiso") ||
+    normalized.includes("brigadeiro");
+  const mentionsMairipora = normalized.includes("mairipora");
+  const mentionsMorning = /\b(manha|periodo da manha|de manha)\b/.test(normalized);
+  const mentionsAfternoon = /\b(tarde|periodo da tarde|a tarde)\b/.test(normalized);
+  const mentionsSaturday = /\b(sabado)\b/.test(normalized);
+
+  if (mentionsSaturday) {
+    return "Para sabado, preciso verificar manualmente quais horarios e unidades estao disponiveis antes de te passar certinho.";
+  }
+
+  if (mentionsTatuape && mentionsAfternoon) {
+    return "Para Tatuape no periodo da tarde, temos atendimento as quartas e sextas, das 15h as 18h. Voces preferem quarta ou sexta a tarde?";
+  }
+
+  if (mentionsPaulista && mentionsMorning) {
+    return "Para Paulista no periodo da manha, temos atendimento as quartas e sextas, das 09h as 12h. Voces preferem quarta ou sexta de manha?";
+  }
+
+  if (mentionsMairipora) {
+    return "Em Mairipora, o atendimento acontece as segundas. Voces tem preferencia por algum horario para eu verificar?";
+  }
+
+  return "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?";
+}
+
+function buildValueQuestion(text: string): string {
+  const normalized = normalizeText(text);
+  const hasAgendaPreference = hasPartialAgendaPreference(text);
+  const valueText =
+    "Antes de avancarmos para reserva, so para deixar voces cientes dos valores: atualmente, 1 regiao fica R$ 377,00. No caso do abdomen total, superior + inferior, fica R$ 550,00. Se tiver regiao central e lateral/flancos, a especialista confirma certinho presencialmente quais regioes entram no caso.";
+
+  if (hasAgendaPreference) {
+    if (normalized.includes("tatuape") && /\b(tarde|periodo da tarde|a tarde)\b/.test(normalized)) {
+      return `Para Tatuape no periodo da tarde, temos atendimento as quartas e sextas, das 15h as 18h.\n\n${valueText}\n\nVoces preferem quarta ou sexta a tarde?`;
+    }
+
+    if (
+      (normalized.includes("paulista") ||
+        normalized.includes("paraiso") ||
+        normalized.includes("brigadeiro")) &&
+      /\b(manha|periodo da manha|de manha)\b/.test(normalized)
+    ) {
+      return `Para Paulista no periodo da manha, temos atendimento as quartas e sextas, das 09h as 12h.\n\n${valueText}\n\nVoces preferem quarta ou sexta de manha?`;
+    }
+
+    if (normalized.includes("mairipora")) {
+      return `Em Mairipora, o atendimento acontece as segundas.\n\n${valueText}\n\nVoces tem preferencia por algum horario para eu verificar?`;
+    }
+
+    if (/\b(sabado)\b/.test(normalized)) {
+      return `Para sabado, preciso verificar manualmente quais horarios e unidades estao disponiveis antes de passar certinho.\n\n${valueText}`;
+    }
+
+    return `${valueText}\n\n${buildAgendaQuestion(text)}`;
+  }
+
+  return "Sobre valores, atualmente 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados ja entram nessa regiao. Abdomen total fica R$ 550,00, incluindo superior + inferior.";
+}
+
 function buildNextQuestion(
   key: QualificationTimelineCheckpointKey,
   customerText: string,
-  detectedRegions: BodyRegionKey[] = detectBodyRegions(customerText)
+  detectedRegions: BodyRegionKey[] = detectBodyRegions(customerText),
+  contextText = customerText
 ): string {
   switch (key) {
     case "funcionamento":
       return "Posso te explicar rapidinho como funciona o tratamento com microagulhamento para estrias.";
     case "valor":
-      return "Sobre valores, atualmente 1 regiao fica R$ 377,00. Quando a regiao e bilateral, os dois lados ja entram nessa regiao. Abdomen total fica R$ 550,00, incluindo superior + inferior.";
+      return buildValueQuestion(contextText);
     case "regiao":
       return "Para eu te orientar melhor, qual regiao do corpo voce gostaria de tratar?\nExemplo: barriga, flancos, gluteos, coxas, seios ou outra regiao.";
     case "subregiao":
@@ -735,7 +831,7 @@ function buildNextQuestion(
     case "unidade":
       return "Qual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora?";
     case "agenda":
-      return "Voce prefere atendimento durante a semana ou sabado? E tem algum periodo melhor: manha ou tarde?";
+      return buildAgendaQuestion(contextText);
     case "sinal":
       return "Esse horario funciona para voce? Se quiser garantir, posso te passar as informacoes da reserva.";
     case "confirmacao":
@@ -763,9 +859,10 @@ function chooseNextBestKey(args: {
 
   if (!done.regiao) return "regiao";
   if (!done.subregiao) return "subregiao";
+  if (!done.valor) return "valor";
   if (!done.unidade) return "unidade";
   if (!done.agenda) return "agenda";
-  if (done.unidade && done.agenda && !done.sinal) return "sinal";
+  if (done.valor && done.unidade && done.agenda && !done.sinal) return "sinal";
   if (done.sinal && !done.confirmacao) return "confirmacao";
   return undefined;
 }
@@ -808,20 +905,20 @@ export function getQualificationTimelineStateForAI(args: {
     regiao: detectedRegions.length > 0,
     subregiao: detectedSubregions.length > 0,
     unidade: hasAny(customerText, UNIT_PATTERNS) || hasAny(assistantText, ["rua manoel", "brigadeiro", "unidade paulista", "unidade tatuape", "unidade mairipora"]),
-    agenda: hasStrongAgendaEvidence(fullText) || hasConfirmedSchedule,
+    agenda: hasStrongAgendaEvidence(customerText) || hasConfirmedSchedule,
     sinal: hasAny(conversationText, SIGNAL_PATTERNS),
     confirmacao: hasConfirmedSchedule,
   };
 
   const touched: Partial<Record<QualificationTimelineCheckpointKey, boolean>> = {
     valor: !done.valor && hasAny([customerText, assistantText].join(" "), VALUE_TOUCHED_PATTERNS),
-    agenda: !done.agenda && hasAny([customerText, assistantText].join(" "), AGENDA_TOUCHED_PATTERNS),
+    agenda: !done.agenda && hasPartialAgendaPreference(fullText),
   };
 
   const hasReturnIntent = hasAny(customerText, RETORNO_PATTERNS);
   const nextBestKey = hasReturnIntent ? undefined : chooseNextBestKey({ done, touched });
   const nextBestLabel = nextBestKey ? NEXT_STEP_LABELS[nextBestKey] : hasReturnIntent ? "Retorno programado" : undefined;
-  const nextBestQuestion = nextBestKey ? buildNextQuestion(nextBestKey, customerText, detectedRegions) : hasReturnIntent ? buildReturnSuggestion().message : undefined;
+  const nextBestQuestion = nextBestKey ? buildNextQuestion(nextBestKey, customerText, detectedRegions, fullText) : hasReturnIntent ? buildReturnSuggestion().message : undefined;
   const nextSuggestion = hasReturnIntent
     ? buildReturnSuggestion()
     : nextBestKey && nextBestLabel && nextBestQuestion

@@ -406,6 +406,25 @@ function allowsMultiRegionQuestion(journeyContext: JourneyContextInput | null) {
   );
 }
 
+function hasPendingValue(journeyContext: JourneyContextInput | null) {
+  const timeline = journeyContext?.timeline;
+  if (!timeline) return false;
+  return !(timeline.doneKeys ?? []).includes("valor");
+}
+
+function replyPushesReservation(value: string) {
+  const text = normalizeInterestMessage(value);
+  return (
+    text.includes("pix") ||
+    text.includes("sinal") ||
+    text.includes("taxa de reserva") ||
+    text.includes("informacoes da reserva") ||
+    text.includes("garantir uma vaga") ||
+    text.includes("garantir seu horario") ||
+    text.includes("reservar o horario")
+  );
+}
+
 function countQuestionMarks(value: string) {
   return (value.match(/\?/g) || []).length;
 }
@@ -643,6 +662,10 @@ export async function POST(request: Request) {
     "BASE 15AB jornada sem base: mensagens como 'Bracos e costas', 'Coxas', 'Coxas parte interna', 'Ombros', 'Ombros e peitoral', 'Barriga, mais embaixo', 'Avenida Paulista', 'Prefiro sabado' e 'Pode ser de manha' sao respostas de checkpoint. Nao diga que nao encontrou resposta aprovada nesses casos.",
     "BASE 15AB regioes multiplas: se detectedRegions tiver duas regioes e nextBestKey=subregiao, reconheca as duas e faca uma pergunta curta por regiao. Para bracos e costas, pergunte parte interna/proxima ao ombro/outra area dos bracos e superior/inferior/laterais das costas. Para mais de duas regioes, pergunte qual incomoda mais ou por onde deseja comecar.",
     "BASE 15AB checkpoint avancado: se detectedSubregions ja estiver preenchido e subregiao estiver em doneKeys, avance para unidade. Se unidade ou agenda for detectada fora da ordem, reconheca o dado e continue pelo proximo checkpoint pendente real.",
+    "BASE 15AC agenda/reserva: se valor nao estiver em doneKeys, nunca puxe Pix, sinal, reserva, garantir vaga ou informacoes da reserva. Antes de qualquer reserva, informe os valores atuais.",
+    "BASE 15AC agenda/reserva: agenda parcial, como 'periodo da tarde, semana', 'manha', 'tarde', 'semana' ou preferencia generica de sabado, nao significa horario fechado. Ofereca opcoes reais de dia/unidade e nao avance para sinal.",
+    "BASE 15AC disponibilidade: Tatuape atende quarta e sexta a tarde, das 15h as 18h. Paulista/Paraiso atende quarta e sexta de manha, das 09h as 12h. Mairipora atende segunda-feira. Sabado precisa verificacao manual de horarios e unidades antes de passar ao cliente.",
+    "BASE 15AC caso Felippe: se unidade Tatuape, cliente preferiu tarde durante a semana e valor esta pendente, diga que Tatuape atende quartas e sextas das 15h as 18h, informe R$ 377,00 por regiao e R$ 550,00 abdomen total, explique que laterais/flancos podem ser outra regiao e a especialista confirma presencialmente, e finalize perguntando se prefere quarta ou sexta a tarde. Nao fale reserva.",
     "Timeline 15U.6: se pendingKeys incluir regiao, ela costuma ser o proximo dado comercial mais importante, exceto quando a mensagem atual exige resposta objetiva sobre outro assunto.",
     "Caso 15U.6 unidade: se cliente diz 'Avenida Paulista' ou 'Paulista' e regiao esta pendente, envie endereco completo da Paulista e conduza com uma pergunta de regiao.",
     "Caso 15U.6 foto: se cliente diz 'Nas duas partes. Posso mandar foto?', reconheca que subregiao foi respondida, permita foto como referencia/prontuario e nao pergunte novamente acima/abaixo/duas partes.",
@@ -694,7 +717,7 @@ export async function POST(request: Request) {
     "Excecao importante: se conversation.stage for schedule_intent ou a mensagem atual falar de dia, agenda, avaliacao, horario ou disponibilidade, trate a intencao de agenda antes do checkpoint pendente.",
     "Para schedule_intent: responda sobre dias/agenda/disponibilidade; pergunte unidade e/ou periodo; nao comece com texto generico como 'o primeiro passo e a avaliacao'; nao force regiao como pergunta principal.",
     "Se o checkpoint for pacote_inicial_pendente ou aguardando_regiao, mas a mensagem atual for schedule_intent, responda agenda. Se precisar coletar regiao, faca como complemento leve depois.",
-    "Resposta esperada para 'Qual dia posso fazer a avaliacao?': 'Consigo verificar uma opcao para avaliacao sim.\\n\\nAtendemos normalmente quarta, sexta e sabado, das 9h as 17h. Terca e quinta dependem da disponibilidade da agenda.\\n\\nQual unidade fica melhor para voce: Paulista/Paraiso, Tatuape ou Mairipora? E voce prefere manha ou tarde?' Nao prometa horario especifico.",
+    "Resposta esperada para 'Qual dia posso fazer a avaliacao?': 'Consigo verificar uma opcao para avaliacao sim.\\n\\nA disponibilidade varia por unidade: Tatuape atende quarta e sexta a tarde, das 15h as 18h; Paulista/Paraiso atende quarta e sexta de manha, das 09h as 12h; Mairipora atende segunda-feira. Para sabado, preciso verificar manualmente quais horarios e unidades estao disponiveis.\\n\\nQual unidade fica melhor para voce?' Nao prometa horario especifico fora dessas regras.",
     "Evite frases como 'Pode sim, o primeiro passo e a avaliacao', 'A avaliacao ajuda a confirmar' quando a pergunta for sobre dia/agenda, e 'Antes de te passar certinho' se soar enrolacao.",
     "Se o cliente fizer uma pergunta fora da ordem, responda somente com a informacao aprovada necessaria e volte em uma frase curta ao checkpoint pendente.",
     "Se currentCheckpoint for cliente_respondeu_abordagem e a mensagem for 'Ok, pode passar', 'pode explicar' ou equivalente, responda com pacote inicial curto: tratamento regenerativo com microagulhamento e ativos, conforme avaliacao da especialista; nao e laser, tinta nem camuflagem; valores atuais somente se a mensagem pedir valor; unidades; e pergunte qual regiao do corpo deseja tratar.",
@@ -870,6 +893,25 @@ export async function POST(request: Request) {
       parsed.safetyNotes = [
         ...parsed.safetyNotes,
         "Resposta pode não ter respondido a intenção de agenda.",
+      ];
+    }
+
+    if (
+      hasPendingValue(sanitizedJourneyContext) &&
+      replyPushesReservation(parsed.adaptedReply) &&
+      sanitizedJourneyContext?.timeline?.nextBestQuestion
+    ) {
+      parsed.adaptedReply = sanitizedJourneyContext.timeline.nextBestQuestion;
+      parsed.confidence = Math.max(parsed.confidence, 0.86);
+      parsed.requiresHumanReview = false;
+      parsed.usedApprovedAnswerOnly = false;
+      parsed.finalJourneyQuestion =
+        sanitizedJourneyContext.timeline.nextBestQuestion;
+      parsed.questionCount = countQuestionMarks(parsed.adaptedReply);
+      parsed.usedKnowledgeAsFacts = true;
+      parsed.safetyNotes = [
+        ...parsed.safetyNotes,
+        "BASE 15AC: fallback aplicado para evitar reserva/sinal antes de valor comunicado.",
       ];
     }
 
