@@ -172,6 +172,7 @@ export function LeadCsvImportPanel({
           tel: row.tel,
           esp: row.esp,
           campanha: row.campanha,
+          dataEntrada: row.dataEntrada,
         })),
       });
       const ignoredRows = Math.max(
@@ -406,6 +407,14 @@ export function LeadCsvImportPanel({
                         </span>
                         <span className="text-[var(--text2)]">
                           {row.campanha || "não informada"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] uppercase tracking-wider text-[var(--text3)]">
+                          Data de entrada
+                        </span>
+                        <span className="text-[var(--text2)]">
+                          {row.dataEntrada || "hoje (fallback)"}
                         </span>
                       </div>
                     </div>

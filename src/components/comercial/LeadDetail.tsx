@@ -55,6 +55,7 @@ type LeadDetailProps = {
     tel: string;
     esp?: string;
     campanha?: string;
+    dataEntrada?: string | null;
   }) => boolean | void | Promise<boolean | void>;
   onSetResultado: (
     lead: Lead,

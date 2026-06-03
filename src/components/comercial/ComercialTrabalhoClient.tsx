@@ -83,6 +83,7 @@ export function ComercialTrabalhoClient({
             phone={comercial.newLeadPhone}
             interest={comercial.newLeadInterest}
             campaign={comercial.newLeadCampaign}
+            entryDate={comercial.newLeadEntryDate}
             suggestedContextName={comercial.newLeadSuggestedContext?.name ?? null}
             contextSuggestionMessage={comercial.newLeadContextSuggestionMessage}
             isSaving={comercial.savingLeadId === "new-lead"}
@@ -90,6 +91,7 @@ export function ComercialTrabalhoClient({
             onPhoneChange={comercial.setNewLeadPhone}
             onInterestChange={comercial.setNewLeadInterest}
             onCampaignChange={comercial.setNewLeadCampaign}
+            onEntryDateChange={comercial.setNewLeadEntryDate}
             onSave={comercial.handleCreateLead}
             onCancel={() => comercial.setShowNewLeadForm(false)}
           />

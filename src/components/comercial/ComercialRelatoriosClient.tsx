@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { DailyCommercialReportCard } from "@/components/comercial/DailyCommercialReportCard";
 import { FUNNELS } from "@/lib/constants/crm";
 import { cn } from "@/lib/utils/cn";
+import type { LeadHistoryItem } from "@/types/lead-history";
 import type { FunnelId, Lead } from "@/types/lead";
 
 type PeriodFilter = "7d" | "30d" | "90d" | "all";
 
 type ComercialRelatoriosClientProps = {
   leads: Lead[];
+  history: LeadHistoryItem[];
   empresaNome: string;
 };
 
@@ -166,6 +169,7 @@ function RankingList({
 
 export function ComercialRelatoriosClient({
   leads,
+  history,
   empresaNome,
 }: ComercialRelatoriosClientProps) {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("30d");
@@ -255,6 +259,10 @@ export function ComercialRelatoriosClient({
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="mt-4">
+        <DailyCommercialReportCard leads={leads} history={history} />
       </div>
 
       {leads.length === 0 ? (

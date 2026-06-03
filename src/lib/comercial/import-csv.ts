@@ -13,6 +13,7 @@ export type LeadImportPreviewRow = {
   tel: string;
   esp: string;
   campanha: string;
+  dataEntrada: string;
   normalizedPhone: string;
   status: LeadImportRowStatus;
   errors: string[];
@@ -34,7 +35,7 @@ export type LeadImportPreview = {
   globalErrors: string[];
 };
 
-type CanonicalLeadImportField = "nome" | "tel" | "esp" | "campanha";
+type CanonicalLeadImportField = "nome" | "tel" | "esp" | "campanha" | "dataEntrada";
 
 const UTF8_BOM = "\uFEFF";
 const TEMPLATE_SEPARATOR = ";";
@@ -70,6 +71,13 @@ const FIELD_ALIASES: Record<CanonicalLeadImportField, string[]> = {
     "source",
     "utm_campaign",
     "utm campaign",
+  ],
+  dataEntrada: [
+    "data_entrada",
+    "data entrada",
+    "data do lead",
+    "entrada",
+    "data campanha",
   ],
 };
 
@@ -258,6 +266,7 @@ export function analyzeLeadCsvImport(
     const tel = getRowValue(row, fieldIndexes, "tel");
     const esp = getRowValue(row, fieldIndexes, "esp");
     const campanha = getRowValue(row, fieldIndexes, "campanha");
+    const dataEntrada = getRowValue(row, fieldIndexes, "dataEntrada");
     const normalizedPhone = normalizeImportPhone(tel);
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -273,6 +282,10 @@ export function analyzeLeadCsvImport(
 
     if (normalizedPhone && normalizedPhone.length < 10) {
       warnings.push("Telefone com menos de 10 dígitos.");
+    }
+
+    if (dataEntrada.trim() && Number.isNaN(new Date(dataEntrada).getTime())) {
+      warnings.push("Data de entrada nao reconhecida. Se importar, sera usada a data de hoje.");
     }
 
     if (normalizedPhone && seenPhones.has(normalizedPhone)) {
@@ -299,6 +312,7 @@ export function analyzeLeadCsvImport(
       tel,
       esp,
       campanha,
+      dataEntrada,
       normalizedPhone,
       status,
       errors,
@@ -339,8 +353,8 @@ export function getValidLeadImportRows(preview: LeadImportPreview) {
 
 export function buildLeadImportTemplateCsv() {
   return [
-    ["nome", "telefone", "interesse", "campanha"].join(TEMPLATE_SEPARATOR),
-    ["Maria Silva", "(11) 99999-9999", "Botox", "Instagram"].join(
+    ["nome", "telefone", "interesse", "campanha", "data_entrada"].join(TEMPLATE_SEPARATOR),
+    ["Maria Silva", "(11) 99999-9999", "Botox", "Instagram", "2026-06-03"].join(
       TEMPLATE_SEPARATOR
     ),
   ].join("\r\n");

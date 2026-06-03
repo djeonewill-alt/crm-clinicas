@@ -3,6 +3,7 @@
   phone: string;
   interest: string;
   campaign: string;
+  entryDate: string;
   suggestedContextName?: string | null;
   contextSuggestionMessage?: string;
   isSaving: boolean;
@@ -10,6 +11,7 @@
   onPhoneChange: (value: string) => void;
   onInterestChange: (value: string) => void;
   onCampaignChange: (value: string) => void;
+  onEntryDateChange: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
 };
@@ -19,6 +21,7 @@ export function NewLeadForm({
   phone,
   interest,
   campaign,
+  entryDate,
   suggestedContextName,
   contextSuggestionMessage,
   isSaving,
@@ -26,6 +29,7 @@ export function NewLeadForm({
   onPhoneChange,
   onInterestChange,
   onCampaignChange,
+  onEntryDateChange,
   onSave,
   onCancel,
 }: NewLeadFormProps) {
@@ -94,6 +98,22 @@ export function NewLeadForm({
                 : contextSuggestionMessage}
             </p>
           )}
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+            Data de entrada
+          </label>
+          <input
+            type="date"
+            value={entryDate}
+            onChange={(event) => onEntryDateChange(event.target.value)}
+            className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          />
+          <p className="mt-1 text-xs text-[var(--text3)]">
+            Use a data real em que o lead entrou pelo WhatsApp/campanha. Para base antiga,
+            informe a data original.
+          </p>
         </div>
       </div>
 

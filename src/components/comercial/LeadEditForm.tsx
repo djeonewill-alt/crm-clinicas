@@ -8,6 +8,7 @@ type LeadEditData = {
   tel: string;
   esp?: string;
   campanha?: string;
+  dataEntrada?: string | null;
 };
 
 type LeadEditFormProps = {
@@ -21,6 +22,9 @@ export function LeadEditForm({ lead, onCancel, onSave }: LeadEditFormProps) {
   const [tel, setTel] = useState(lead.tel ?? "");
   const [esp, setEsp] = useState(lead.esp ?? "");
   const [campanha, setCampanha] = useState(lead.campanha ?? "");
+  const [dataEntrada, setDataEntrada] = useState(
+    lead.dataEntrada ? lead.dataEntrada.slice(0, 10) : ""
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,6 +44,7 @@ export function LeadEditForm({ lead, onCancel, onSave }: LeadEditFormProps) {
         tel: tel.trim(),
         esp: esp.trim(),
         campanha: campanha.trim(),
+        dataEntrada: dataEntrada || null,
       });
     } catch (saveError) {
       setError(
@@ -108,6 +113,22 @@ export function LeadEditForm({ lead, onCancel, onSave }: LeadEditFormProps) {
             className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
             placeholder="Instagram, tráfego, indicação..."
           />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+            Data de entrada
+          </label>
+          <input
+            type="date"
+            value={dataEntrada}
+            onChange={(event) => setDataEntrada(event.target.value)}
+            className="w-full rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          />
+          <p className="mt-1 text-xs text-[var(--text3)]">
+            Data comercial real em que o lead entrou pela campanha/WhatsApp. Nao altera a
+            data de criacao no CRM.
+          </p>
         </div>
       </div>
 

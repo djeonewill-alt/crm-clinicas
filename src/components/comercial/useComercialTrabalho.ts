@@ -48,6 +48,7 @@ type LeadDetailsInput = {
   tel: string;
   esp?: string;
   campanha?: string;
+  dataEntrada?: string | null;
 };
 
 type ScheduleReturnInput = {
@@ -233,6 +234,7 @@ export function useComercialTrabalho({
   const [newLeadPhone, setNewLeadPhone] = useState("");
   const [newLeadInterest, setNewLeadInterest] = useState("");
   const [newLeadCampaign, setNewLeadCampaign] = useState("");
+  const [newLeadEntryDate, setNewLeadEntryDate] = useState(todayInputValue());
   const [listMode, setListMode] = useState<ListMode>("smart");
   const [search, setSearch] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState(FILTER_ALL);
@@ -548,7 +550,13 @@ export function useComercialTrabalho({
     setSearch("");
     setSelectedCampaign(FILTER_ALL);
     setSelectedInterest(FILTER_ALL);
-    setShowNewLeadForm((current) => !current);
+    setShowNewLeadForm((current) => {
+      if (!current) {
+        setNewLeadEntryDate(todayInputValue());
+      }
+
+      return !current;
+    });
   }
 
   function clearSearch() {
@@ -736,6 +744,7 @@ export function useComercialTrabalho({
         esp: newLeadInterest,
         campanha: newLeadCampaign,
         commercialContextId: autoContext?.id ?? null,
+        dataEntrada: newLeadEntryDate || todayInputValue(),
         tentativas: createTentativasForDay("prospeccao", "d1"),
       });
 
@@ -749,6 +758,7 @@ export function useComercialTrabalho({
       setNewLeadPhone("");
       setNewLeadInterest("");
       setNewLeadCampaign("");
+      setNewLeadEntryDate(todayInputValue());
       setMessage(
         autoContext
           ? `Novo lead criado em Prospecção / d1. Contexto aplicado automaticamente: ${autoContext.name}.`
@@ -765,6 +775,7 @@ export function useComercialTrabalho({
           source: "manual",
           funnel: "prospeccao",
           diaProsp: "d1",
+          dataEntrada: createdLead.dataEntrada ?? null,
           commercialContextAutoApplied: Boolean(autoContext),
           commercialContextId: autoContext?.id ?? null,
           commercialContextName: autoContext?.name ?? null,
@@ -802,6 +813,7 @@ export function useComercialTrabalho({
       tel: input.tel.trim(),
       esp: input.esp?.trim() || "",
       campanha: input.campanha?.trim() || "",
+      dataEntrada: input.dataEntrada || selectedLead.dataEntrada || new Date().toISOString(),
       colAt: Date.now(),
     };
 
@@ -1574,6 +1586,8 @@ export function useComercialTrabalho({
     setNewLeadInterest,
     newLeadCampaign,
     setNewLeadCampaign,
+    newLeadEntryDate,
+    setNewLeadEntryDate,
     newLeadSuggestedContext,
     newLeadContextSuggestionMessage,
 

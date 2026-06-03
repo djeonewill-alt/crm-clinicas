@@ -13,6 +13,16 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
+function normalizeEntryDate(value: string | null | undefined, fallbackIso: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallbackIso;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return fallbackIso;
+
+  return trimmed;
+}
+
 function rowToLead(row: Record<string, unknown>): Lead {
   return {
     id: String(row.id ?? ""),
@@ -65,6 +75,7 @@ export async function updateLeadCommercialFields(input: {
       fechado: lead.fechado ?? false,
       retorno_data: lead.retornoData || null,
       valor: lead.valor ?? 0,
+      data_entrada: lead.dataEntrada || new Date().toISOString(),
       col_at: lead.colAt
         ? new Date(lead.colAt).toISOString()
         : new Date().toISOString(),
@@ -238,10 +249,12 @@ export async function createLeadForEmpresa(input: {
   esp?: string;
   campanha?: string;
   commercialContextId?: string | null;
+  dataEntrada?: string | null;
   tentativas: Tentativa[];
 }) {
   const supabase = createClient();
   const now = new Date().toISOString();
+  const dataEntrada = normalizeEntryDate(input.dataEntrada, now);
 
   const { data, error } = await supabase
     .from("leads")
@@ -258,7 +271,7 @@ export async function createLeadForEmpresa(input: {
       fechado: false,
       valor: 0,
       col_at: now,
-      data_entrada: now,
+      data_entrada: dataEntrada,
     })
     .select("*")
     .single();
@@ -277,6 +290,7 @@ export async function importLeadsForEmpresa(input: {
     tel: string;
     esp?: string;
     campanha?: string;
+    dataEntrada?: string | null;
   }>;
 }): Promise<Lead[]> {
   if (input.leads.length === 0) return [];
@@ -300,7 +314,7 @@ export async function importLeadsForEmpresa(input: {
     fechado: false,
     valor: 0,
     col_at: now,
-    data_entrada: now,
+    data_entrada: normalizeEntryDate(lead.dataEntrada, now),
   }));
 
   const { data, error } = await supabase
