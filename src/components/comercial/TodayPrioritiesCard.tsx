@@ -20,6 +20,7 @@ type PriorityGroup = {
   description: string;
   leads: Lead[];
   actionLabel: string;
+  badge: string;
   countOnly?: boolean;
 };
 
@@ -51,7 +52,6 @@ function parseLocalDate(value?: string | null) {
 
 function isTodayOrOverdue(value?: string | null) {
   const date = parseLocalDate(value);
-
   if (!date) return false;
 
   const today = new Date();
@@ -65,10 +65,7 @@ function isTodayOrOverdue(value?: string | null) {
 }
 
 function sortByOldestActivity(first: Lead, second: Lead) {
-  const firstValue = first.colAt ?? 0;
-  const secondValue = second.colAt ?? 0;
-
-  return firstValue - secondValue;
+  return (first.colAt ?? 0) - (second.colAt ?? 0);
 }
 
 function getGroups(leads: Lead[]): PriorityGroup[] {
@@ -109,30 +106,34 @@ function getGroups(leads: Lead[]): PriorityGroup[] {
     {
       id: "new-prospection",
       title: "Novos para primeiro contato",
-      description: "D1 sem tentativa concluída.",
+      description: "D1 sem tentativa concluida.",
       leads: newProspection,
-      actionLabel: "Fazer primeira ação",
+      actionLabel: "Fazer primeira acao",
+      badge: "Novo",
     },
     {
       id: "pending-prospection",
-      title: "Prospecção com tentativa pendente",
-      description: "Leads de prospecção com tentativa ainda aberta.",
+      title: "Prospeccao com tentativa pendente",
+      description: "Leads de prospeccao com tentativa ainda aberta.",
       leads: pendingProspection,
-      actionLabel: "Continuar prospecção",
+      actionLabel: "Continuar prospeccao",
+      badge: "Prospeccao",
     },
     {
       id: "qualification",
-      title: "Qualificação em andamento",
-      description: "Leads que já estão em qualificação.",
+      title: "Qualificacao em andamento",
+      description: "Leads que ja estao em qualificacao.",
       leads: qualification,
       actionLabel: "Continuar atendimento",
+      badge: "Qualificacao",
     },
     {
       id: "due-returns",
       title: "Retornos de hoje ou vencidos",
-      description: "Retornos com data até hoje.",
+      description: "Retornos com data ate hoje.",
       leads: dueReturns,
       actionLabel: "Retomar contato",
+      badge: "Retorno",
     },
     {
       id: "clients",
@@ -140,6 +141,7 @@ function getGroups(leads: Lead[]): PriorityGroup[] {
       description: "Contador simples de clientes carregados.",
       leads: clients,
       actionLabel: "Ver cliente",
+      badge: "Cliente",
       countOnly: true,
     },
   ];
@@ -159,6 +161,70 @@ function getCallPriorityClass(priority: CallPriorityItem["priority"]) {
   return "border-[var(--border2)] bg-[var(--bg2)] text-[var(--text2)]";
 }
 
+function getItemClass(active: boolean) {
+  return [
+    "block w-full rounded-lg border bg-[var(--bg3)] p-3 text-left transition",
+    "hover:border-[var(--accent)] hover:bg-[var(--bg4)]",
+    active
+      ? "border-[var(--accent)] ring-1 ring-[rgba(232,197,71,.35)]"
+      : "border-[var(--border2)]",
+  ].join(" ");
+}
+
+function OpenAction({ label }: { label: string }) {
+  return (
+    <span className="mt-3 inline-flex rounded-md border border-[var(--border2)] bg-[var(--bg2)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent)]">
+      {label}
+    </span>
+  );
+}
+
+function renderLeadItem(input: {
+  lead: Lead;
+  active: boolean;
+  label: string;
+  onSelectLead?: (lead: Lead) => void;
+  leadHref?: string;
+}) {
+  const { lead, active, label, onSelectLead, leadHref } = input;
+  const content = (
+    <>
+      <span className="block truncate text-xs font-semibold text-[var(--text)]">
+        {getLeadName(lead)}
+      </span>
+      {lead.tel && (
+        <span className="mt-1 block text-[11px] text-[var(--text3)]">
+          {lead.tel}
+        </span>
+      )}
+      <span className="mt-2 block text-[11px] text-[var(--text2)]">
+        {formatLeadMeta(lead)}
+      </span>
+      <OpenAction label={label} />
+    </>
+  );
+  const itemClass = getItemClass(active);
+
+  return onSelectLead ? (
+    <button
+      key={lead.id}
+      type="button"
+      onClick={() => onSelectLead(lead)}
+      className={itemClass}
+    >
+      {content}
+    </button>
+  ) : (
+    <Link
+      key={lead.id}
+      href={leadHref ?? "/comercial/trabalho"}
+      className={itemClass}
+    >
+      {content}
+    </Link>
+  );
+}
+
 export function TodayPrioritiesCard({
   leads,
   selectedLeadId = null,
@@ -166,7 +232,9 @@ export function TodayPrioritiesCard({
   leadHref,
 }: TodayPrioritiesCardProps) {
   const groups = getGroups(leads);
-  const recommendedCalls = getRecommendedCallLeads(leads).slice(0, MAX_CALL_ITEMS);
+  const callItems = getRecommendedCallLeads(leads);
+  const recommendedCalls = callItems.slice(0, MAX_CALL_ITEMS);
+  const hiddenCallCount = Math.max(callItems.length - recommendedCalls.length, 0);
   const totalPriorities = groups
     .filter((group) => !group.countOnly)
     .reduce((total, group) => total + group.leads.length, 0);
@@ -184,43 +252,103 @@ export function TodayPrioritiesCard({
         </div>
 
         <span className="rounded-full border border-[var(--border2)] bg-[var(--bg2)] px-3 py-1 text-xs font-semibold text-[var(--text2)]">
-          {totalPriorities} lead(s) com ação
+          {totalPriorities} lead(s) com acao
         </span>
       </div>
 
-      <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {groups.map((group) => {
+          const visibleLeads = group.leads.slice(0, MAX_ITEMS_PER_GROUP);
+          const hiddenCount = Math.max(group.leads.length - visibleLeads.length, 0);
+
+          return (
+            <div
+              key={group.id}
+              className="min-h-[220px] rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-[var(--text)]">
+                      {group.title}
+                    </p>
+                    <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text3)]">
+                      {group.badge}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text3)]">
+                    {group.description}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full border border-[var(--border2)] px-2 py-0.5 text-xs font-semibold text-[var(--text2)]">
+                  {group.leads.length}
+                </span>
+              </div>
+
+              {group.countOnly ? (
+                <p className="mt-3 text-xs text-[var(--text3)]">
+                  Sem acao automatica nesta base.
+                </p>
+              ) : visibleLeads.length > 0 ? (
+                <div className="mt-3 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                  {visibleLeads.map((lead) =>
+                    renderLeadItem({
+                      lead,
+                      active: String(selectedLeadId) === String(lead.id),
+                      label: leadHref ? "Abrir em Trabalho" : group.actionLabel,
+                      onSelectLead,
+                      leadHref,
+                    })
+                  )}
+
+                  {hiddenCount > 0 && (
+                    <p className="text-xs text-[var(--text3)]">
+                      + {hiddenCount} outro(s)
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-[var(--text3)]">
+                  Nada urgente aqui agora.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-[var(--text)]">
-              Ligações recomendadas
+              Ligacoes recomendadas
             </p>
             <p className="mt-1 text-xs text-[var(--text3)]">
-              Clientes que podem precisar de ligação agora, com base no funil,
-              retorno e tentativas.
+              Clientes que podem precisar de ligacao agora.
             </p>
           </div>
           <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-xs font-semibold text-[var(--text2)]">
-            {recommendedCalls.length}
+            {callItems.length}
           </span>
         </div>
 
         {recommendedCalls.length > 0 ? (
-          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          <div className="mt-3 grid max-h-[460px] grid-cols-1 gap-3 overflow-y-auto pr-1 lg:grid-cols-2 xl:grid-cols-3">
             {recommendedCalls.map((item) => {
               const active = String(selectedLeadId) === String(item.leadId);
               const content = (
                 <>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <span className="block truncate text-xs font-semibold text-[var(--text)]">
                         {item.nome}
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-[var(--text3)]">
+                      <span className="mt-1 block text-[11px] text-[var(--text3)]">
                         {item.tel}
                       </span>
                     </div>
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${getCallPriorityClass(
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${getCallPriorityClass(
                         item.priority
                       )}`}
                     >
@@ -233,7 +361,7 @@ export function TodayPrioritiesCard({
                       {item.funnel}
                     </span>
                     <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
-                      {item.hasCallToday ? "ligação já feita hoje" : "sem ligação hoje"}
+                      {item.hasCallToday ? "ligacao ja feita hoje" : "sem ligacao hoje"}
                     </span>
                     {item.hasMessageToday && (
                       <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-[10px] text-[var(--text2)]">
@@ -242,19 +370,13 @@ export function TodayPrioritiesCard({
                     )}
                   </div>
 
-                  <p className="mt-2 text-[11px] text-[var(--text2)]">
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--text2)]">
                     {item.reason}
                   </p>
-                  <p className="mt-1 text-[11px] font-semibold text-[var(--accent)]">
-                    {leadHref ? "Abrir em Trabalho" : item.actionLabel}
-                  </p>
+                  <OpenAction label={leadHref ? "Abrir em Trabalho" : item.actionLabel} />
                 </>
               );
-              const itemClass = `w-full rounded-lg border px-3 py-2 text-left transition ${
-                active
-                  ? "border-[var(--accent)] bg-[rgba(232,197,71,.10)]"
-                  : "border-[var(--border2)] bg-[var(--bg3)] hover:border-[var(--accent)]"
-              }`;
+              const itemClass = getItemClass(active);
 
               return onSelectLead ? (
                 <button
@@ -278,107 +400,16 @@ export function TodayPrioritiesCard({
           </div>
         ) : (
           <p className="mt-3 text-xs text-[var(--text3)]">
-            Sem ligações recomendadas agora.
+            Sem ligacoes recomendadas agora.
+          </p>
+        )}
+
+        {hiddenCallCount > 0 && (
+          <p className="mt-3 text-xs text-[var(--text3)]">
+            + {hiddenCallCount} outro(s)
           </p>
         )}
       </div>
-
-      <div className="mt-4 grid gap-3 xl:grid-cols-5">
-        {groups.map((group) => {
-          const visibleLeads = group.leads.slice(0, MAX_ITEMS_PER_GROUP);
-          const hiddenCount = Math.max(
-            group.leads.length - visibleLeads.length,
-            0
-          );
-
-          return (
-            <div
-              key={group.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg2)] p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text)]">
-                    {group.title}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--text3)]">
-                    {group.description}
-                  </p>
-                </div>
-                <span className="rounded-full border border-[var(--border2)] px-2 py-0.5 text-xs font-semibold text-[var(--text2)]">
-                  {group.leads.length}
-                </span>
-              </div>
-
-              {group.countOnly ? (
-                <p className="mt-3 text-xs text-[var(--text3)]">
-                  Sem ação automática nesta base.
-                </p>
-              ) : visibleLeads.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  {visibleLeads.map((lead) => {
-                    const active = String(selectedLeadId) === String(lead.id);
-
-                    const content = (
-                      <>
-                        <span className="block truncate text-xs font-semibold text-[var(--text)]">
-                          {getLeadName(lead)}
-                        </span>
-                        {lead.tel && (
-                          <span className="mt-0.5 block truncate text-[11px] text-[var(--text3)]">
-                            {lead.tel}
-                          </span>
-                        )}
-                        <span className="mt-1 block text-[11px] text-[var(--text2)]">
-                          {formatLeadMeta(lead)}
-                        </span>
-                        <span className="mt-1 block text-[11px] font-semibold text-[var(--accent)]">
-                          {leadHref ? "Abrir em Trabalho" : group.actionLabel}
-                        </span>
-                      </>
-                    );
-                    const itemClass = `w-full rounded-lg border px-3 py-2 text-left transition ${
-                      active
-                        ? "border-[var(--accent)] bg-[rgba(232,197,71,.10)]"
-                        : "border-[var(--border2)] bg-[var(--bg3)] hover:border-[var(--accent)]"
-                    }`;
-
-                    return onSelectLead ? (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        onClick={() => onSelectLead(lead)}
-                        className={itemClass}
-                      >
-                        {content}
-                      </button>
-                    ) : (
-                      <Link key={lead.id} href={leadHref ?? "/comercial/trabalho"} className={itemClass}>
-                        {content}
-                      </Link>
-                    );
-                  })}
-
-                  {hiddenCount > 0 && (
-                    <p className="text-xs text-[var(--text3)]">
-                      + {hiddenCount} outro(s)
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-[var(--text3)]">
-                  Nada urgente aqui agora.
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="mt-3 text-xs text-[var(--text3)]">
-        Cliente respondeu - qualificar depende de histórico global e fica para
-        uma próxima base.
-      </p>
     </section>
   );
 }

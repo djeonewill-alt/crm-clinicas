@@ -5,7 +5,6 @@ import { FunnelStatCards } from "@/components/comercial/FunnelStatCards";
 import { LeadQueue } from "@/components/comercial/LeadQueue";
 import { LeadDetail } from "@/components/comercial/LeadDetail";
 import { ComercialWorkHeader } from "@/components/comercial/ComercialWorkHeader";
-import { TodayPrioritiesCard } from "@/components/comercial/TodayPrioritiesCard";
 import { useComercialTrabalho } from "@/components/comercial/useComercialTrabalho";
 import type {
   CommercialResponse,
@@ -100,12 +99,6 @@ export function ComercialTrabalhoClient({
           queuesByFunnel={comercial.queuesByFunnel}
           rawCounts={comercial.rawCounts}
           onChangeFunnel={comercial.handleChangeFunnel}
-        />
-
-        <TodayPrioritiesCard
-          leads={comercial.leads}
-          selectedLeadId={comercial.selectedLead?.id ?? null}
-          onSelectLead={(lead) => comercial.setSelectedLeadId(lead.id)}
         />
 
         <LeadDetail
