@@ -18,6 +18,13 @@ import {
   isDuplicateHistoryEvent,
 } from "@/lib/comercial/history-duplicates";
 import {
+  PROSPECTING_CADENCE_ACTIONS,
+  getCadenceHistoryMetadata,
+  getProspectingScript,
+  isPostCallMessageAction,
+  type ProspectingCadenceAction,
+} from "@/lib/comercial/prospecting-cadence";
+import {
   getQualificationJourneyState,
   getQualificationTimelineStateForAI,
   type QualificationTimelineStateForAI,
@@ -139,6 +146,11 @@ type LeadAssistedServicePanelProps = {
   currentJourneyStep?: string | null;
   currentCommercialContext?: CommercialContext | null;
   leadHistory?: LeadHistoryItem[];
+  prefillCadenceReply?: {
+    text: string;
+    action: ProspectingCadenceAction;
+    version: number;
+  } | null;
   commercialResponseCategories: CommercialResponseCategory[];
   commercialResponses: CommercialResponse[];
 };
@@ -563,6 +575,7 @@ export function LeadAssistedServicePanel({
   currentJourneyStep,
   currentCommercialContext,
   leadHistory = [],
+  prefillCadenceReply,
   commercialResponseCategories,
   commercialResponses,
 }: LeadAssistedServicePanelProps) {
@@ -646,6 +659,8 @@ export function LeadAssistedServicePanel({
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [callScriptResult, setCallScriptResult] =
     useState<CallScriptResult | null>(null);
+  const [pendingCadenceAction, setPendingCadenceAction] =
+    useState<ProspectingCadenceAction | null>(null);
   const [isGeneratingCallScript, setIsGeneratingCallScript] = useState(false);
   const [callScriptError, setCallScriptError] = useState("");
   const journeyState = useMemo(
@@ -785,9 +800,23 @@ export function LeadAssistedServicePanel({
     setCallScriptResult(null);
     setIsGeneratingCallScript(false);
     setCallScriptError("");
+    setPendingCadenceAction(null);
     setShowApprovedResponseForm(false);
     resetApprovedResponseForm();
   }, [leadId]);
+
+  useEffect(() => {
+    if (!prefillCadenceReply?.text.trim()) return;
+
+    setReplyText(prefillCadenceReply.text);
+    setPendingCadenceAction(prefillCadenceReply.action);
+    setSuggestionMatch(null);
+    setNextActionSuggestion(null);
+    resetAiAdaptationState();
+    setStatusMessage(
+      `${prefillCadenceReply.action.dayLabel} — ${prefillCadenceReply.action.label} aplicado na resposta. Envie manualmente no WhatsApp e depois registre como enviada.`
+    );
+  }, [prefillCadenceReply?.version]);
 
   useEffect(() => {
     if (!showMaterialSentForm || materialSentMode !== "catalog") return;
@@ -1445,10 +1474,63 @@ export function LeadAssistedServicePanel({
     }
   }
 
+  function getPostCallActionAfterNoAnswer() {
+    const priorCallCount = leadHistory.filter(
+      (item) => item.metadata?.event === "call_logged"
+    ).length;
+    const actionKey =
+      priorCallCount >= 1 ? "d4_final_message" : "d2_post_call_message";
+
+    return (
+      PROSPECTING_CADENCE_ACTIONS.find((action) => action.key === actionKey) ??
+      null
+    );
+  }
+
+  async function handleCallLoggedAttempt(input: {
+    callResult?: string;
+    note?: string;
+  }) {
+    const result = await onCallLoggedAttempt?.(input);
+    const normalizedResult = normalizeCommercialSearchText(input.callResult ?? "");
+    const shouldPreparePostCall =
+      currentFunnel === "prospeccao" &&
+      ["no answer", "no_answer", "nao atendeu", "nao-atendeu"].some((value) =>
+        normalizedResult.includes(value)
+      );
+
+    if (shouldPreparePostCall) {
+      const action = getPostCallActionAfterNoAnswer();
+      const script = getProspectingScript(action);
+
+      if (action && isPostCallMessageAction(action) && script) {
+        setReplyText(script);
+        setPendingCadenceAction(action);
+        setSuggestionMatch(null);
+        setNextActionSuggestion(null);
+        resetAiAdaptationState();
+        setStatusMessage(
+          `Ligação registrada. Próxima ação: enviar ${action.label.toLowerCase()}. O script já foi aplicado na resposta.`
+        );
+      }
+    }
+
+    return (
+      result ?? {
+        marked: false,
+        message: "Ligação registrada.",
+      }
+    );
+  }
+
   async function handleRegisterReplySent() {
     const trimmedReply = replyText.trim();
+    const cadenceMetadata = pendingCadenceAction
+      ? getCadenceHistoryMetadata(pendingCadenceAction)
+      : null;
+    const eventName = cadenceMetadata?.event ?? "commercial_reply_sent";
     const metadata = {
-      event: "commercial_reply_sent",
+      event: eventName,
       source: "whatsapp_manual",
       sendMode: "manual_whatsapp_desktop",
       channel: "whatsapp",
@@ -1475,6 +1557,7 @@ export function LeadAssistedServicePanel({
       },
       requiresHumanReview:
         aiRequiresHumanReview || suggestionMatch?.response.requiresHuman === true,
+      ...(cadenceMetadata ?? {}),
     };
 
     if (!trimmedReply) {
@@ -1484,7 +1567,7 @@ export function LeadAssistedServicePanel({
 
     if (
       hasDuplicateEvent({
-        eventName: "commercial_reply_sent",
+        eventName,
         description: trimmedReply,
         metadata,
       })
@@ -1508,7 +1591,7 @@ export function LeadAssistedServicePanel({
       });
 
       rememberSavedEvent({
-        eventName: "commercial_reply_sent",
+        eventName,
         description: trimmedReply,
         metadata,
       });
@@ -1526,6 +1609,7 @@ export function LeadAssistedServicePanel({
       }
 
       setReplyText("");
+      setPendingCadenceAction(null);
       setSuggestionMatch(null);
       setNextActionSuggestion(null);
       resetAiAdaptationState();
@@ -3359,7 +3443,7 @@ export function LeadAssistedServicePanel({
               leadId={leadId}
               empresaId={empresaId}
               onHistoryChanged={onHistoryChanged}
-              onCallLoggedAttempt={onCallLoggedAttempt}
+              onCallLoggedAttempt={handleCallLoggedAttempt}
             />
           </div>
         )}

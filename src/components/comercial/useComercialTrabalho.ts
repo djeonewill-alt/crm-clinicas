@@ -446,23 +446,29 @@ export function useComercialTrabalho({
     const preferred = filteredLeads.find(
       (lead) => String(lead.id) === String(selectedLeadId)
     );
+    const selectedOutsideCurrentQueue = leads.find(
+      (lead) => String(lead.id) === String(selectedLeadId)
+    );
 
-    return preferred ?? filteredLeads[0] ?? null;
-  }, [filteredLeads, selectedLeadId]);
+    return preferred ?? selectedOutsideCurrentQueue ?? filteredLeads[0] ?? null;
+  }, [filteredLeads, leads, selectedLeadId]);
 
   useEffect(() => {
     const isSelectedLeadVisible = filteredLeads.some(
       (lead) => String(lead.id) === String(selectedLeadId)
     );
+    const selectedLeadStillExists = leads.some(
+      (lead) => String(lead.id) === String(selectedLeadId)
+    );
 
-    if (isSelectedLeadVisible) return;
+    if (isSelectedLeadVisible || selectedLeadStillExists) return;
 
     const nextSelectedLeadId = filteredLeads[0]?.id ?? null;
 
     if (String(selectedLeadId) === String(nextSelectedLeadId)) return;
 
     setSelectedLeadId(nextSelectedLeadId);
-  }, [filteredLeads, selectedLeadId]);
+  }, [filteredLeads, leads, selectedLeadId]);
 
   useEffect(() => {
     if (!selectedLead) {
@@ -955,6 +961,8 @@ export function useComercialTrabalho({
   ) {
     const tentativas = ensureTentativasForLead(lead);
     const now = new Date();
+    const tentativaAtual = tentativas[tentativaIndex];
+    const attemptType = String(tentativaAtual?.tipo ?? "");
 
     const updatedTentativas = tentativas.map((tentativa, index) => {
       if (index !== tentativaIndex) return tentativa;
@@ -995,6 +1003,7 @@ export function useComercialTrabalho({
         metadata: {
           event: "attempt_recorded",
           tentativaIndex,
+          attemptType,
           resultado,
         },
       });

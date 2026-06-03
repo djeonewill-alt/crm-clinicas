@@ -209,6 +209,11 @@ export function buildDailyCommercialReport({
     ({ event }) => event === "customer_message_received"
   );
   const postCallItems = eventItems.filter(({ event }) => event === "post_call_message_sent");
+  const prospectingCadenceMessageItems = eventItems.filter(
+    ({ event }) =>
+      event === "prospecting_followup_message_sent" ||
+      event === "prospecting_final_message_sent"
+  );
   const commercialReplyItems = eventItems.filter(
     ({ event }) => event === "commercial_reply_sent"
   );
@@ -291,7 +296,10 @@ export function buildDailyCommercialReport({
     ),
     campaignSummary,
     production: {
-      messagesSent: commercialReplyItems.length + postCallItems.length,
+      messagesSent:
+        commercialReplyItems.length +
+        postCallItems.length +
+        prospectingCadenceMessageItems.length,
       customerReplies: customerReplyItems.length,
       callsMade: callItems.length,
       callsNoAnswer: historyToday.filter(isNoAnswerCall).length,

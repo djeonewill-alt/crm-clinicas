@@ -2,6 +2,7 @@ import {
   getQualificationTimelineStateForAI,
   type QualificationTimelineStateForAI,
 } from "@/lib/comercial/qualification-journey";
+import { PROSPECTING_CADENCE_ACTIONS, getProspectingScript } from "@/lib/comercial/prospecting-cadence";
 import type { Lead } from "@/types/lead";
 import type { LeadHistoryItem } from "@/types/lead-history";
 
@@ -229,7 +230,12 @@ function buildPostCallMessage(input: {
     return "Conforme conversamos, antes de avancar para reserva eu te explico por aqui os valores e a divisao das regioes para ficar tudo claro.";
   }
 
-  return "Oi, tudo bem? Tentei te ligar rapidinho para te orientar sobre o tratamento de estrias e tirar suas duvidas. Quando puder, me responde por aqui que eu te ajudo a seguir.";
+  return (
+    getProspectingScript(
+      PROSPECTING_CADENCE_ACTIONS.find((action) => action.key === "d2_post_call_message")
+    ) ||
+    "Oi, tudo bem? Tentei te ligar rapidinho para te orientar sobre o tratamento de estrias e tirar suas duvidas. Quando puder, me responde por aqui que eu te ajudo a seguir."
+  );
 }
 
 export function buildLeadCallScript(input: {

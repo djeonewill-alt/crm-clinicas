@@ -10,6 +10,12 @@ import { LeadHistory } from "@/components/comercial/LeadHistory";
 import { TentativasList } from "@/components/comercial/TentativasList";
 import { FUNNELS } from "@/lib/constants/crm";
 import {
+  PROSPECTING_CADENCE_ACTIONS,
+  getProspectingCadenceState,
+  getProspectingScript,
+  type ProspectingCadenceAction,
+} from "@/lib/comercial/prospecting-cadence";
+import {
   canMoveLeadToPreviousDay,
   ensureTentativasForLead,
   getAttemptProgress,
@@ -144,6 +150,11 @@ export function LeadDetail({
 }: LeadDetailProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
+  const [cadenceReplyDraft, setCadenceReplyDraft] = useState<{
+    text: string;
+    action: ProspectingCadenceAction;
+    version: number;
+  } | null>(null);
   const [closeForm, setCloseForm] = useState<CloseClientInput>(
     createInitialCloseForm
   );
@@ -165,6 +176,39 @@ export function LeadDetail({
     commercialContexts.find(
       (context) => context.id === lead.commercialContextId
     ) ?? null;
+  const prospectingCadence = getProspectingCadenceState(lead, leadHistory);
+  const nextCadenceScript = getProspectingScript(prospectingCadence.nextAction);
+  async function handleSetResultadoWithCadence(
+    currentLead: Lead,
+    tentativaIndex: number,
+    resultado: string
+  ) {
+    await onSetResultado(currentLead, tentativaIndex, resultado);
+
+    const tentativa = tentativas[tentativaIndex];
+    const isNoAnswerCall =
+      currentLead.funnel === "prospeccao" &&
+      String(tentativa?.tipo ?? "") === "ligacao" &&
+      resultado === "nao-atendeu";
+
+    if (!isNoAnswerCall) return;
+
+    const actionKey =
+      prospectingCadence.steps.find((step) => step.key === "d2_call" && !step.done)
+        ? "d2_post_call_message"
+        : "d4_final_message";
+    const action =
+      PROSPECTING_CADENCE_ACTIONS.find((item) => item.key === actionKey) ?? null;
+    const script = getProspectingScript(action);
+
+    if (!action || !script) return;
+
+    setCadenceReplyDraft({
+      text: script,
+      action,
+      version: Date.now(),
+    });
+  }
 
   return (
     <div className="rounded-2xl border border-[var(--border2)] bg-[var(--bg2)] p-5">
@@ -459,6 +503,61 @@ export function LeadDetail({
         }
       />
 
+      {lead.funnel === "prospeccao" && (
+        <section className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--bg3)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+                Próxima ação da prospecção
+              </p>
+              <h3 className="mt-1 text-sm font-semibold">
+                {prospectingCadence.nextAction.dayLabel} —{" "}
+                {prospectingCadence.nextAction.label}
+              </h3>
+              <p className="mt-1 text-xs text-[var(--text2)]">
+                {prospectingCadence.isComplete
+                  ? "Cadência completa. Se não houver resposta após aguardar, mova para Futuro/Recuperação manualmente."
+                  : `${prospectingCadence.completedCount}/${prospectingCadence.totalActionCount} ações concluídas.`}
+              </p>
+            </div>
+
+            {nextCadenceScript && (
+              <button
+                type="button"
+                onClick={() =>
+                  setCadenceReplyDraft({
+                    text: nextCadenceScript,
+                    action: prospectingCadence.nextAction,
+                    version: Date.now(),
+                  })
+                }
+                className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.12)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.18)]"
+              >
+                Usar script na resposta
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {prospectingCadence.steps
+              .filter((step) => step.type !== "manual_move")
+              .map((step) => (
+                <div
+                  key={step.key}
+                  className={
+                    step.done
+                      ? "rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-200"
+                      : "rounded-lg border border-[var(--border2)] bg-[var(--bg2)] px-3 py-2 text-xs text-[var(--text2)]"
+                  }
+                >
+                  <span className="font-semibold">{step.dayLabel}</span> ·{" "}
+                  {step.label}
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
+
       <LeadAssistedServicePanel
         lead={lead}
         leadId={lead.id}
@@ -491,6 +590,7 @@ export function LeadDetail({
         currentJourneyStep={lead.diaProsp}
         currentCommercialContext={currentCommercialContext}
         leadHistory={leadHistory}
+        prefillCadenceReply={cadenceReplyDraft}
         commercialResponseCategories={commercialResponseCategories}
         commercialResponses={commercialResponses}
         onCreateNote={onCreateLeadNote}
@@ -517,7 +617,7 @@ export function LeadDetail({
         lead={lead}
         tentativas={tentativas}
         savingLeadId={savingLeadId}
-        onSetResultado={onSetResultado}
+        onSetResultado={handleSetResultadoWithCadence}
       />
 
       <LeadHistory
