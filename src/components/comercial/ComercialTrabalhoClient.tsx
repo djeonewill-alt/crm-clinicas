@@ -43,6 +43,8 @@ export function ComercialTrabalhoClient({
         activeFunnelLabel={comercial.activeFunnel.label}
         queuesByFunnel={comercial.queuesByFunnel}
         queueLeads={comercial.filteredLeads}
+        globalSearchResults={comercial.globalSearchResults}
+        isGlobalSearchLoading={comercial.isGlobalSearchLoading}
         hiddenCount={comercial.hiddenCount}
         filteredCount={comercial.filteredCount}
         selectedLeadId={comercial.selectedLead?.id ?? null}
@@ -59,7 +61,8 @@ export function ComercialTrabalhoClient({
         onCampaignChange={comercial.setSelectedCampaign}
         onInterestChange={comercial.setSelectedInterest}
         onClearFilters={comercial.clearFilters}
-        onSelectLead={comercial.setSelectedLeadId}
+        onSelectLead={comercial.handleSelectLeadFromQueue}
+        onSelectGlobalLead={comercial.handleOpenGlobalSearchLead}
         getLeadName={comercial.getLeadName}
         getLastAction={comercial.getLastAction}
       />
@@ -71,9 +74,7 @@ export function ComercialTrabalhoClient({
           queueCount={comercial.queueCount}
           hiddenCount={comercial.hiddenCount}
           message={comercial.message}
-          onToggleNewLeadForm={() =>
-            comercial.setShowNewLeadForm((current) => !current)
-          }
+          onToggleNewLeadForm={comercial.handleOpenNewLeadForm}
         />
 
         {comercial.showNewLeadForm && (
@@ -135,6 +136,9 @@ export function ComercialTrabalhoClient({
           onUpdateLeadDetails={comercial.handleUpdateLeadDetails}
           onSetResultado={comercial.handleSetResultado}
           onMarkNextLeadAttempt={comercial.handleMarkNextLeadAttempt}
+          onRegisterNoAnswerWithPostMessage={
+            comercial.handleRegisterNoAnswerWithPostMessage
+          }
           onCreateLeadNote={comercial.handleCreateLeadNote}
           onRefreshLeadHistory={comercial.loadLeadHistory}
           onAdvanceQueue={comercial.handleAdvanceQueue}

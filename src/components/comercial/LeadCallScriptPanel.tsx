@@ -8,6 +8,7 @@ import type { LeadHistoryItem } from "@/types/lead-history";
 type LeadCallScriptPanelProps = {
   lead: Lead;
   leadHistory: LeadHistoryItem[];
+  onRegisterNoAnswerWithPostMessage?: (message: string) => Promise<void> | void;
 };
 
 function SectionList({
@@ -62,9 +63,11 @@ function buildCopyText(script: ReturnType<typeof buildLeadCallScript>) {
 export function LeadCallScriptPanel({
   lead,
   leadHistory,
+  onRegisterNoAnswerWithPostMessage,
 }: LeadCallScriptPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
+  const [isRegisteringPostCall, setIsRegisteringPostCall] = useState(false);
   const script = useMemo(
     () => buildLeadCallScript({ lead, history: leadHistory }),
     [lead, leadHistory]
@@ -77,6 +80,32 @@ export function LeadCallScriptPanel({
       window.setTimeout(() => setCopyMessage(""), 2500);
     } catch {
       setCopyMessage("Não foi possível copiar automaticamente.");
+    }
+  }
+
+  async function handleRegisterNoAnswerWithPostMessage() {
+    if (!onRegisterNoAnswerWithPostMessage) return;
+
+    const confirmed = window.confirm(
+      "Confirma que a ligação não foi atendida e que você já enviou manualmente a mensagem pós-ligação no WhatsApp?"
+    );
+
+    if (!confirmed) return;
+
+    setIsRegisteringPostCall(true);
+    setCopyMessage("");
+
+    try {
+      await onRegisterNoAnswerWithPostMessage(script.postCallWhatsAppMessage);
+      setCopyMessage("Ligação não atendida e mensagem pós-ligação registradas.");
+    } catch (error) {
+      setCopyMessage(
+        error instanceof Error
+          ? `Erro ao registrar: ${error.message}`
+          : "Erro ao registrar ação combinada."
+      );
+    } finally {
+      setIsRegisteringPostCall(false);
     }
   }
 
@@ -118,6 +147,18 @@ export function LeadCallScriptPanel({
               >
                 Copiar mensagem pós-ligação
               </button>
+              {onRegisterNoAnswerWithPostMessage && (
+                <button
+                  type="button"
+                  disabled={isRegisteringPostCall}
+                  onClick={() => void handleRegisterNoAnswerWithPostMessage()}
+                  className="rounded-lg border border-[var(--accent)] bg-[rgba(232,197,71,.08)] px-3 py-2 text-xs font-semibold text-[var(--accent)] hover:bg-[rgba(232,197,71,.14)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRegisteringPostCall
+                    ? "Registrando..."
+                    : "Registrar não atendida + mensagem enviada"}
+                </button>
+              )}
             </>
           )}
         </div>

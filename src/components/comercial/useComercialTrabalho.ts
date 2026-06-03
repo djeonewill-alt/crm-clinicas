@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
 import { resolveCommercialContextForCampaign } from "@/lib/comercial/commercial-context-resolver";
+import { normalizePhoneDigits, phoneMatchesSearch } from "@/lib/comercial/phone";
 import {
   createLeadHistoryEvent,
   createLeadHistoryNote,
   listLeadHistory,
 } from "@/lib/services/lead-history-client";
+import { createClient } from "@/lib/supabase/client";
 import {
   archiveLeadById,
   createLeadForEmpresa,
@@ -105,6 +107,7 @@ function formatDate(value?: string | null) {
 function leadMatchesSearch(lead: Lead, normalizedSearch: string) {
   if (!normalizedSearch) return true;
 
+  const queryDigits = normalizePhoneDigits(normalizedSearch);
   const searchable = [
     lead.nome,
     lead.tel,
@@ -117,7 +120,10 @@ function leadMatchesSearch(lead: Lead, normalizedSearch: string) {
     .join(" ")
     .toLowerCase();
 
-  return searchable.includes(normalizedSearch);
+  return (
+    searchable.includes(normalizedSearch) ||
+    (queryDigits.length > 0 && phoneMatchesSearch(lead.tel, queryDigits))
+  );
 }
 
 function normalizeFilterValue(value?: string | null) {
@@ -235,6 +241,8 @@ export function useComercialTrabalho({
   const [isLoadingLeadHistory, setIsLoadingLeadHistory] = useState(false);
   const [isSavingLeadHistory, setIsSavingLeadHistory] = useState(false);
   const [leadHistoryError, setLeadHistoryError] = useState<string | null>(null);
+  const [globalSearchResults, setGlobalSearchResults] = useState<Lead[]>([]);
+  const [isGlobalSearchLoading, setIsGlobalSearchLoading] = useState(false);
   const normalizedSearch = search.trim().toLowerCase();
   const hasActiveSearch = normalizedSearch.length > 0;
   const hasActiveFilters =
@@ -330,6 +338,108 @@ export function useComercialTrabalho({
   const hiddenCount =
     listMode === "smart" ? Math.max(rawCount - queueCount, 0) : 0;
 
+  useEffect(() => {
+    const query = search.trim();
+
+    if (query.length < 3) {
+      setGlobalSearchResults([]);
+      setIsGlobalSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function searchGlobalLeads() {
+      setIsGlobalSearchLoading(true);
+
+      try {
+        const supabase = createClient();
+        const queryDigits = normalizePhoneDigits(query);
+        const orFilters = [`nome.ilike.%${query}%`, `tel.ilike.%${query}%`];
+
+        if (queryDigits) {
+          orFilters.push(`tel.ilike.%${queryDigits}%`);
+          if (queryDigits.length >= 4) {
+            orFilters.push(`tel.ilike.%${queryDigits.slice(-4)}%`);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("empresa_id", empresaId)
+          .is("archived_at", null)
+          .or(orFilters.join(","))
+          .order("col_at", { ascending: true })
+          .limit(20);
+
+        if (error) throw new Error(error.message);
+
+        const mapped = (data ?? []).map((row) => ({
+          id: String(row.id ?? ""),
+          nome: String(row.nome ?? ""),
+          tel: String(row.tel ?? ""),
+          funnel: String(row.funnel ?? "prospeccao") as Lead["funnel"],
+          diaProsp: String(row.dia_prosp ?? "d1"),
+          esp: String(row.esp ?? ""),
+          campanha: String(row.campanha ?? ""),
+          commercialContextId: row.commercial_context_id
+            ? String(row.commercial_context_id)
+            : null,
+          valor: Number(row.valor ?? 0),
+          fechado: row.fechado === true,
+          archivedAt: row.archived_at ? String(row.archived_at) : null,
+          retornoData: row.retorno_data ? String(row.retorno_data) : null,
+          tentativas: Array.isArray(row.tentativas) ? row.tentativas : [],
+          dataEntrada: row.data_entrada ? String(row.data_entrada) : null,
+          colAt: row.col_at ? new Date(String(row.col_at)).getTime() : Date.now(),
+          respondeuAt: row.respondeu_at
+            ? new Date(String(row.respondeu_at)).getTime()
+            : null,
+          prospectadoEm: row.prospectado_em
+            ? new Date(String(row.prospectado_em)).getTime()
+            : null,
+          qualificadoEm: row.qualificado_em
+            ? new Date(String(row.qualificado_em)).getTime()
+            : null,
+          fechadoEm: row.fechado_em
+            ? new Date(String(row.fechado_em)).getTime()
+            : null,
+        }));
+
+        const localIds = new Set(leads.map((lead) => String(lead.id)));
+        const visibleIds = new Set(filteredLeads.map((lead) => String(lead.id)));
+        const filtered = mapped.filter(
+          (lead) =>
+            !visibleIds.has(String(lead.id)) &&
+            (lead.nome.toLowerCase().includes(normalizedSearch) ||
+              lead.tel.toLowerCase().includes(normalizedSearch) ||
+              phoneMatchesSearch(lead.tel, query))
+        );
+
+        if (cancelled) return;
+
+        setGlobalSearchResults(
+          filtered.map((lead) =>
+            localIds.has(String(lead.id))
+              ? leads.find((item) => String(item.id) === String(lead.id)) ?? lead
+              : lead
+          )
+        );
+      } catch {
+        if (!cancelled) setGlobalSearchResults([]);
+      } finally {
+        if (!cancelled) setIsGlobalSearchLoading(false);
+      }
+    }
+
+    const timeout = window.setTimeout(() => void searchGlobalLeads(), 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [empresaId, filteredLeads, leads, normalizedSearch, search]);
+
   const selectedLead = useMemo(() => {
     const preferred = filteredLeads.find(
       (lead) => String(lead.id) === String(selectedLeadId)
@@ -405,6 +515,40 @@ export function useComercialTrabalho({
     }
 
     setSelectedLeadId(lead.id);
+  }
+
+  function handleSelectLeadFromQueue(leadId: string | number) {
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
+    setSelectedLeadId(leadId);
+  }
+
+  function handleOpenGlobalSearchLead(lead: Lead) {
+    const targetFunnel = FUNNELS.find((funnel) => funnel.id === lead.funnel);
+
+    setLeads((current) =>
+      current.some((item) => String(item.id) === String(lead.id))
+        ? current
+        : [lead, ...current]
+    );
+    setListMode("all");
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
+
+    if (targetFunnel) {
+      setWorkFunnel(targetFunnel.id);
+    }
+
+    setSelectedLeadId(lead.id);
+  }
+
+  function handleOpenNewLeadForm() {
+    setSearch("");
+    setSelectedCampaign(FILTER_ALL);
+    setSelectedInterest(FILTER_ALL);
+    setShowNewLeadForm((current) => !current);
   }
 
   function clearSearch() {
@@ -493,6 +637,93 @@ export function useComercialTrabalho({
     setSavingLeadId("new-lead");
 
     try {
+      const phoneDigits = normalizePhoneDigits(newLeadPhone);
+      const localDuplicate = phoneDigits
+        ? [...leads, ...globalSearchResults].find((lead) =>
+            phoneMatchesSearch(lead.tel, phoneDigits)
+          )
+        : null;
+
+      if (localDuplicate) {
+        const shouldOpen = window.confirm(
+          "Já existe um lead com esse telefone. Deseja abrir o lead existente?"
+        );
+
+        if (shouldOpen) {
+          handleOpenGlobalSearchLead(localDuplicate);
+        }
+
+        setMessage("Cadastro cancelado para evitar duplicidade.");
+        return;
+      }
+
+      if (phoneDigits.length >= 4) {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("empresa_id", empresaId)
+          .is("archived_at", null)
+          .or(`tel.ilike.%${phoneDigits}%,tel.ilike.%${phoneDigits.slice(-4)}%`)
+          .limit(10);
+
+        if (error) throw new Error(error.message);
+
+        const duplicateRow = (data ?? []).find((row) =>
+          phoneMatchesSearch(String(row.tel ?? ""), phoneDigits)
+        );
+
+        if (duplicateRow) {
+          const duplicateLead: Lead = {
+            id: String(duplicateRow.id ?? ""),
+            nome: String(duplicateRow.nome ?? ""),
+            tel: String(duplicateRow.tel ?? ""),
+            funnel: String(duplicateRow.funnel ?? "prospeccao") as Lead["funnel"],
+            diaProsp: String(duplicateRow.dia_prosp ?? "d1"),
+            esp: String(duplicateRow.esp ?? ""),
+            campanha: String(duplicateRow.campanha ?? ""),
+            commercialContextId: duplicateRow.commercial_context_id
+              ? String(duplicateRow.commercial_context_id)
+              : null,
+            valor: Number(duplicateRow.valor ?? 0),
+            fechado: duplicateRow.fechado === true,
+            archivedAt: duplicateRow.archived_at ? String(duplicateRow.archived_at) : null,
+            retornoData: duplicateRow.retorno_data ? String(duplicateRow.retorno_data) : null,
+            tentativas: Array.isArray(duplicateRow.tentativas)
+              ? duplicateRow.tentativas
+              : [],
+            dataEntrada: duplicateRow.data_entrada
+              ? String(duplicateRow.data_entrada)
+              : null,
+            colAt: duplicateRow.col_at
+              ? new Date(String(duplicateRow.col_at)).getTime()
+              : Date.now(),
+            respondeuAt: duplicateRow.respondeu_at
+              ? new Date(String(duplicateRow.respondeu_at)).getTime()
+              : null,
+            prospectadoEm: duplicateRow.prospectado_em
+              ? new Date(String(duplicateRow.prospectado_em)).getTime()
+              : null,
+            qualificadoEm: duplicateRow.qualificado_em
+              ? new Date(String(duplicateRow.qualificado_em)).getTime()
+              : null,
+            fechadoEm: duplicateRow.fechado_em
+              ? new Date(String(duplicateRow.fechado_em)).getTime()
+              : null,
+          };
+          const shouldOpen = window.confirm(
+            "Já existe um lead com esse telefone. Deseja abrir o lead existente?"
+          );
+
+          if (shouldOpen) {
+            handleOpenGlobalSearchLead(duplicateLead);
+          }
+
+          setMessage("Cadastro cancelado para evitar duplicidade.");
+          return;
+        }
+      }
+
       const contextResolution = resolveCommercialContextForCampaign({
         campaign: newLeadCampaign,
         contexts: commercialContexts,
@@ -511,6 +742,7 @@ export function useComercialTrabalho({
       setLeads((current) => [createdLead, ...current]);
       setWorkFunnel("prospeccao");
       setListMode("smart");
+      setSearch("");
       setSelectedLeadId(createdLead.id);
       setShowNewLeadForm(false);
       setNewLeadName("");
@@ -851,6 +1083,70 @@ export function useComercialTrabalho({
           ? "Tentativa de ligação marcada."
           : "Tentativa de mensagem marcada.",
     };
+  }
+
+  async function handleRegisterNoAnswerWithPostMessage(
+    lead: Lead,
+    postCallMessage: string
+  ) {
+    setSavingLeadId(lead.id);
+    setMessage("");
+
+    try {
+      await recordLeadHistoryEvent({
+        leadId: lead.id,
+        type: "note",
+        title: "Ligação não atendida",
+        description:
+          "Resultado: Não atendeu.\nResumo: Ligação feita manualmente e não atendida.",
+        metadata: {
+          event: "call_logged",
+          source: "post_call_combined_action",
+          callResult: "no_answer",
+          callResultLabel: "Não atendeu",
+          summary: "Ligação feita manualmente e não atendida.",
+          assistedPanel: true,
+        },
+      });
+
+      await handleMarkNextLeadAttempt({
+        leadId: lead.id,
+        attemptType: "call",
+        source: "call_logged",
+        result: "no_answer",
+        note: "Ligação não atendida.",
+      });
+
+      await recordLeadHistoryEvent({
+        leadId: lead.id,
+        type: "whatsapp",
+        title: "Mensagem pós-ligação enviada",
+        description: postCallMessage,
+        metadata: {
+          event: "post_call_message_sent",
+          source: "manual_whatsapp_desktop",
+          channel: "whatsapp",
+          sentByApi: false,
+          manualSendConfirmed: true,
+          callContext: true,
+          replyText: postCallMessage,
+        },
+      });
+
+      await handleMarkNextLeadAttempt({
+        leadId: lead.id,
+        attemptType: "message",
+        source: "assisted_reply_sent",
+        result: "sent",
+        note: "Mensagem pós-ligação enviada manualmente pelo WhatsApp Desktop.",
+      });
+
+      await loadLeadHistory(String(lead.id));
+      setMessage("Ligação não atendida e mensagem pós-ligação registradas.");
+      selectNextLeadAfter(lead.id);
+    } finally {
+      setSavingLeadId(null);
+    }
   }
 
   async function handleAdvanceQueue(lead: Lead) {
@@ -1249,6 +1545,8 @@ export function useComercialTrabalho({
     queuesByFunnel,
     rawCounts,
     filteredLeads,
+    globalSearchResults,
+    isGlobalSearchLoading,
     queueCount,
     filteredCount,
     hiddenCount,
@@ -1266,6 +1564,7 @@ export function useComercialTrabalho({
 
     showNewLeadForm,
     setShowNewLeadForm,
+    handleOpenNewLeadForm,
 
     newLeadName,
     setNewLeadName,
@@ -1294,6 +1593,8 @@ export function useComercialTrabalho({
     clearFilters,
 
     setSelectedLeadId,
+    handleSelectLeadFromQueue,
+    handleOpenGlobalSearchLead,
 
     getLeadName,
     getLastAction,
@@ -1307,6 +1608,7 @@ export function useComercialTrabalho({
     loadLeadHistory,
     handleSetResultado,
     handleMarkNextLeadAttempt,
+    handleRegisterNoAnswerWithPostMessage,
     handleAdvanceQueue,
     handleMoveToQualificacao,
     handleMoveToRetorno,

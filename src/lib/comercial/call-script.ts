@@ -229,7 +229,7 @@ function buildPostCallMessage(input: {
     return "Conforme conversamos, antes de avancar para reserva eu te explico por aqui os valores e a divisao das regioes para ficar tudo claro.";
   }
 
-  return "Oi, tentei falar com voce agora ha pouco. Quando puder, me responde por aqui que eu te ajudo a seguir com as informacoes.";
+  return "Oi, tudo bem? Tentei te ligar rapidinho para te orientar sobre o tratamento de estrias e tirar suas duvidas. Quando puder, me responde por aqui que eu te ajudo a seguir.";
 }
 
 export function buildLeadCallScript(input: {

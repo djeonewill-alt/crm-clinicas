@@ -68,6 +68,10 @@ type LeadDetailProps = {
     result?: string;
     note?: string;
   }) => Promise<MarkLeadAttemptResult>;
+  onRegisterNoAnswerWithPostMessage: (
+    lead: Lead,
+    message: string
+  ) => Promise<void> | void;
   onCreateLeadNote: (
     description: string
   ) => boolean | void | Promise<boolean | void>;
@@ -127,6 +131,7 @@ export function LeadDetail({
   onUpdateLeadDetails,
   onSetResultado,
   onMarkNextLeadAttempt,
+  onRegisterNoAnswerWithPostMessage,
   onCreateLeadNote,
   onRefreshLeadHistory,
   onAdvanceQueue,
@@ -445,7 +450,13 @@ export function LeadDetail({
         </>
       )}
 
-      <LeadCallScriptPanel lead={lead} leadHistory={leadHistory} />
+      <LeadCallScriptPanel
+        lead={lead}
+        leadHistory={leadHistory}
+        onRegisterNoAnswerWithPostMessage={(message) =>
+          onRegisterNoAnswerWithPostMessage(lead, message)
+        }
+      />
 
       <LeadAssistedServicePanel
         lead={lead}

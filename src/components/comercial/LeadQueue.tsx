@@ -20,6 +20,8 @@ type LeadQueueProps = {
   activeFunnelLabel: string;
   queuesByFunnel: Record<VisibleFunnelId, Lead[]>;
   queueLeads: Lead[];
+  globalSearchResults: Lead[];
+  isGlobalSearchLoading: boolean;
   hiddenCount: number;
   filteredCount: number;
   selectedLeadId: string | number | null;
@@ -37,6 +39,7 @@ type LeadQueueProps = {
   onInterestChange: (value: string) => void;
   onClearFilters: () => void;
   onSelectLead: (leadId: string | number) => void;
+  onSelectGlobalLead: (lead: Lead) => void;
   getLeadName: (lead: Lead) => string;
   getLastAction: (lead: Lead) => string;
 };
@@ -93,6 +96,8 @@ export function LeadQueue({
   activeFunnelLabel,
   queuesByFunnel,
   queueLeads,
+  globalSearchResults,
+  isGlobalSearchLoading,
   hiddenCount,
   filteredCount,
   selectedLeadId,
@@ -110,6 +115,7 @@ export function LeadQueue({
   onInterestChange,
   onClearFilters,
   onSelectLead,
+  onSelectGlobalLead,
   getLeadName,
   getLastAction,
 }: LeadQueueProps) {
@@ -269,6 +275,52 @@ export function LeadQueue({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {hasActiveFilters && (
+          <div className="border-b border-[var(--border)] bg-[var(--bg2)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text3)]">
+                Fora da fila atual
+              </p>
+              {isGlobalSearchLoading && (
+                <span className="text-[10px] text-[var(--text3)]">buscando...</span>
+              )}
+            </div>
+
+            {globalSearchResults.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {globalSearchResults.slice(0, 5).map((lead) => (
+                  <button
+                    key={lead.id}
+                    type="button"
+                    onClick={() => onSelectGlobalLead(lead)}
+                    className="block w-full rounded-lg border border-[var(--border2)] bg-[var(--bg3)] px-3 py-2 text-left transition hover:border-[var(--accent)]"
+                  >
+                    <span className="block truncate text-xs font-semibold text-[var(--text)]">
+                      {getLeadName(lead)}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-[var(--text3)]">
+                      {formatPhone(lead.tel)}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-[var(--text2)]">
+                      {lead.funnel} / {lead.diaProsp || "d1"}
+                    </span>
+                    <span className="mt-2 inline-flex rounded-md border border-[var(--border2)] bg-[var(--bg2)] px-2 py-1 text-[11px] font-semibold text-[var(--accent)]">
+                      Abrir lead existente
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              search.trim().length >= 3 &&
+              !isGlobalSearchLoading && (
+                <p className="mt-2 text-[11px] text-[var(--text3)]">
+                  Nenhum lead fora da fila atual encontrado.
+                </p>
+              )
+            )}
+          </div>
+        )}
+
         {queueLeads.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-[var(--text3)]">
             <div className="mb-3 text-4xl">🎉</div>
