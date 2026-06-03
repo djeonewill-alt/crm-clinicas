@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { FUNNELS } from "@/lib/constants/crm";
+import {
+  getLeadOperationalStatus,
+  type LeadOperationalStatusTone,
+} from "@/lib/comercial/lead-priority";
 import { getAttemptProgress } from "@/lib/services/queue";
 import { cn } from "@/lib/utils/cn";
 import type { Lead } from "@/types/lead";
@@ -49,47 +53,25 @@ function formatPhone(phone: string) {
   return phone;
 }
 
-function parseLocalDate(value?: string | null) {
-  if (!value) return null;
-  const [datePart] = value.split("T");
-  const [year, month, day] = datePart.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-}
+const statusToneClasses: Record<LeadOperationalStatusTone, string> = {
+  red: "border-red-500/30 bg-red-500/10 text-red-200",
+  orange: "border-orange-500/30 bg-orange-500/10 text-orange-200",
+  yellow: "border-yellow-500/30 bg-yellow-500/10 text-yellow-200",
+  blue: "border-blue-500/30 bg-blue-500/10 text-blue-200",
+  green: "border-green-500/30 bg-green-500/10 text-green-200",
+  neutral: "border-[var(--border2)] bg-[var(--bg3)] text-[var(--text2)]",
+  purple: "border-purple-500/30 bg-purple-500/10 text-purple-200",
+};
 
-function isOverdue(value?: string | null) {
-  const date = parseLocalDate(value);
-  if (!date) return false;
-  const today = new Date();
-  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return date.getTime() < todayOnly.getTime();
-}
-
-function getPriorityIndicator(lead: Lead) {
-  const progress = getAttemptProgress(lead);
-
-  if (isOverdue(lead.retornoData)) {
-    return { label: "Atrasado", className: "bg-red-400" };
-  }
-
-  if (lead.funnel === "retorno" && lead.retornoData) {
-    return { label: "Retorno", className: "bg-purple-400" };
-  }
-
-  if (lead.funnel === "qualificacao") {
-    return { label: "Qualif.", className: "bg-blue-400" };
-  }
-
-  if (progress.total > 0 && progress.completed >= progress.total) {
-    return { label: "Em dia", className: "bg-green-400" };
-  }
-
-  if (progress.total > 0) {
-    return { label: "Ação", className: "bg-orange-400" };
-  }
-
-  return { label: "Novo", className: "bg-orange-400" };
-}
+const statusDotClasses: Record<LeadOperationalStatusTone, string> = {
+  red: "bg-red-400",
+  orange: "bg-orange-400",
+  yellow: "bg-yellow-300",
+  blue: "bg-blue-400",
+  green: "bg-green-400",
+  neutral: "bg-[var(--text3)]",
+  purple: "bg-purple-400",
+};
 
 export function LeadQueue({
   workFunnel,
@@ -207,37 +189,39 @@ export function LeadQueue({
         </div>
       </div>
 
-      <div className="flex border-b border-[var(--border)]">
-        {FUNNELS.map((funnel) => {
-          const active = funnel.id === workFunnel;
-          const count = queuesByFunnel[funnel.id]?.length ?? 0;
+      <div className="border-b border-[var(--border)] bg-[var(--bg)] px-2 py-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {FUNNELS.map((funnel) => {
+            const active = funnel.id === workFunnel;
+            const count = queuesByFunnel[funnel.id]?.length ?? 0;
 
-          return (
-            <button
-              key={funnel.id}
-              type="button"
-              onClick={() => onChangeFunnel(funnel.id)}
-              className={cn(
-                "flex-1 border-b-2 px-2 py-2 text-[10px] font-semibold transition",
-                active
-                  ? "border-[var(--accent)] text-[var(--accent)]"
-                  : "border-transparent text-[var(--text3)] hover:bg-[var(--bg2)] hover:text-[var(--text2)]"
-              )}
-            >
-              {funnel.short}
-              <span
+            return (
+              <button
+                key={funnel.id}
+                type="button"
+                onClick={() => onChangeFunnel(funnel.id)}
                 className={cn(
-                  "ml-1 rounded-full px-1.5 py-0.5 font-mono",
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold transition",
                   active
-                    ? "bg-[rgba(232,197,71,.15)] text-[var(--accent)]"
-                    : "bg-[var(--bg4)] text-[var(--text3)]"
+                    ? "border-[var(--accent)] bg-[rgba(232,197,71,.12)] text-[var(--accent)]"
+                    : "border-[var(--border2)] bg-[var(--bg3)] text-[var(--text3)] hover:border-[var(--border)] hover:text-[var(--text2)]"
                 )}
               >
-                {count}
-              </span>
-            </button>
-          );
-        })}
+                <span>{funnel.short}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+                    active
+                      ? "bg-[rgba(232,197,71,.18)] text-[var(--accent)]"
+                      : "bg-[var(--bg4)] text-[var(--text3)]"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="border-b border-[var(--border)] bg-[var(--bg2)] px-4 py-2 text-[11px] text-[var(--text3)]">
@@ -339,55 +323,66 @@ export function LeadQueue({
             )}
           </div>
         ) : (
-          queueLeads.map((lead) => {
-            const active = String(selectedLeadId) === String(lead.id);
-            const progress = getAttemptProgress(lead);
-            const priority = getPriorityIndicator(lead);
+          <div className="space-y-2 p-2">
+            {queueLeads.map((lead) => {
+              const active = String(selectedLeadId) === String(lead.id);
+              const progress = getAttemptProgress(lead);
+              const operationalStatus = getLeadOperationalStatus(lead);
 
-            return (
-              <button
-                key={lead.id}
-                type="button"
-                onClick={() => onSelectLead(lead.id)}
-                className={cn(
-                  "block w-full border-b border-[var(--border)] px-4 py-3 text-left transition hover:bg-[var(--bg2)]",
-                  active &&
-                    "border-l-2 border-l-[var(--accent)] bg-[rgba(232,197,71,0.07)] pl-[14px]"
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-[var(--text)]">
-                      {getLeadName(lead)}
+              return (
+                <button
+                  key={lead.id}
+                  type="button"
+                  onClick={() => onSelectLead(lead.id)}
+                  className={cn(
+                    "block w-full rounded-xl border border-[var(--border)] bg-[var(--bg2)] p-3 text-left transition hover:border-[var(--border2)] hover:bg-[var(--bg3)]",
+                    active &&
+                      "border-[var(--accent)] bg-[rgba(232,197,71,0.07)] ring-1 ring-[rgba(232,197,71,.35)]"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[var(--text)]">
+                        {getLeadName(lead)}
+                      </div>
+                      <div className="truncate text-xs text-[var(--text2)]">
+                        {formatPhone(lead.tel)}
+                      </div>
                     </div>
-                    <div className="truncate text-xs text-[var(--text2)]">
-                      {formatPhone(lead.tel)}
-                    </div>
+
+                    <span className="shrink-0 rounded-full bg-[rgba(232,197,71,.15)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                      {lead.diaProsp || "d1"}
+                    </span>
                   </div>
 
-                  <span className="shrink-0 rounded-full bg-[rgba(232,197,71,.15)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
-                    {lead.diaProsp || "d1"}
-                  </span>
-                </div>
+                  <div
+                    className={cn(
+                      "mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold",
+                      statusToneClasses[operationalStatus.tone]
+                    )}
+                    title={operationalStatus.description}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        statusDotClasses[operationalStatus.tone]
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{operationalStatus.label}</span>
+                  </div>
 
-                <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--text3)]">
-                  <span
-                    className={cn("h-2 w-2 rounded-full", priority.className)}
-                    aria-hidden="true"
-                  />
-                  <span>{priority.label}</span>
-                </div>
+                  <div className="mt-1 text-[11px] text-[var(--text2)]">
+                    {lead.diaProsp || "d1"} · {progress.completed}/{progress.total} tentativas
+                  </div>
 
-                <div className="mt-1 text-[11px] text-[var(--text2)]">
-                  {lead.diaProsp || "d1"} · {progress.completed}/{progress.total} tentativas
-                </div>
-
-                <div className="mt-1 text-[11px] text-[var(--text2)]">
-                  {getLastAction(lead)}
-                </div>
-              </button>
-            );
-          })
+                  <div className="mt-1 text-[11px] text-[var(--text2)]">
+                    {getLastAction(lead)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </aside>
